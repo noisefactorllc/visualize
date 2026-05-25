@@ -23,10 +23,11 @@ Click **START SET**, then **⚙ → audio device** to enable mic/loopback input.
 - **Beat scheduler** with tap tempo, manual BPM input, and beat indicator. Synchronizes auto-mix and strobe.
 - **Master FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the master canvas (cheap); strobe/flash/freeze are handled inside the compositor draw loop.
 - **Auto-VJ mode**: every N bars, picks a fresh random program, loads into the off-side deck, and fades to it over the chosen curve.
-- **Recording**: capture the master canvas to a webm via `MediaRecorder`.
+- **Scenes**: save a full snapshot (both decks' programs + speeds, crossfader, BPM, FX, auto-VJ config) as a named scene. Recall instantly via the panel or Shift+1…9. Stored in browser localStorage.
+- **Recording**: capture the master canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
 - **Output window**: dedicated popup that mirrors the master canvas for second-display / projector use.
 - **Fullscreen master** (F key).
-- **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), arrows (nudge xfade).
+- **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), arrows (nudge xfade), Shift+S (scenes drawer), Shift+1…9 (recall scene), Esc (close drawer / exit fullscreen).
 
 ## Architecture
 
@@ -42,6 +43,7 @@ js/
 ├── compositor.js       MasterCompositor — 2D drawImage blend of decks + FX
 ├── library.js          Library — load programs.json, render grid
 ├── automix.js          AutoMix — beat-driven scene-swap automation
+├── scenes.js           Scenes — named state snapshots (localStorage)
 ├── recorder.js         Recorder — MediaRecorder of master canvas
 └── output.js           OutputWindow — popup mirror for projector
 ```

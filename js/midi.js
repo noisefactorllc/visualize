@@ -25,9 +25,16 @@ export class SharedMidi {
         this._midiStates = new Map() // deck -> midiState bag
 
         // Learn / assignments
-        this._assignments = this._loadAssignments() // { controlId -> { ch, cc, range01 } }
+        // Each assignment: { ch, cc, min, max }. min/max default to 0/127
+        // (full 7-bit MIDI range). During learn we observe the actual
+        // range the controller emits so endless encoders, fader banks
+        // with limited travel, or unusual controllers map correctly.
+        this._assignments = this._loadAssignments()
         this._controlHandlers = new Map() // controlId -> { handler(value01), label }
         this._learningControlId = null
+        this._learningCapture = null // { ch, cc, min, max } once first CC arrives
+        this._learnWindowMs = 2000   // observe range this long after first CC
+        this._learnCommitTimer = null
 
         this._followClock = false
         this._clockTickCount = 0
@@ -82,11 +89,21 @@ export class SharedMidi {
     /** Begin learning the next CC for the given control. */
     startLearn(controlId) {
         this._learningControlId = controlId
+        this._learningCapture = null
+        if (this._learnCommitTimer) {
+            clearTimeout(this._learnCommitTimer)
+            this._learnCommitTimer = null
+        }
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
     }
 
     cancelLearn() {
         this._learningControlId = null
+        this._learningCapture = null
+        if (this._learnCommitTimer) {
+            clearTimeout(this._learnCommitTimer)
+            this._learnCommitTimer = null
+        }
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
     }
 
@@ -133,6 +150,12 @@ export class SharedMidi {
     /** Toggle on/off — disable just detaches listeners; access stays. */
     async toggle() {
         if (!this._enabled) return this.enable()
+        // Re-read inputs from the access object before detaching — any
+        // device hot-plugged between enable() and toggle() wouldn't be
+        // in our cached `_inputs` array otherwise.
+        if (this._access) {
+            this._inputs = Array.from(this._access.inputs.values())
+        }
         for (const input of this._inputs) input.onmidimessage = null
         this._enabled = false
         this._notify('MIDI off')
@@ -160,30 +183,43 @@ export class SharedMidi {
         if (status === 0xB0) {
             const cc = data[1]
             const value = data[2]
-            const value01 = value / 127
 
-            // Learn capture
+            // Learn capture — first CC seen locks ch+cc; we then keep
+            // tracking min/max for _learnWindowMs so the user can wiggle
+            // the control through its full range.
             if (this._learningControlId) {
-                this._assignments[this._learningControlId] = { ch: channel, cc }
-                const id = this._learningControlId
-                this._learningControlId = null
-                this._saveAssignments()
-                if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
-                this._notify(`learned: ${id} ← CC ${cc} ch ${channel + 1}`)
+                if (!this._learningCapture) {
+                    this._learningCapture = { ch: channel, cc, min: value, max: value }
+                    this._learnCommitTimer = setTimeout(() => this._commitLearn(), this._learnWindowMs)
+                } else if (this._learningCapture.ch === channel && this._learningCapture.cc === cc) {
+                    if (value < this._learningCapture.min) this._learningCapture.min = value
+                    if (value > this._learningCapture.max) this._learningCapture.max = value
+                }
+                // Don't dispatch while learning to avoid bound controls firing on
+                // the same CC we're capturing.
                 return
             }
 
-            // Dispatch to bound control
+            // Dispatch to bound control(s), normalising into the
+            // assigned min/max range. Defaults to 0..127 for assignments
+            // saved before range-learn existed.
             for (const [controlId, asg] of Object.entries(this._assignments)) {
                 if (asg.ch === channel && asg.cc === cc) {
+                    const min = asg.min ?? 0
+                    const max = asg.max ?? 127
+                    const span = Math.max(1, max - min)
+                    const value01 = Math.max(0, Math.min(1, (value - min) / span))
                     const handler = this._controlHandlers.get(controlId)?.handler
                     if (handler) handler(value01)
                 }
             }
 
-            // Mirror into each deck's midiState
+            // Mirror into each deck's midiState (use raw 0..1 scaling
+            // here — the noisemaker midi() automation does its own
+            // mapping with min/max args)
+            const raw01 = value / 127
             for (const state of this._midiStates.values()) {
-                this._writeCcIntoMidiState(state, channel, cc, value01)
+                this._writeCcIntoMidiState(state, channel, cc, raw01)
             }
         }
 
@@ -234,6 +270,27 @@ export class SharedMidi {
      * jitter (common over USB-MIDI from DAWs) doesn't visibly wobble
      * the BPM readout.
      */
+    _commitLearn() {
+        if (!this._learningControlId || !this._learningCapture) return
+        const id = this._learningControlId
+        const cap = this._learningCapture
+        // If the user only nudged a single value (min === max), keep the
+        // 0..127 default so the bound control still gets the full range
+        // available later.
+        const min = cap.min < cap.max ? cap.min : 0
+        const max = cap.max > cap.min ? cap.max : 127
+        this._assignments[id] = { ch: cap.ch, cc: cap.cc, min, max }
+        this._learningControlId = null
+        this._learningCapture = null
+        if (this._learnCommitTimer) {
+            clearTimeout(this._learnCommitTimer)
+            this._learnCommitTimer = null
+        }
+        this._saveAssignments()
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+        this._notify(`learned: ${id} ← CC ${cap.cc} ch ${cap.ch + 1} (${min}-${max})`)
+    }
+
     _onClockTick() {
         const now = performance.now()
         if (this._clockTickCount === 0) {
@@ -270,7 +327,10 @@ export class SharedMidi {
                 label: info.label,
                 ch: asg?.ch,
                 cc: asg?.cc,
-                learning: this._learningControlId === controlId
+                min: asg?.min,
+                max: asg?.max,
+                learning: this._learningControlId === controlId,
+                capturing: this._learningControlId === controlId && !!this._learningCapture
             })
         }
         return rows

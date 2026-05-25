@@ -58,11 +58,6 @@ export class SharedAudio {
         if (state) this._audioStates.set(deck, state)
     }
 
-    removeDeck(deck) {
-        this._decks.delete(deck)
-        this._audioStates.delete(deck)
-    }
-
     /**
      * List available audio input devices. May trigger a permissions prompt
      * for labels — call this after `enable()` for full device names.

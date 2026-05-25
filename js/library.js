@@ -8,13 +8,10 @@
  *   - mount(rootEl, { onLoadToDeck, onFilterCount }) for the UI panel
  */
 
-const STORAGE_KEY = 'visualize.library.favorites.v1'
-
 export class Library {
     constructor() {
         this.programs = []
         this._filter = ''
-        this._favorites = this._loadFavorites()
         this._rootEl = null
         this._gridEl = null
         this._countEl = null
@@ -156,24 +153,4 @@ export class Library {
         return card
     }
 
-    toggleFavorite(title) {
-        if (this._favorites.has(title)) this._favorites.delete(title)
-        else this._favorites.add(title)
-        this._saveFavorites()
-    }
-
-    _loadFavorites() {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY)
-            return new Set(raw ? JSON.parse(raw) : [])
-        } catch {
-            return new Set()
-        }
-    }
-
-    _saveFavorites() {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify([...this._favorites]))
-        } catch {}
-    }
 }

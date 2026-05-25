@@ -21,6 +21,7 @@ import { Library } from './library.js'
 import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
+import { Scenes } from './scenes.js'
 
 const $ = (id) => document.getElementById(id)
 
@@ -121,13 +122,31 @@ async function boot() {
         if (msg) toast(msg)
     })
 
+    // Cached DOM refs — declared before any callbacks that capture them
+    // so we don't risk TDZ if a callback fires between declaration and
+    // first use (e.g. compositor frame hook firing during boot).
+    const deckEls = {
+        A: document.querySelector('.deck.deck-a'),
+        B: document.querySelector('.deck.deck-b')
+    }
+    const xfaderEl = $('crossfader')
+    const fpsEl = $('fps-value')
+    const bpmInputEl = $('bpm-input')
+    const flashOverlayEl = $('master-fx-overlay')
+
+    function updateLiveIndicator() {
+        const aLive = state.crossfade < 0.5
+        deckEls.A.classList.toggle('live', aLive)
+        deckEls.B.classList.toggle('live', !aLive)
+    }
+
     // BPM / scheduler
     const scheduler = new BeatScheduler(120)
     scheduler.start()
     midi.onBpm((bpm) => {
         if (!midi.followClock) return
         scheduler.bpm = bpm
-        $('bpm-input').value = bpm.toFixed(1)
+        bpmInputEl.value = bpm.toFixed(1)
     })
 
     // Auto-mix
@@ -137,7 +156,7 @@ async function boot() {
         setXfade: (v) => {
             state.crossfade = v
             compositor.setCrossfade(v)
-            $('crossfader').value = String(v)
+            xfaderEl.value = String(v)
             updateLiveIndicator()
         },
         onStatus: (msg) => toast(msg)
@@ -167,19 +186,8 @@ async function boot() {
 
     // ── Wire UI ───────────────────────────────────────────────────────────
 
-    // Mark the "live" deck (whichever has more weight) so the UI rim glows.
-    const deckEls = {
-        A: document.querySelector('.deck.deck-a'),
-        B: document.querySelector('.deck.deck-b')
-    }
-    function updateLiveIndicator() {
-        const aLive = state.crossfade < 0.5
-        deckEls.A.classList.toggle('live', aLive)
-        deckEls.B.classList.toggle('live', !aLive)
-    }
-
     // Crossfader
-    $('crossfader').addEventListener('input', (e) => {
+    xfaderEl.addEventListener('input', (e) => {
         state.crossfade = parseFloat(e.target.value)
         compositor.setCrossfade(state.crossfade)
         updateLiveIndicator()
@@ -188,14 +196,14 @@ async function boot() {
     $('cut-a').addEventListener('click', () => {
         state.crossfade = 0
         compositor.setCrossfade(0)
-        $('crossfader').value = '0'
+        xfaderEl.value = '0'
         updateLiveIndicator()
         autoMix.noteUserOverride()
     })
     $('cut-b').addEventListener('click', () => {
         state.crossfade = 1
         compositor.setCrossfade(1)
-        $('crossfader').value = '1'
+        xfaderEl.value = '1'
         updateLiveIndicator()
         autoMix.noteUserOverride()
     })
@@ -214,7 +222,7 @@ async function boot() {
             const eased = 0.5 - 0.5 * Math.cos(t * Math.PI)
             state.crossfade = start + (target - start) * eased
             compositor.setCrossfade(state.crossfade)
-            $('crossfader').value = String(state.crossfade)
+            xfaderEl.value = String(state.crossfade)
             updateLiveIndicator()
             if (t < 1) requestAnimationFrame(step)
         }
@@ -266,6 +274,14 @@ async function boot() {
     })
     library.setRandomBothButton($('library-random'))
 
+    // Cache deck label refs — these are touched on every program load
+    // and on every Auto-VJ scene swap. Looking them up by id each time
+    // shows up in the profiler under heavy auto-VJ use.
+    const deckLabels = {
+        A: { name: $('deck-a-name'), tag: $('deck-a-tagline') },
+        B: { name: $('deck-b-name'), tag: $('deck-b-tagline') }
+    }
+
     async function loadProgram(deckId, program) {
         if (!program) return
         const deck = state.decks[deckId]
@@ -276,8 +292,11 @@ async function boot() {
         }
         // Refresh audio routing in case renderer recreated audioState
         audio.refreshDeckStates()
-        $(`deck-${deckId.toLowerCase()}-name`).textContent = program.title
-        $(`deck-${deckId.toLowerCase()}-tagline`).textContent = program.tagline || ''
+        const labels = deckLabels[deckId]
+        if (labels) {
+            labels.name.textContent = program.title
+            labels.tag.textContent = program.tagline || ''
+        }
     }
 
     // Drag-drop on deck preview
@@ -296,14 +315,14 @@ async function boot() {
     })
 
     // BPM controls
-    $('bpm-input').addEventListener('change', (e) => {
+    bpmInputEl.addEventListener('change', (e) => {
         scheduler.bpm = parseFloat(e.target.value)
         scheduler.resetPhase()
     })
     const tapBtn = $('tap-tempo')
     function doTap() {
         const bpm = scheduler.tap()
-        if (bpm) $('bpm-input').value = bpm.toFixed(1)
+        if (bpm) bpmInputEl.value = bpm.toFixed(1)
         tapBtn.classList.add('flash')
         setTimeout(() => tapBtn.classList.remove('flash'), 100)
     }
@@ -326,7 +345,6 @@ async function boot() {
         btn.addEventListener('click', () => toggleFx(fx, btn))
     })
 
-    const flashOverlay = $('master-fx-overlay')
     function toggleFx(fx, btnEl) {
         const btn = btnEl || document.querySelector(`.fx-button[data-fx="${fx}"]`)
         const active = !btn.classList.contains('active')
@@ -339,9 +357,9 @@ async function boot() {
             compositor.flash()
             // Also pulse the CSS overlay for a soft "screen flash" feel
             // on top of the canvas-level white frame
-            if (flashOverlay) {
-                flashOverlay.classList.add('flash')
-                setTimeout(() => flashOverlay.classList.remove('flash'), 300)
+            if (flashOverlayEl) {
+                flashOverlayEl.classList.add('flash')
+                setTimeout(() => flashOverlayEl.classList.remove('flash'), 300)
             }
             return
         }
@@ -357,6 +375,7 @@ async function boot() {
         autoMix.setBarsPerScene(parseInt(e.target.value, 10))
     })
     $('automix-curve').addEventListener('change', (e) => {
+        state.curve = e.target.value
         autoMix.setCurve(e.target.value)
         compositor.setCurve(e.target.value)
     })
@@ -443,7 +462,7 @@ async function boot() {
         crossfader: (v01) => {
             state.crossfade = v01
             compositor.setCrossfade(v01)
-            $('crossfader').value = String(v01)
+            xfaderEl.value = String(v01)
         },
         speedA: (v01) => {
             const s = 0.1 + v01 * 3.9
@@ -486,8 +505,178 @@ async function boot() {
 
     // FPS readout
     setInterval(() => {
-        $('fps-value').textContent = String(compositor.fps)
+        fpsEl.textContent = String(compositor.fps)
     }, 500)
+
+    // ── Scenes ───────────────────────────────────────────────────────────
+    const scenes = new Scenes()
+    const scenesDrawer = $('scenes-drawer')
+    const scenesList = $('scenes-list')
+    const sceneNameInput = $('scene-name-input')
+
+    /** Snapshot accessor — passed to Scenes.snapshot(). */
+    function snapshotAccessors() {
+        return {
+            decks: state.decks,
+            getXfade: () => state.crossfade,
+            getCurve: () => state.curve,
+            scheduler,
+            getFxState: () => ({
+                strobe: compositor.strobe,
+                invert: compositor.invert,
+                bw: compositor.bw,
+                zoom: compositor.zoom,
+                freeze: compositor.freeze
+            }),
+            getAutoMixConfig: () => ({
+                enabled: autoMix.enabled,
+                barsPerScene: parseInt($('automix-bars').value, 10),
+                curve: $('automix-curve').value
+            })
+        }
+    }
+
+    /** Applicator — passed to Scenes.apply(). */
+    function applyAccessors() {
+        return {
+            decks: state.decks,
+            setXfade: (v) => {
+                state.crossfade = v
+                compositor.setCrossfade(v)
+                xfaderEl.value = String(v)
+                updateLiveIndicator()
+            },
+            setCurve: (c) => {
+                state.curve = c
+                compositor.setCurve(c)
+                autoMix.setCurve(c)
+                const sel = $('automix-curve')
+                if (sel) sel.value = c
+            },
+            scheduler,
+            setFx: (fx) => {
+                // Match each toggle to the saved state; call toggleFx
+                // only when the active state differs.
+                for (const name of ['strobe', 'invert', 'bw', 'zoom', 'freeze']) {
+                    const want = !!fx[name]
+                    const have = compositor[name]
+                    if (want !== have) {
+                        const btn = document.querySelector(`.fx-button[data-fx="${name}"]`)
+                        toggleFx(name, btn)
+                    }
+                }
+            },
+            setAutoMixConfig: (cfg) => {
+                if (typeof cfg.barsPerScene === 'number') {
+                    autoMix.setBarsPerScene(cfg.barsPerScene)
+                    const sel = $('automix-bars')
+                    if (sel) sel.value = String(cfg.barsPerScene)
+                }
+                if (cfg.curve) {
+                    autoMix.setCurve(cfg.curve)
+                    state.curve = cfg.curve
+                    compositor.setCurve(cfg.curve)
+                }
+                // Sync the auto-VJ button without toggling (only flip if
+                // saved state differs from current)
+                if (autoMix.enabled !== !!cfg.enabled) {
+                    autoMix.setEnabled(!!cfg.enabled)
+                    $('automix-toggle').dataset.state = cfg.enabled ? 'on' : 'off'
+                }
+            },
+            refreshAudio: () => audio.refreshDeckStates()
+        }
+    }
+
+    function renderScenes() {
+        const list = scenes.scenes
+        scenesList.innerHTML = ''
+        if (list.length === 0) {
+            const empty = document.createElement('div')
+            empty.className = 'scenes-empty'
+            empty.textContent = 'no scenes saved yet — set up your decks and save a snapshot above'
+            scenesList.appendChild(empty)
+            return
+        }
+        list.forEach((s, i) => {
+            const row = document.createElement('div')
+            row.className = 'scene-row'
+            const hot = i < 9 ? `⇧${i + 1}` : ''
+            const fxBadges = Object.entries(s.fx || {})
+                .filter(([, v]) => v)
+                .map(([k]) => k.toUpperCase())
+                .join('·') || '—'
+            row.innerHTML = `
+                <span class="sr-key">${hot}</span>
+                <span>
+                    <div class="sr-name">${escapeHtml(s.name)}</div>
+                    <div class="sr-meta">${Math.round(s.bpm || 0)} BPM · ${fxBadges}</div>
+                </span>
+            `
+            const actions = document.createElement('span')
+            actions.className = 'sr-actions'
+            const load = document.createElement('button')
+            load.textContent = 'recall'
+            load.addEventListener('click', (e) => {
+                e.stopPropagation()
+                recallScene(s)
+            })
+            const del = document.createElement('button')
+            del.className = 'sr-delete'
+            del.textContent = '✕'
+            del.title = 'delete'
+            del.addEventListener('click', (e) => {
+                e.stopPropagation()
+                if (confirm(`Delete scene "${s.name}"?`)) {
+                    scenes.delete(s.name)
+                }
+            })
+            actions.appendChild(load)
+            actions.appendChild(del)
+            row.appendChild(actions)
+            row.addEventListener('click', () => recallScene(s))
+            scenesList.appendChild(row)
+        })
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]))
+    }
+
+    async function recallScene(scene) {
+        toast(`recall: ${scene.name}`)
+        const errors = await Scenes.apply(scene, applyAccessors())
+        if (errors.length) toast(`recall had errors: ${errors[0].slice(0, 60)}`, 4000)
+    }
+
+    state.curve = 'dipped' // track current curve so snapshots can read it
+
+    scenes.onChange(() => renderScenes())
+    renderScenes()
+
+    $('scenes-open').addEventListener('click', () => {
+        scenesDrawer.setAttribute('aria-hidden', scenesDrawer.getAttribute('aria-hidden') === 'false' ? 'true' : 'false')
+    })
+    $('scenes-close').addEventListener('click', () => {
+        scenesDrawer.setAttribute('aria-hidden', 'true')
+    })
+    $('scene-save').addEventListener('click', () => {
+        const name = sceneNameInput.value
+        if (!name.trim()) {
+            toast('name your scene first')
+            sceneNameInput.focus()
+            return
+        }
+        const snap = Scenes.snapshot(snapshotAccessors())
+        scenes.save(name, snap)
+        sceneNameInput.value = ''
+        toast(`saved: ${name.trim()}`)
+    })
+    sceneNameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('scene-save').click()
+    })
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
@@ -495,6 +684,25 @@ async function boot() {
         const tag = e.target.tagName
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
         const key = e.key.toLowerCase()
+
+        // Shift+S toggles scenes drawer; Shift+1..9 recalls scene.
+        // Check e.code (layout-independent) for digits because Shift+1
+        // on a US keyboard produces e.key = '!', not '1'.
+        const digitMatch = e.shiftKey && /^Digit[1-9]$/.test(e.code)
+        if (e.shiftKey && (key === 's' || digitMatch)) {
+            e.preventDefault()
+            if (key === 's') {
+                scenesDrawer.setAttribute('aria-hidden',
+                    scenesDrawer.getAttribute('aria-hidden') === 'false' ? 'true' : 'false')
+                return
+            }
+            const idx = parseInt(e.code.replace('Digit', ''), 10) - 1
+            const s = scenes.byIndex(idx)
+            if (s) recallScene(s)
+            else toast(`no scene at slot ${idx + 1}`)
+            return
+        }
+
         switch (key) {
             case ' ':
                 e.preventDefault()
@@ -528,7 +736,7 @@ async function boot() {
             case 'arrowleft': {
                 state.crossfade = Math.max(0, state.crossfade - 0.05)
                 compositor.setCrossfade(state.crossfade)
-                $('crossfader').value = String(state.crossfade)
+                xfaderEl.value = String(state.crossfade)
                 updateLiveIndicator()
                 autoMix.noteUserOverride()
                 break
@@ -536,7 +744,7 @@ async function boot() {
             case 'arrowright': {
                 state.crossfade = Math.min(1, state.crossfade + 0.05)
                 compositor.setCrossfade(state.crossfade)
-                $('crossfader').value = String(state.crossfade)
+                xfaderEl.value = String(state.crossfade)
                 updateLiveIndicator()
                 autoMix.noteUserOverride()
                 break
@@ -550,6 +758,8 @@ async function boot() {
             case 'escape':
                 if (drawer.getAttribute('aria-hidden') === 'false') {
                     closeSettings()
+                } else if (scenesDrawer.getAttribute('aria-hidden') === 'false') {
+                    scenesDrawer.setAttribute('aria-hidden', 'true')
                 } else if (document.fullscreenElement) {
                     document.exitFullscreen?.()
                 }
@@ -589,9 +799,17 @@ function renderLearnRows(rows, midi) {
         const div = document.createElement('div')
         div.className = 'midi-learn-row'
         if (row.learning) div.classList.add('learning')
-        const ccLabel = row.cc != null
-            ? `<span class="ml-cc">CC ${row.cc} · ch ${row.ch + 1}</span>`
-            : `<span class="ml-cc" style="opacity:0.5">${row.learning ? 'move a knob…' : 'unassigned'}</span>`
+        let ccLabel
+        if (row.capturing) {
+            ccLabel = `<span class="ml-cc">CC ${row.cc} · ch ${row.ch + 1} <span style="opacity:0.7">— wiggle through range…</span></span>`
+        } else if (row.cc != null) {
+            const rangeText = (row.min != null && row.max != null && (row.min !== 0 || row.max !== 127))
+                ? ` (${row.min}-${row.max})`
+                : ''
+            ccLabel = `<span class="ml-cc">CC ${row.cc} · ch ${row.ch + 1}${rangeText}</span>`
+        } else {
+            ccLabel = `<span class="ml-cc" style="opacity:0.5">${row.learning ? 'move a knob…' : 'unassigned'}</span>`
+        }
         div.innerHTML = `
             <span class="ml-target">${row.label}</span>
             ${ccLabel}

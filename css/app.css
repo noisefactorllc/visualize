@@ -59,6 +59,16 @@ body {
     gap: 0;
 }
 
+/* Focus rings — only on keyboard nav so mouse use stays clean */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.program-card:focus-visible {
+    outline: 2px solid var(--vz-master);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
 /* ─────────────── topbar ─────────────── */
 .topbar {
     grid-area: top;
@@ -1115,6 +1125,80 @@ kbd {
 }
 .midi-learn-row button:hover { color: var(--vz-rec); }
 
+/* ─────────────── scenes list ─────────────── */
+.scenes-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.scene-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--hf-bg-base, #0a0a0f);
+    border: 1px solid var(--vz-border);
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'Noto Sans Mono', monospace;
+    cursor: pointer;
+    transition: border-color 0.1s ease;
+}
+
+.scene-row:hover { border-color: var(--vz-master); }
+
+.scene-row .sr-key {
+    color: var(--vz-master);
+    font-size: 10px;
+    text-align: center;
+    background: color-mix(in srgb, var(--vz-master) 20%, transparent);
+    border-radius: 3px;
+    padding: 1px 0;
+}
+
+.scene-row .sr-name {
+    color: var(--vz-text);
+    font-weight: 700;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.scene-row .sr-meta {
+    color: var(--vz-text-dim);
+    font-size: 10px;
+}
+
+.scene-row .sr-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.scene-row .sr-actions button {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--vz-border);
+    color: var(--vz-text-dim);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.scene-row .sr-actions button:hover { color: var(--vz-text); border-color: var(--vz-border-strong); }
+.scene-row .sr-delete:hover { color: var(--vz-rec); border-color: var(--vz-rec); }
+
+.scenes-empty {
+    color: var(--vz-text-dim);
+    font-size: 11px;
+    text-align: center;
+    padding: 16px;
+    font-style: italic;
+}
+
 /* ─────────────── toast ─────────────── */
 .toast {
     position: fixed;
@@ -1264,4 +1348,24 @@ kbd {
     .library { max-height: 120px; }
     .library-grid { grid-auto-flow: column; grid-auto-columns: 200px; grid-template-columns: none; }
     .stage { grid-template-columns: 1fr; grid-template-rows: 1fr 2fr 1fr; }
+}
+
+/* Small-screen notice on the boot overlay — VJ work needs the desk.
+   Doesn't block usage, just sets expectations. */
+@media (max-width: 600px) {
+    .boot-small-screen-warning { display: block !important; }
+    .boot-title { font-size: 38px; }
+}
+
+.boot-small-screen-warning {
+    display: none;
+    background: color-mix(in srgb, var(--vz-rec) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--vz-rec) 50%, transparent);
+    color: var(--vz-text);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin: 0 0 20px;
+    font-size: 12px;
+    font-family: 'Noto Sans Mono', monospace;
+    line-height: 1.5;
 }

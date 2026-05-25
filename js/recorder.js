@@ -42,10 +42,15 @@ export class Recorder {
 
     _pickMime() {
         if (typeof MediaRecorder === 'undefined') return ''
+        // Preference order: best compression first, then broadly-supported,
+        // then Safari's h264/mp4 path (newer Tech Preview supports webm but
+        // shipping Safari still wants mp4).
         const candidates = [
             'video/webm;codecs=vp9',
             'video/webm;codecs=vp8',
-            'video/webm'
+            'video/webm',
+            'video/mp4;codecs=avc1.42E01E',
+            'video/mp4'
         ]
         for (const m of candidates) {
             try {
@@ -53,6 +58,10 @@ export class Recorder {
             } catch {}
         }
         return ''
+    }
+
+    _fileExtension() {
+        return this._mimeType.startsWith('video/mp4') ? 'mp4' : 'webm'
     }
 
     get isRecording() {
@@ -116,7 +125,8 @@ export class Recorder {
     }
 
     _onStop() {
-        const blob = new Blob(this._chunks, { type: this._mimeType || 'video/webm' })
+        const fallbackType = this._fileExtension() === 'mp4' ? 'video/mp4' : 'video/webm'
+        const blob = new Blob(this._chunks, { type: this._mimeType || fallbackType })
         this._chunks = []
         this._onStateChange(false)
         if (blob.size === 0) return
@@ -129,7 +139,7 @@ export class Recorder {
         const a = document.createElement('a')
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
         a.href = url
-        a.download = `visualize-${ts}.webm`
+        a.download = `visualize-${ts}.${this._fileExtension()}`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

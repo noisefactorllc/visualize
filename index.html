@@ -55,8 +55,8 @@
             <div class="topbar-center">
                 <div class="bpm-block">
                     <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">TAP</button>
-                    <div class="bpm-display">
-                        <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120">
+                    <div class="bpm-display" aria-live="polite" aria-atomic="true">
+                        <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
                         <span class="bpm-label">BPM</span>
                     </div>
                     <div class="beat-indicator" id="beat-indicator">
@@ -80,8 +80,8 @@
                     <span class="status-icon">⚡</span>
                     <span class="status-text"><span id="fps-value">0</span> fps</span>
                 </div>
-                <button class="icon-button" id="settings-toggle" title="Settings (S)">⚙</button>
-                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen master (F)">⛶</button>
+                <button class="icon-button" id="settings-toggle" title="Settings (S)" aria-label="Open settings">⚙</button>
+                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen master (F)" aria-label="Toggle fullscreen">⛶</button>
             </div>
         </header>
 
@@ -203,6 +203,7 @@
                     <span class="control-value" id="speed-b-val">1.0×</span>
                 </div>
                 <div class="control-group rec-group">
+                    <button id="scenes-open" class="ghost-button" title="Scenes (save/recall full state)">★ scenes</button>
                     <button id="record-toggle" class="record-button" data-state="off">
                         <span class="record-dot"></span>
                         <span class="record-text">REC</span>
@@ -216,7 +217,7 @@
         <div class="settings-drawer" id="settings-drawer" aria-hidden="true">
             <div class="settings-head">
                 <h2>settings</h2>
-                <button class="icon-button" id="settings-close">✕</button>
+                <button class="icon-button" id="settings-close" aria-label="Close settings">✕</button>
             </div>
 
             <section class="settings-section">
@@ -290,6 +291,9 @@
                     <div><kbd>← / →</kbd> nudge crossfader</div>
                     <div><kbd>1–6</kbd> master FX</div>
                     <div><kbd>Q / W</kbd> random load A / B</div>
+                    <div><kbd>Shift</kbd>+<kbd>S</kbd> scenes</div>
+                    <div><kbd>Shift</kbd>+<kbd>1–9</kbd> recall scene</div>
+                    <div><kbd>Esc</kbd> close drawer / exit fullscreen</div>
                 </div>
             </section>
 
@@ -298,6 +302,34 @@
                     Built on <a href="https://polymorphic.noisedeck.app/" target="_blank" rel="noopener">Noisemaker</a> shaders &middot;
                     <a href="https://noisedeck.app/" target="_blank" rel="noopener">Noisedeck</a> family of apps &middot;
                     <a href="https://handfish.noisefactor.io/" target="_blank" rel="noopener">Handfish</a> design system
+                </p>
+            </section>
+        </div>
+
+        <div class="settings-drawer" id="scenes-drawer" aria-hidden="true">
+            <div class="settings-head">
+                <h2>scenes</h2>
+                <button class="icon-button" id="scenes-close" aria-label="Close scenes">✕</button>
+            </div>
+            <section class="settings-section">
+                <h3>save current state</h3>
+                <div class="settings-row">
+                    <input id="scene-name-input" type="text" placeholder="scene name" maxlength="40">
+                    <button id="scene-save" class="ghost-button">save</button>
+                </div>
+                <p class="settings-hint">
+                    Snapshots both decks (DSL + speed), crossfader, BPM, master FX, and auto-VJ config. Recall is instant — for animated transitions, use auto-VJ.
+                </p>
+            </section>
+
+            <section class="settings-section">
+                <h3>saved (number row: 1–9 recall)</h3>
+                <div id="scenes-list" class="scenes-list"></div>
+            </section>
+
+            <section class="settings-section">
+                <p class="settings-hint">
+                    Scenes live in browser storage. Use <kbd>Shift</kbd>+<kbd>S</kbd> to open this panel and <kbd>Shift</kbd>+<kbd>1</kbd>…<kbd>9</kbd> to recall.
                 </p>
             </section>
         </div>
@@ -311,6 +343,9 @@
                 <p class="boot-detail">
                     Audio-reactive shaders. Two decks. Crossfader. MIDI. Auto-VJ.<br>
                     Browser-based, no install.
+                </p>
+                <p class="boot-small-screen-warning">
+                    ⚠ This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
                 </p>
                 <button id="boot-start" class="boot-button">▶ START SET</button>
                 <p class="boot-hint">press start, then enable audio input from the settings panel</p>

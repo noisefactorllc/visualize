@@ -12,6 +12,11 @@
  * across browsers.
  */
 
+// XSS gate: POPUP_HTML is written via document.write into a freshly-opened
+// window and contains an inline <script>. It MUST remain a static string
+// — never interpolate user input, deck DSL, program titles, or anything
+// dynamic into this template, or you create a self-XSS vector. If you
+// need to pass data to the popup, do it via postMessage AFTER load.
 const POPUP_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
