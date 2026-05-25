@@ -1,0 +1,630 @@
+/**
+ * Visualize — main entry point.
+ *
+ * Wires together: two Decks, the SharedAudio analyzer, SharedMidi router,
+ * BeatScheduler, MasterCompositor (with FX), Library, AutoMix, Recorder,
+ * and OutputWindow. Also owns keyboard shortcuts and the settings drawer.
+ *
+ * Boot flow:
+ *   1. Render boot overlay; wait for user gesture (required for audio).
+ *   2. Initialize both decks (loads shader manifest from CDN).
+ *   3. Load library and pre-fill A/B with two random programs.
+ *   4. Start compositor + scheduler. Audio/MIDI stay opt-in (settings).
+ */
+
+import { Deck } from './noisemaker/deck.js'
+import { SharedAudio } from './audio.js'
+import { SharedMidi } from './midi.js'
+import { BeatScheduler } from './bpm.js'
+import { MasterCompositor } from './compositor.js'
+import { Library } from './library.js'
+import { AutoMix } from './automix.js'
+import { Recorder, formatRecTime } from './recorder.js'
+import { OutputWindow } from './output.js'
+
+const $ = (id) => document.getElementById(id)
+
+const state = {
+    decks: { A: null, B: null },
+    masterRes: { width: 1280, height: 720 },
+    loopDuration: 10,
+    preferWebGPU: false,
+    crossfade: 0
+}
+
+function toast(msg, timeoutMs = 2200) {
+    const el = $('toast')
+    if (!el) return
+    el.textContent = msg
+    el.classList.add('show')
+    clearTimeout(toast._t)
+    toast._t = setTimeout(() => el.classList.remove('show'), timeoutMs)
+}
+
+function setStatusPill(id, text, state) {
+    const el = $(id)
+    if (!el) return
+    el.dataset.state = state
+    el.querySelector('.status-text').textContent = text
+}
+
+async function boot() {
+    // Boot overlay — required for browsers to allow audio later
+    await new Promise((resolve) => {
+        $('boot-start').addEventListener('click', () => {
+            $('boot-overlay').classList.add('hidden')
+            resolve()
+        }, { once: true })
+    })
+
+    // Construct decks
+    state.decks.A = new Deck($('deck-a-canvas'), {
+        id: 'deckA', width: state.masterRes.width, height: state.masterRes.height,
+        loopDuration: state.loopDuration, preferWebGPU: state.preferWebGPU,
+        onError: (err) => console.error('[deckA]', err)
+    })
+    state.decks.B = new Deck($('deck-b-canvas'), {
+        id: 'deckB', width: state.masterRes.width, height: state.masterRes.height,
+        loopDuration: state.loopDuration, preferWebGPU: state.preferWebGPU,
+        onError: (err) => console.error('[deckB]', err)
+    })
+
+    toast('initializing shaders…')
+    try {
+        await Promise.all([state.decks.A.init(), state.decks.B.init()])
+    } catch (err) {
+        console.error('Deck init failed', err)
+        toast('shader engine failed to load — check console')
+        return
+    }
+
+    // Library
+    const library = new Library()
+    try {
+        await library.load()
+    } catch (err) {
+        console.error('Library load failed', err)
+        toast('failed to load programs.json')
+        return
+    }
+
+    // Compositor (master)
+    const compositor = new MasterCompositor(
+        $('master-canvas'),
+        state.decks.A,
+        state.decks.B,
+        { width: state.masterRes.width, height: state.masterRes.height }
+    )
+    compositor.start()
+
+    // Audio
+    const audio = new SharedAudio()
+    audio.addDeck(state.decks.A)
+    audio.addDeck(state.decks.B)
+    audio.onStatusChange((msg, enabled) => {
+        setStatusPill('audio-status', enabled ? `audio: ${audio.currentDeviceLabel.slice(0, 14)}` : 'audio off', enabled ? 'on' : 'off')
+        if (msg) toast(msg)
+    })
+    audio.onMeters((m) => {
+        $('meter-low').firstElementChild.style.width = `${m.low * 100}%`
+        $('meter-mid').firstElementChild.style.width = `${m.mid * 100}%`
+        $('meter-high').firstElementChild.style.width = `${m.high * 100}%`
+    })
+
+    // MIDI
+    const midi = new SharedMidi()
+    midi.addDeck(state.decks.A)
+    midi.addDeck(state.decks.B)
+    midi.onStatusChange((msg, enabled) => {
+        setStatusPill('midi-status', enabled ? `midi: ${midi.inputCount} in` : 'midi off', enabled ? 'on' : 'off')
+        $('midi-info').textContent = enabled ? `${midi.inputCount} input(s)` : 'not connected'
+        if (msg) toast(msg)
+    })
+
+    // BPM / scheduler
+    const scheduler = new BeatScheduler(120)
+    scheduler.start()
+    midi.onBpm((bpm) => {
+        if (!midi.followClock) return
+        scheduler.bpm = bpm
+        $('bpm-input').value = bpm.toFixed(1)
+    })
+
+    // Auto-mix
+    const autoMix = new AutoMix({
+        library, decks: state.decks, compositor, scheduler,
+        getXfade: () => state.crossfade,
+        setXfade: (v) => {
+            state.crossfade = v
+            compositor.setCrossfade(v)
+            $('crossfader').value = String(v)
+            updateLiveIndicator()
+        },
+        onStatus: (msg) => toast(msg)
+    })
+    // Drive the AutoMix fade per-frame for smooth interpolation
+    // (per-beat would only give ~4 visible steps across a 1-bar fade).
+    compositor.onFrame(() => autoMix.tickFrame())
+
+    // Recorder
+    const recorder = new Recorder($('master-canvas'), {
+        onTick: (ms) => { $('record-time').textContent = formatRecTime(ms) },
+        onStateChange: (recording) => {
+            const btn = $('record-toggle')
+            btn.dataset.state = recording ? 'on' : 'off'
+            if (!recording) $('record-time').textContent = '0:00'
+            toast(recording ? 'recording…' : 'recording saved')
+        },
+        onWarning: (msg) => toast(msg, 6000)
+    })
+    if (!Recorder.isSupported()) {
+        $('record-toggle').disabled = true
+        $('record-toggle').title = 'MediaRecorder not supported'
+    }
+
+    // Output window
+    const outputWin = new OutputWindow($('master-canvas'))
+
+    // ── Wire UI ───────────────────────────────────────────────────────────
+
+    // Mark the "live" deck (whichever has more weight) so the UI rim glows.
+    const deckEls = {
+        A: document.querySelector('.deck.deck-a'),
+        B: document.querySelector('.deck.deck-b')
+    }
+    function updateLiveIndicator() {
+        const aLive = state.crossfade < 0.5
+        deckEls.A.classList.toggle('live', aLive)
+        deckEls.B.classList.toggle('live', !aLive)
+    }
+
+    // Crossfader
+    $('crossfader').addEventListener('input', (e) => {
+        state.crossfade = parseFloat(e.target.value)
+        compositor.setCrossfade(state.crossfade)
+        updateLiveIndicator()
+        autoMix.noteUserOverride()
+    })
+    $('cut-a').addEventListener('click', () => {
+        state.crossfade = 0
+        compositor.setCrossfade(0)
+        $('crossfader').value = '0'
+        updateLiveIndicator()
+        autoMix.noteUserOverride()
+    })
+    $('cut-b').addEventListener('click', () => {
+        state.crossfade = 1
+        compositor.setCrossfade(1)
+        $('crossfader').value = '1'
+        updateLiveIndicator()
+        autoMix.noteUserOverride()
+    })
+    $('auto-fade').addEventListener('click', () => {
+        const target = state.crossfade < 0.5 ? 1 : 0
+        animateXfade(target, 1.5)
+    })
+
+    function animateXfade(target, durSec = 1) {
+        autoMix.noteUserOverride()
+        const start = state.crossfade
+        const startMs = performance.now()
+        const durMs = durSec * 1000
+        const step = () => {
+            const t = Math.min(1, (performance.now() - startMs) / durMs)
+            const eased = 0.5 - 0.5 * Math.cos(t * Math.PI)
+            state.crossfade = start + (target - start) * eased
+            compositor.setCrossfade(state.crossfade)
+            $('crossfader').value = String(state.crossfade)
+            updateLiveIndicator()
+            if (t < 1) requestAnimationFrame(step)
+        }
+        step()
+    }
+
+    // Speed sliders
+    function bindSpeed(deckId, sliderId, valId) {
+        const slider = $(sliderId)
+        const val = $(valId)
+        slider.addEventListener('input', () => {
+            const v = parseFloat(slider.value)
+            state.decks[deckId].setSpeed(v)
+            val.textContent = `${v.toFixed(1)}×`
+        })
+    }
+    bindSpeed('A', 'speed-a', 'speed-a-val')
+    bindSpeed('B', 'speed-b', 'speed-b-val')
+
+    // Random load per deck
+    document.querySelectorAll('.deck-load-random').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.deck
+            const exclude = state.decks[id].currentName
+            const p = library.randomExcept(exclude)
+            if (!p) return
+            await loadProgram(id, p)
+        })
+    })
+
+    // Library mount
+    library.mount({
+        rootEl: $('library-panel'),
+        gridEl: $('library-grid'),
+        countEl: $('library-count'),
+        searchEl: $('library-search'),
+        onLoadToDeck: async (deckId, program) => {
+            if (deckId === 'auto') {
+                // Load into the deck that's currently "less visible"
+                deckId = state.crossfade < 0.5 ? 'B' : 'A'
+            }
+            await loadProgram(deckId, program)
+        },
+        onRandomBoth: async () => {
+            const a = library.random()
+            const b = library.randomExcept(a?.title)
+            await Promise.all([loadProgram('A', a), loadProgram('B', b)])
+        }
+    })
+    library.setRandomBothButton($('library-random'))
+
+    async function loadProgram(deckId, program) {
+        if (!program) return
+        const deck = state.decks[deckId]
+        const res = await deck.load(program.dsl, program.title)
+        if (!res.success) {
+            toast(`${deckId}: ${res.error.slice(0, 60)}`)
+            return
+        }
+        // Refresh audio routing in case renderer recreated audioState
+        audio.refreshDeckStates()
+        $(`deck-${deckId.toLowerCase()}-name`).textContent = program.title
+        $(`deck-${deckId.toLowerCase()}-tagline`).textContent = program.tagline || ''
+    }
+
+    // Drag-drop on deck preview
+    document.querySelectorAll('.deck-canvas-wrap').forEach(wrap => {
+        const deck = wrap.closest('.deck')
+        const deckId = deck.dataset.deck
+        wrap.addEventListener('dragover', (e) => { e.preventDefault(); wrap.classList.add('drag-over') })
+        wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'))
+        wrap.addEventListener('drop', async (e) => {
+            e.preventDefault()
+            wrap.classList.remove('drag-over')
+            const title = e.dataTransfer.getData('text/program-title')
+            const p = library.byTitle(title)
+            if (p) await loadProgram(deckId, p)
+        })
+    })
+
+    // BPM controls
+    $('bpm-input').addEventListener('change', (e) => {
+        scheduler.bpm = parseFloat(e.target.value)
+        scheduler.resetPhase()
+    })
+    const tapBtn = $('tap-tempo')
+    function doTap() {
+        const bpm = scheduler.tap()
+        if (bpm) $('bpm-input').value = bpm.toFixed(1)
+        tapBtn.classList.add('flash')
+        setTimeout(() => tapBtn.classList.remove('flash'), 100)
+    }
+    tapBtn.addEventListener('click', doTap)
+
+    // Beat dots
+    const beatDots = [...document.querySelectorAll('.beat-dot')]
+    beatDots.forEach((d, i) => d.classList.toggle('downbeat', i === 0))
+    scheduler.onBeat((b) => {
+        beatDots.forEach((d, i) => {
+            d.classList.toggle('active', i === b.beatInBar)
+        })
+        // Beat-driven strobe
+        if (compositor.strobe) compositor.strobeBlink()
+    })
+
+    // Master FX buttons
+    document.querySelectorAll('.fx-button').forEach(btn => {
+        const fx = btn.dataset.fx
+        btn.addEventListener('click', () => toggleFx(fx, btn))
+    })
+
+    const flashOverlay = $('master-fx-overlay')
+    function toggleFx(fx, btnEl) {
+        const btn = btnEl || document.querySelector(`.fx-button[data-fx="${fx}"]`)
+        const active = !btn.classList.contains('active')
+        if (fx === 'strobe') compositor.setStrobe(active)
+        else if (fx === 'invert') compositor.setInvert(active)
+        else if (fx === 'bw') compositor.setBW(active)
+        else if (fx === 'zoom') compositor.setZoom(active)
+        else if (fx === 'freeze') compositor.setFreeze(active)
+        else if (fx === 'flash') {
+            compositor.flash()
+            // Also pulse the CSS overlay for a soft "screen flash" feel
+            // on top of the canvas-level white frame
+            if (flashOverlay) {
+                flashOverlay.classList.add('flash')
+                setTimeout(() => flashOverlay.classList.remove('flash'), 300)
+            }
+            return
+        }
+        if (btn) btn.classList.toggle('active', active)
+    }
+
+    // Auto-mix toggle
+    $('automix-toggle').addEventListener('click', () => {
+        const on = autoMix.toggle()
+        $('automix-toggle').dataset.state = on ? 'on' : 'off'
+    })
+    $('automix-bars').addEventListener('change', (e) => {
+        autoMix.setBarsPerScene(parseInt(e.target.value, 10))
+    })
+    $('automix-curve').addEventListener('change', (e) => {
+        autoMix.setCurve(e.target.value)
+        compositor.setCurve(e.target.value)
+    })
+
+    // Record
+    $('record-toggle').addEventListener('click', () => recorder.toggle())
+    $('output-window').addEventListener('click', () => outputWin.toggle())
+
+    // Fullscreen
+    $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
+    document.addEventListener('fullscreenchange', () => {
+        document.getElementById('app').classList.toggle('fullscreen-master', !!document.fullscreenElement)
+    })
+
+    function toggleFullscreen() {
+        const app = document.getElementById('app')
+        if (!document.fullscreenElement) {
+            app.classList.add('fullscreen-master')
+            app.requestFullscreen?.().catch(() => app.classList.remove('fullscreen-master'))
+        } else {
+            document.exitFullscreen?.()
+            app.classList.remove('fullscreen-master')
+        }
+    }
+
+    // Settings drawer
+    const drawer = $('settings-drawer')
+    function openSettings() {
+        drawer.setAttribute('aria-hidden', 'false')
+        refreshAudioDevices()
+    }
+    function closeSettings() { drawer.setAttribute('aria-hidden', 'true') }
+    $('settings-toggle').addEventListener('click', () => {
+        const open = drawer.getAttribute('aria-hidden') !== 'false'
+        if (open) openSettings(); else closeSettings()
+    })
+    $('settings-close').addEventListener('click', closeSettings)
+
+    async function refreshAudioDevices() {
+        const sel = $('audio-device')
+        const cur = sel.value
+        const devices = await audio.listDevices()
+        sel.innerHTML = '<option value="">— pick to enable —</option>'
+        for (const d of devices) {
+            const opt = document.createElement('option')
+            opt.value = d.deviceId
+            opt.textContent = d.label || `Audio input ${d.deviceId.slice(0, 6)}`
+            sel.appendChild(opt)
+        }
+        if (audio.enabled && audio.currentDeviceId) {
+            sel.value = audio.currentDeviceId
+        } else if (cur) {
+            sel.value = cur
+        }
+    }
+
+    $('audio-device').addEventListener('change', async (e) => {
+        const id = e.target.value
+        if (!id) {
+            await audio.disable()
+            return
+        }
+        const ok = await audio.enable(id)
+        if (ok) await refreshAudioDevices()
+    })
+    $('audio-sensitivity').addEventListener('input', (e) => {
+        const v = parseFloat(e.target.value)
+        audio.setSensitivity(v)
+        $('audio-sensitivity-val').textContent = `${v.toFixed(1)}×`
+    })
+
+    // MIDI
+    $('midi-enable').addEventListener('click', async () => {
+        const on = await midi.toggle()
+        $('midi-enable').textContent = on ? 'disable MIDI' : 'enable MIDI'
+    })
+    $('midi-clock-enable').addEventListener('change', (e) => {
+        midi.followClock = e.target.checked
+        toast(midi.followClock ? 'following MIDI clock for BPM' : 'BPM is manual / tap')
+    })
+
+    // MIDI learn rows
+    registerMidiControls(midi, {
+        crossfader: (v01) => {
+            state.crossfade = v01
+            compositor.setCrossfade(v01)
+            $('crossfader').value = String(v01)
+        },
+        speedA: (v01) => {
+            const s = 0.1 + v01 * 3.9
+            state.decks.A.setSpeed(s)
+            $('speed-a').value = String(s)
+            $('speed-a-val').textContent = `${s.toFixed(1)}×`
+        },
+        speedB: (v01) => {
+            const s = 0.1 + v01 * 3.9
+            state.decks.B.setSpeed(s)
+            $('speed-b').value = String(s)
+            $('speed-b-val').textContent = `${s.toFixed(1)}×`
+        },
+        fxStrobe: (v01) => { if (v01 > 0.5) toggleFx('strobe') },
+        fxInvert: (v01) => { if (v01 > 0.5) toggleFx('invert') },
+        fxFlash: (v01) => { if (v01 > 0.5) compositor.flash() },
+        fxFreeze: (v01) => { if (v01 > 0.5) toggleFx('freeze') }
+    })
+    midi.onLearnUpdate((rows) => renderLearnRows(rows, midi))
+    renderLearnRows(midi.getLearnView(), midi)
+    $('midi-learn-clear').addEventListener('click', () => midi.clearAllAssignments())
+
+    // Master resolution / loop / WebGPU
+    $('master-resolution').addEventListener('change', (e) => {
+        const [w, h] = e.target.value.split('x').map(Number)
+        state.masterRes = { width: w, height: h }
+        state.decks.A.resize(w, h)
+        state.decks.B.resize(w, h)
+        compositor.resize(w, h)
+        $('master-res').textContent = `${w}×${h}`
+        toast(`master: ${w}×${h}`)
+    })
+    $('master-loop').addEventListener('change', (e) => {
+        const sec = parseFloat(e.target.value)
+        if (!Number.isFinite(sec) || sec <= 0) return
+        state.loopDuration = sec
+        state.decks.A.setBaseLoopDuration(sec)
+        state.decks.B.setBaseLoopDuration(sec)
+    })
+
+    // FPS readout
+    setInterval(() => {
+        $('fps-value').textContent = String(compositor.fps)
+    }, 500)
+
+    // ── Keyboard shortcuts ────────────────────────────────────────────────
+    document.addEventListener('keydown', (e) => {
+        // ignore when typing in inputs
+        const tag = e.target.tagName
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+        const key = e.key.toLowerCase()
+        switch (key) {
+            case ' ':
+                e.preventDefault()
+                $('automix-toggle').click()
+                break
+            case 't':
+                doTap(); break
+            case 'f':
+                toggleFullscreen(); break
+            case 's':
+                if (drawer.getAttribute('aria-hidden') === 'false') closeSettings(); else openSettings()
+                break
+            case 'r':
+                recorder.toggle(); break
+            case 'z':
+                $('cut-a').click(); break
+            case 'x':
+                $('auto-fade').click(); break
+            case 'c':
+                $('cut-b').click(); break
+            case 'q': {
+                const p = library.randomExcept(state.decks.A.currentName)
+                loadProgram('A', p)
+                break
+            }
+            case 'w': {
+                const p = library.randomExcept(state.decks.B.currentName)
+                loadProgram('B', p)
+                break
+            }
+            case 'arrowleft': {
+                state.crossfade = Math.max(0, state.crossfade - 0.05)
+                compositor.setCrossfade(state.crossfade)
+                $('crossfader').value = String(state.crossfade)
+                updateLiveIndicator()
+                autoMix.noteUserOverride()
+                break
+            }
+            case 'arrowright': {
+                state.crossfade = Math.min(1, state.crossfade + 0.05)
+                compositor.setCrossfade(state.crossfade)
+                $('crossfader').value = String(state.crossfade)
+                updateLiveIndicator()
+                autoMix.noteUserOverride()
+                break
+            }
+            case '1': toggleFx('strobe'); break
+            case '2': toggleFx('invert'); break
+            case '3': toggleFx('bw'); break
+            case '4': toggleFx('zoom'); break
+            case '5': toggleFx('freeze'); break
+            case '6': toggleFx('flash'); break
+            case 'escape':
+                if (drawer.getAttribute('aria-hidden') === 'false') {
+                    closeSettings()
+                } else if (document.fullscreenElement) {
+                    document.exitFullscreen?.()
+                }
+                break
+        }
+    })
+
+    // Initial load: random into both decks. Serialize (not Promise.all) —
+    // the shader bundle's loadEffects() shares manifest state and parallel
+    // first-time loads sometimes race into ERR_COMPILATION_FAILED.
+    const startA = library.random()
+    const startB = library.randomExcept(startA?.title)
+    await loadProgram('A', startA)
+    await loadProgram('B', startB)
+    updateLiveIndicator()
+    setStatusPill('audio-status', 'audio off', 'off')
+    setStatusPill('midi-status', 'midi off', 'off')
+    toast('ready — open settings to enable audio/MIDI')
+}
+
+/** Register each Visualize control as a MIDI-learnable target. */
+function registerMidiControls(midi, controls) {
+    midi.registerControl('crossfader', 'crossfader',     controls.crossfader)
+    midi.registerControl('speedA',     'speed A',         controls.speedA)
+    midi.registerControl('speedB',     'speed B',         controls.speedB)
+    midi.registerControl('fxStrobe',   'fx · strobe',     controls.fxStrobe)
+    midi.registerControl('fxInvert',   'fx · invert',     controls.fxInvert)
+    midi.registerControl('fxFlash',    'fx · flash',      controls.fxFlash)
+    midi.registerControl('fxFreeze',   'fx · freeze',     controls.fxFreeze)
+}
+
+function renderLearnRows(rows, midi) {
+    const container = $('midi-learn-rows')
+    if (!container) return
+    container.innerHTML = ''
+    for (const row of rows) {
+        const div = document.createElement('div')
+        div.className = 'midi-learn-row'
+        if (row.learning) div.classList.add('learning')
+        const ccLabel = row.cc != null
+            ? `<span class="ml-cc">CC ${row.cc} · ch ${row.ch + 1}</span>`
+            : `<span class="ml-cc" style="opacity:0.5">${row.learning ? 'move a knob…' : 'unassigned'}</span>`
+        div.innerHTML = `
+            <span class="ml-target">${row.label}</span>
+            ${ccLabel}
+            <span></span>
+        `
+        const actions = document.createElement('span')
+        actions.style.cssText = 'display:flex; gap:4px;'
+        if (row.learning) {
+            const cancel = document.createElement('button')
+            cancel.textContent = '✕'
+            cancel.title = 'cancel learn'
+            cancel.addEventListener('click', () => midi.cancelLearn())
+            actions.appendChild(cancel)
+        } else {
+            const learn = document.createElement('button')
+            learn.textContent = row.cc != null ? '↻' : '◉'
+            learn.title = row.cc != null ? 'relearn' : 'learn'
+            learn.addEventListener('click', () => midi.startLearn(row.controlId))
+            actions.appendChild(learn)
+            if (row.cc != null) {
+                const clear = document.createElement('button')
+                clear.textContent = '✕'
+                clear.title = 'clear'
+                clear.addEventListener('click', () => midi.clearAssignment(row.controlId))
+                actions.appendChild(clear)
+            }
+        }
+        div.appendChild(actions)
+        container.appendChild(div)
+    }
+}
+
+boot().catch((err) => {
+    console.error('boot failed', err)
+    toast('boot failed — see console')
+})
