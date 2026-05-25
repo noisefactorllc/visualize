@@ -1,12 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Visualize — Music Visualizer &amp; VJ Player</title>
     <meta name="description" content="Audio-reactive shader visualizer and VJ gig player. Two decks, crossfader, MIDI, auto-mix. Built on Noisemaker.">
     <meta name="author" content="Noise Factor">
-    <meta name="theme-color" content="#0a0a0f">
 
     <link rel="preconnect" href="https://fonts.noisefactor.io" crossorigin>
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
@@ -15,32 +14,38 @@
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
 
-    <style>
-        @font-face {
-            font-family: 'Nunito';
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: swap;
-            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito%5Bwght%5D.woff2') format('woff2');
+    <!-- Apply the saved handfish theme synchronously to avoid a flash from
+         the default dark palette to the user's chosen theme on every load.
+         The script appends the theme <link> AFTER tokens.css so it wins the
+         cascade (both selectors are specificity (0,1,0), later loses-then-
+         wins on source order). Keep this mapping in sync with
+         js/handfish-theme.js (THEMES). -->
+    <script>
+    (function () {
+        var FILES = {
+            'neutral-dark': 'neutral', 'neutral-light': 'neutral',
+            'gray-dark': 'gray', 'gray-light': 'gray',
+            'corporate': 'corporate',
+            'high-contrast-dark': 'high-contrast', 'high-contrast-light': 'high-contrast',
+            'newspaper': 'newspaper', 'gothic': 'gothic', 'terminal': 'terminal',
+            'brutalist': 'brutalist', 'ocean': 'ocean', 'dusk': 'dusk',
+            'sunset': 'sunset', 'earthy': 'earthy', 'organic': 'organic',
+            'cyberpunk': 'cyberpunk', 'synthwave': 'synthwave',
+            'rave': 'rave', 'kawaii': 'kawaii'
         }
-        @font-face {
-            font-family: 'Comfortaa';
-            font-weight: 100 700;
-            font-style: normal;
-            font-display: swap;
-            src: url('https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa%5Bwght%5D.woff2') format('woff2');
-        }
-        @font-face {
-            font-family: 'Noto Sans Mono';
-            font-weight: 200 700;
-            font-style: normal;
-            font-display: swap;
-            src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono%5Bwdth%2Cwght%5D.woff2') format('woff2');
-        }
+        var stored = null
+        try { stored = localStorage.getItem('visualize.theme.v1') } catch (e) {}
+        var theme = (stored && FILES[stored]) ? stored : 'neutral-dark'
+        document.documentElement.setAttribute('data-theme', theme)
+        var link = document.createElement('link')
+        link.id = 'hf-theme-link'
+        link.rel = 'stylesheet'
+        link.href = 'https://handfish.noisefactor.io/0/styles/themes/' + FILES[theme] + '.css'
+        document.head.appendChild(link)
+    })()
+    </script>
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-    </style>
-
+    <style>* { margin: 0; padding: 0; box-sizing: border-box; }</style>
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -48,7 +53,7 @@
 
         <header class="topbar">
             <div class="brand">
-                <span class="brand-logo">▶◉</span>
+                <span class="brand-logo icon">equalizer</span>
                 <span class="brand-name">VISUALIZE</span>
                 <span class="brand-tag">vj &middot; visualizer</span>
             </div>
@@ -77,19 +82,19 @@
             </div>
             <div class="topbar-right">
                 <div class="status-pill" id="audio-status" data-state="off" title="Audio status">
-                    <span class="status-icon">♪</span>
+                    <span class="status-icon icon">music_note</span>
                     <span class="status-text">audio off</span>
                 </div>
                 <div class="status-pill" id="midi-status" data-state="off" title="MIDI status">
-                    <span class="status-icon">⌥</span>
+                    <span class="status-icon icon">piano</span>
                     <span class="status-text">midi off</span>
                 </div>
                 <div class="status-pill" id="fps-status" title="Frames per second">
-                    <span class="status-icon">⚡</span>
+                    <span class="status-icon icon">bolt</span>
                     <span class="status-text"><span id="fps-value">0</span> fps</span>
                 </div>
-                <button class="icon-button" id="settings-toggle" title="Settings (S)" aria-label="Open settings">⚙</button>
-                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen main (F)" aria-label="Toggle fullscreen">⛶</button>
+                <button class="icon-button" id="settings-toggle" title="Settings (S)" aria-label="Open settings"><span class="icon">settings</span></button>
+                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen main (F)" aria-label="Toggle fullscreen"><span class="icon">fullscreen</span></button>
             </div>
         </header>
 
@@ -101,7 +106,7 @@
             <div class="library-grid" id="library-grid"></div>
             <div class="library-footer">
                 <span id="library-count">0 programs</span>
-                <button id="library-random" class="ghost-button" title="Load random into both decks">↻ random both</button>
+                <button id="library-random" class="ghost-button" title="Load random into both decks"><span class="icon">shuffle</span> random both</button>
             </div>
         </aside>
 
@@ -110,7 +115,7 @@
                 <div class="deck-head">
                     <span class="deck-label">DECK A</span>
                     <span class="deck-program" id="deck-a-name">—</span>
-                    <button class="deck-load-random" data-deck="A" title="Load random program">↻</button>
+                    <button class="deck-load-random" data-deck="A" title="Load random program"><span class="icon">shuffle</span></button>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-a-canvas"></canvas>
@@ -149,7 +154,7 @@
                 <div class="deck-head">
                     <span class="deck-label">DECK B</span>
                     <span class="deck-program" id="deck-b-name">—</span>
-                    <button class="deck-load-random" data-deck="B" title="Load random program">↻</button>
+                    <button class="deck-load-random" data-deck="B" title="Load random program"><span class="icon">shuffle</span></button>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-b-canvas"></canvas>
@@ -198,9 +203,9 @@
                     <span class="xfader-label-b">B</span>
                 </div>
                 <div class="xfader-quick">
-                    <button class="quick-cut" id="cut-a" title="Cut to A (Z)">◀</button>
-                    <button class="quick-cut" id="auto-fade" title="Auto-fade (X)">⇄</button>
-                    <button class="quick-cut" id="cut-b" title="Cut to B (C)">▶</button>
+                    <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
+                    <button class="quick-cut" id="auto-fade" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
+                    <button class="quick-cut" id="cut-b" title="Cut to B (C)"><span class="icon">last_page</span></button>
                 </div>
             </div>
 
@@ -211,13 +216,13 @@
                     <span class="control-value" id="speed-b-val">1.0×</span>
                 </div>
                 <div class="control-group rec-group">
-                    <button id="scenes-open" class="ghost-button" title="Scenes (save/recall full state)">★ scenes</button>
+                    <button id="scenes-open" class="ghost-button" title="Scenes (save/recall full state)"><span class="icon">bookmark</span> scenes</button>
                     <button id="record-toggle" class="record-button" data-state="off">
                         <span class="record-dot"></span>
                         <span class="record-text">REC</span>
                         <span class="record-time" id="record-time">0:00</span>
                     </button>
-                    <button id="output-window" class="ghost-button" title="Open output window">⎘ output</button>
+                    <button id="output-window" class="ghost-button" title="Open output window"><span class="icon">open_in_new</span> output</button>
                 </div>
             </div>
         </section>
@@ -225,8 +230,17 @@
         <div class="settings-drawer" id="settings-drawer" aria-hidden="true">
             <div class="settings-head">
                 <h2>settings</h2>
-                <button class="icon-button" id="settings-close" aria-label="Close settings">✕</button>
+                <button class="icon-button" id="settings-close" aria-label="Close settings"><span class="icon">close</span></button>
             </div>
+
+            <section class="settings-section">
+                <h3>appearance</h3>
+                <div class="settings-row">
+                    <label for="theme-picker-host">theme</label>
+                    <span id="theme-picker-host" class="theme-picker-host"></span>
+                </div>
+                <p class="settings-hint">Handfish themes. Picks your color palette, font, and surface treatment site-wide.</p>
+            </section>
 
             <section class="settings-section">
                 <h3>audio input</h3>
@@ -316,7 +330,7 @@
         <div class="settings-drawer" id="scenes-drawer" aria-hidden="true">
             <div class="settings-head">
                 <h2>scenes</h2>
-                <button class="icon-button" id="scenes-close" aria-label="Close scenes">✕</button>
+                <button class="icon-button" id="scenes-close" aria-label="Close scenes"><span class="icon">close</span></button>
             </div>
             <section class="settings-section">
                 <h3>save current state</h3>
@@ -352,9 +366,9 @@
                     Browser-based, no install.
                 </p>
                 <p class="boot-small-screen-warning">
-                    ⚠ This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
+                    <span class="icon">warning</span> This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
                 </p>
-                <button id="boot-start" class="boot-button">▶ START SET</button>
+                <button id="boot-start" class="boot-button"><span class="icon">play_arrow</span> START SET</button>
                 <p class="boot-hint">press start, then enable audio input from the settings panel</p>
             </div>
         </div>

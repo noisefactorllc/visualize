@@ -22,6 +22,7 @@ import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import { Scenes } from './scenes.js'
+import { mountThemePicker } from './handfish-theme.js'
 
 const $ = (id) => document.getElementById(id)
 
@@ -472,6 +473,12 @@ async function boot() {
             app.classList.remove('fullscreen-main')
         }
     }
+
+    // Theme picker (Handfish themes; the inline <script> in index.html
+    // already applied the saved theme before paint, so this just wires the
+    // dropdown UI).
+    const themeHost = $('theme-picker-host')
+    if (themeHost) mountThemePicker({ container: themeHost, storageKey: 'visualize.theme.v1' })
 
     // Settings drawer
     const drawer = $('settings-drawer')
