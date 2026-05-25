@@ -458,7 +458,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     text-overflow: ellipsis;
 }
 
-.deck-load-random {
+.deck-load-random,
+.deck-edit-toggle {
     appearance: none;
     background: transparent;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
@@ -470,7 +471,13 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
 }
-.deck-load-random:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-load-random:hover,
+.deck-edit-toggle:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-edit-toggle.active {
+    color: var(--hf-bg-base);
+    background: var(--hf-accent);
+    border-color: var(--hf-accent);
+}
 
 .deck-canvas-wrap {
     position: relative;
@@ -494,6 +501,66 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     inset: 0;
     pointer-events: none;
 }
+
+/* DSL editor — optionally overlays the deck canvas when the user clicks
+   the </> button. Canvas keeps rendering behind so compiled changes are
+   visible the moment "compile" runs. */
+.deck-editor {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--hf-bg-base);
+    z-index: 10;
+}
+.deck-editor[hidden] { display: none; }
+
+.deck-editor-code {
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--hf-bg-base);
+    color: var(--hf-text-normal);
+    --code-editor-font: var(--hf-font-family-mono);
+    --code-editor-font-size: var(--hf-size-xs);
+    --code-editor-line-height: 1.5;
+    --code-editor-gutter-bg: var(--hf-bg-surface);
+    --code-editor-gutter-width: 2.5em;
+    --code-editor-line-number-color: var(--hf-text-dim);
+    --code-editor-caret-color: var(--hf-accent);
+}
+
+.deck-editor-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--hf-space-2);
+    padding: var(--hf-space-1) var(--hf-space-2);
+    background: var(--hf-bg-surface);
+    border-top: var(--hf-border-width) solid var(--hf-border-subtle);
+    flex: 0 0 auto;
+}
+
+.deck-editor-hint {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-dim);
+}
+
+.deck-editor-compile {
+    appearance: none;
+    background: var(--hf-accent);
+    color: var(--hf-bg-base);
+    border: var(--hf-border-width) solid var(--hf-accent);
+    border-radius: var(--hf-radius-sm);
+    padding: var(--hf-space-1) var(--hf-space-3);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    font-weight: var(--hf-weight-bold);
+    letter-spacing: var(--hf-tracking-wide);
+    cursor: pointer;
+    transition: var(--hf-transition-bg);
+}
+.deck-editor-compile:hover { background: var(--hf-accent-hover); }
 
 .deck-meta {
     padding: var(--hf-space-1) var(--hf-space-3);

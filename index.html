@@ -11,6 +11,12 @@
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
     <link rel="preconnect" href="https://handfish.noisefactor.io" crossorigin>
 
+    <!-- Resolve `import ... from 'handfish'` in app.js to the CDN bundle.
+         Used for the <code-editor> custom element + dslTokenizer. -->
+    <script type="importmap">
+        { "imports": { "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js" } }
+    </script>
+
     <!-- Preload the metric-matched Blank placeholder fonts so handfish's
          zero-CLS strategy kicks in. Without these, browsers optimize away
          the Nunito Blank / NotoSansMono Blank fallbacks (they sit at the
@@ -123,11 +129,19 @@
                 <div class="deck-head">
                     <span class="deck-label">DECK A</span>
                     <span class="deck-program" id="deck-a-name">—</span>
+                    <button class="deck-edit-toggle" data-deck="A" title="Edit DSL"><span class="icon">code</span></button>
                     <button class="deck-load-random" data-deck="A" title="Load random program"><span class="icon">shuffle</span></button>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-a-canvas"></canvas>
                     <div class="deck-overlay" id="deck-a-overlay"></div>
+                    <div class="deck-editor" hidden>
+                        <code-editor class="deck-editor-code" line-numbers></code-editor>
+                        <div class="deck-editor-actions">
+                            <span class="deck-editor-hint">⌘/Ctrl+Enter to compile</span>
+                            <button class="deck-editor-compile">compile</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="deck-meta">
                     <span class="deck-tagline" id="deck-a-tagline"></span>
@@ -162,11 +176,19 @@
                 <div class="deck-head">
                     <span class="deck-label">DECK B</span>
                     <span class="deck-program" id="deck-b-name">—</span>
+                    <button class="deck-edit-toggle" data-deck="B" title="Edit DSL"><span class="icon">code</span></button>
                     <button class="deck-load-random" data-deck="B" title="Load random program"><span class="icon">shuffle</span></button>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-b-canvas"></canvas>
                     <div class="deck-overlay" id="deck-b-overlay"></div>
+                    <div class="deck-editor" hidden>
+                        <code-editor class="deck-editor-code" line-numbers></code-editor>
+                        <div class="deck-editor-actions">
+                            <span class="deck-editor-hint">⌘/Ctrl+Enter to compile</span>
+                            <button class="deck-editor-compile">compile</button>
+                        </div>
+                    </div>
                 </div>
                 <div class="deck-meta">
                     <span class="deck-tagline" id="deck-b-tagline"></span>

@@ -23,11 +23,15 @@ import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import { Scenes } from './scenes.js'
 import { mountThemePicker } from './handfish-theme.js'
+// Pulls handfish's <code-editor> custom element (auto-registers on import)
+// plus the DSL syntax tokenizer.
+import { dslTokenizer } from 'handfish'
 
 const $ = (id) => document.getElementById(id)
 
 const state = {
     decks: { A: null, B: null },
+    deckDsl: { A: '', B: '' },        // last loaded DSL (for the editor)
     mainRes: { width: 1280, height: 720 },
     loopDuration: 10,
     preferWebGPU: false,
@@ -349,6 +353,7 @@ async function boot() {
             toast(`${deckId}: ${res.error.slice(0, 60)}`)
             return
         }
+        state.deckDsl[deckId] = program.dsl
         // Refresh audio routing in case renderer recreated audioState
         audio.refreshDeckStates()
         const labels = deckLabels[deckId]
@@ -356,7 +361,75 @@ async function boot() {
             labels.name.textContent = program.title
             labels.tag.textContent = program.tagline || ''
         }
+        // If the editor is open for this deck, sync its content to the
+        // newly loaded program — otherwise the editor would still show
+        // the previous program's DSL.
+        syncDeckEditor(deckId)
     }
+
+    /** Wire the per-deck DSL editor toggle, compile, and Ctrl+Enter binding. */
+    function wireDeckEditors() {
+        for (const deckId of ['A', 'B']) {
+            const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
+            const panel = deckEl.querySelector('.deck-editor')
+            const editor = deckEl.querySelector('code-editor')
+            const compileBtn = deckEl.querySelector('.deck-editor-compile')
+            const toggleBtn = deckEl.querySelector('.deck-edit-toggle')
+
+            // Apply DSL syntax highlighting. setTokenizer may not exist yet
+            // on first paint if the handfish bundle is still resolving, so
+            // we retry once a frame later as a belt-and-braces measure.
+            const applyTokenizer = () => editor.setTokenizer?.(dslTokenizer)
+            applyTokenizer()
+            if (typeof editor.setTokenizer !== 'function') {
+                requestAnimationFrame(applyTokenizer)
+            }
+
+            toggleBtn.addEventListener('click', () => {
+                const opening = panel.hidden
+                panel.hidden = !opening
+                toggleBtn.classList.toggle('active', opening)
+                if (opening) {
+                    editor.value = state.deckDsl[deckId] || ''
+                    // Defer focus so the show transition + textarea init settle
+                    requestAnimationFrame(() => editor.focus?.())
+                }
+            })
+
+            async function compileFromEditor() {
+                const dsl = editor.value
+                if (!dsl.trim()) return
+                const res = await state.decks[deckId].load(dsl, '(custom)')
+                if (!res.success) {
+                    toast(`${deckId}: ${res.error.slice(0, 60)}`, 4000)
+                    return
+                }
+                state.deckDsl[deckId] = dsl
+                audio.refreshDeckStates()
+                const labels = deckLabels[deckId]
+                if (labels) {
+                    labels.name.textContent = '(custom)'
+                    labels.tag.textContent = ''
+                }
+                toast(`${deckId}: compiled`)
+            }
+
+            compileBtn.addEventListener('click', compileFromEditor)
+            // <code-editor> fires forcerecompile on Ctrl/Cmd+Enter.
+            editor.addEventListener('forcerecompile', compileFromEditor)
+        }
+    }
+
+    /** Keep an open editor in sync with the deck's currently loaded DSL. */
+    function syncDeckEditor(deckId) {
+        const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
+        const panel = deckEl.querySelector('.deck-editor')
+        if (panel.hidden) return
+        const editor = deckEl.querySelector('code-editor')
+        editor.value = state.deckDsl[deckId] || ''
+    }
+
+    wireDeckEditors()
 
     // Drag-drop on deck preview
     document.querySelectorAll('.deck-canvas-wrap').forEach(wrap => {
