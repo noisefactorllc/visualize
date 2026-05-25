@@ -3,7 +3,7 @@
  *
  * Three jobs:
  *  1. Route MIDI CC values to registered Visualize controls (crossfader,
- *     deck speeds, master FX). Uses a "learn" workflow so the user
+ *     deck speeds, main FX). Uses a "learn" workflow so the user
  *     touches a control on the controller to bind it.
  *  2. Forward CC + note state into each deck's midiState bag so DSL
  *     programs using midi() automation also react.

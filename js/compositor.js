@@ -1,10 +1,10 @@
 /**
- * MasterCompositor — owns the master canvas and blends deck A and deck B
+ * MainCompositor — owns the main canvas and blends deck A and deck B
  * into it every frame using a configurable crossfade curve.
  *
  * Both deck canvases are real DOM <canvas> elements rendered by their
  * own CanvasRenderer; we sample them with drawImage(). This is cheaper
- * than running a third GPU pipeline and means the master stays just a
+ * than running a third GPU pipeline and means the main stays just a
  * 2D context the recorder / fullscreen logic can hand off freely.
  *
  * FX (strobe/invert/B&W/flash/zoom/freeze) are applied as either CSS
@@ -25,7 +25,7 @@ const XFADE_CURVES = {
     cut: (x) => x < 0.5 ? 0 : 1
 }
 
-export class MasterCompositor {
+export class MainCompositor {
     constructor(canvas, deckA, deckB, options = {}) {
         this.canvas = canvas
         this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
@@ -71,7 +71,7 @@ export class MasterCompositor {
 
     onFrame(cb) { this._onFrame = cb }
 
-    /** Resize the master canvas. */
+    /** Resize the main canvas. */
     resize(width, height) {
         this.width = width
         this.height = height
@@ -186,7 +186,7 @@ export class MasterCompositor {
      * strobe rate is exactly the BPM (PSE-safe at typical tempos: a
      * 1/8th-note strobe at 180 BPM is 6 Hz, well below the 3 Hz/8 Hz
      * danger zone but reasonable to use; users should still be warned).
-     * The flash fades over _strobeDurMs (default 40ms) so the master
+     * The flash fades over _strobeDurMs (default 40ms) so the main
      * looks like a real strobe rather than a steady white block.
      */
     strobeBlink() {

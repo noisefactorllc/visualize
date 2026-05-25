@@ -27,14 +27,14 @@ Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device**
 - **Crossfader** with four blend curves (linear / sharp / dipped equal-power / hard cut).
 - **35 curated programs** — 12 audio-reactive (use `audio(band: 0|1|2)` DSL automation), 23 base presets.
 - **Audio analyzer** maps low/mid/high FFT bands into each deck's `audioState` so DSL programs using `audio()` automation react to live mic/loopback input. Device picker + sensitivity slider.
-- **MIDI** with `requestMIDIAccess()` — assign any CC to crossfader, speed A/B, or master FX via a learn workflow. Persisted to localStorage. Optional MIDI clock follower drives BPM.
+- **MIDI** with `requestMIDIAccess()` — assign any CC to crossfader, speed A/B, or main FX via a learn workflow. Persisted to localStorage. Optional MIDI clock follower drives BPM.
 - **Beat scheduler** with tap tempo, manual BPM input, and beat indicator. Synchronizes auto-mix and strobe.
-- **Master FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the master canvas (cheap); strobe/flash/freeze are handled inside the compositor draw loop.
+- **Main FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the main canvas (cheap); strobe/flash/freeze are handled inside the compositor draw loop.
 - **Auto-VJ mode**: every N bars, picks a fresh random program, loads into the off-side deck, and fades to it over the chosen curve.
 - **Scenes**: save a full snapshot (both decks' programs + speeds, crossfader, BPM, FX, auto-VJ config) as a named scene. Recall instantly via the panel or Shift+1…9. Stored in browser localStorage.
-- **Recording**: capture the master canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
-- **Output window**: dedicated popup that mirrors the master canvas for second-display / projector use.
-- **Fullscreen master** (F key).
+- **Recording**: capture the main canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
+- **Output window**: dedicated popup that mirrors the main canvas for second-display / projector use.
+- **Fullscreen main** (F key).
 - **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), arrows (nudge xfade), Shift+S (scenes drawer), Shift+1…9 (recall scene), Esc (close drawer / exit fullscreen).
 
 ## Architecture
@@ -48,15 +48,15 @@ js/
 ├── audio.js            SharedAudio — one analyser → many deck audioStates
 ├── midi.js             SharedMidi — CC routing, learn, clock-to-BPM
 ├── bpm.js              BeatScheduler — tap tempo + beat events
-├── compositor.js       MasterCompositor — 2D drawImage blend of decks + FX
+├── compositor.js       MainCompositor — 2D drawImage blend of decks + FX
 ├── library.js          Library — load programs.json, render grid
 ├── automix.js          AutoMix — beat-driven scene-swap automation
 ├── scenes.js           Scenes — named state snapshots (localStorage)
-├── recorder.js         Recorder — MediaRecorder of master canvas
+├── recorder.js         Recorder — MediaRecorder of main canvas
 └── output.js           OutputWindow — popup mirror for projector
 ```
 
-Both decks render via their own `CanvasRenderer` to a hidden-ish offscreen-style canvas (technically visible in the deck preview pane). The master is a 2D context that samples both deck canvases each frame and blends with the active crossfade curve. This means the recorder, fullscreen, and output-window features can all hand around plain `HTMLCanvasElement` references — no `OffscreenCanvas` or `captureStream` chaining required.
+Both decks render via their own `CanvasRenderer` to a hidden-ish offscreen-style canvas (technically visible in the deck preview pane). The main is a 2D context that samples both deck canvases each frame and blends with the active crossfade curve. This means the recorder, fullscreen, and output-window features can all hand around plain `HTMLCanvasElement` references — no `OffscreenCanvas` or `captureStream` chaining required.
 
 ## Adding programs
 

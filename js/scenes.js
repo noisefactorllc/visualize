@@ -8,12 +8,12 @@
  *   - Per-deck speed multiplier
  *   - Crossfader value + current curve
  *   - BPM
- *   - Master FX state (which toggles are active)
+ *   - Main FX state (which toggles are active)
  *   - Auto-mix config (enabled, bars-per-scene, fade curve)
  *
  * Scenes persist to localStorage. The first 9 scenes are hotkey-recallable
  * via the number row 1-9 (modified with Shift to avoid clashing with the
- * existing 1-6 master FX shortcuts). Saving a scene with the same name
+ * existing 1-6 main FX shortcuts). Saving a scene with the same name
  * overwrites.
  *
  * Recall is a snap — no animation between current and target state. For

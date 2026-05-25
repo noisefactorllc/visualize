@@ -1,7 +1,7 @@
 /* ==========================================================================
    VISUALIZE — VJ gig player & music visualizer
    Layout uses Handfish design tokens for color/typography; bespoke grid for
-   the deck/master/library workspace.
+   the deck/main/library workspace.
    ========================================================================== */
 
 :root {
@@ -13,7 +13,7 @@
     /* Distinctive Visualize accents on top of Handfish */
     --vz-deck-a: var(--hf-blue, #4ea8ff);
     --vz-deck-b: var(--hf-magenta, #ff5fc0);
-    --vz-master: var(--hf-yellow, #ffd24e);
+    --vz-main: var(--hf-yellow, #ffd24e);
     --vz-rec: var(--hf-red, #ff4d5e);
     --vz-good: var(--hf-green, #4ed99b);
 
@@ -64,7 +64,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 .program-card:focus-visible {
-    outline: 2px solid var(--vz-master);
+    outline: 2px solid var(--vz-main);
     outline-offset: 2px;
     border-radius: 4px;
 }
@@ -93,15 +93,15 @@ select:focus-visible,
 .brand-logo {
     display: inline-block;
     font-size: 20px;
-    color: var(--vz-master);
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--vz-master) 60%, transparent));
+    color: var(--vz-main);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--vz-main) 60%, transparent));
 }
 
 .brand-name {
     font-size: 18px;
     font-weight: 700;
     letter-spacing: 0.18em;
-    background: linear-gradient(90deg, var(--vz-deck-a), var(--vz-master), var(--vz-deck-b));
+    background: linear-gradient(90deg, var(--vz-deck-a), var(--vz-main), var(--vz-deck-b));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -144,9 +144,9 @@ select:focus-visible,
     transition: all 0.1s ease;
 }
 
-.tap-button:hover { border-color: var(--vz-master); color: var(--vz-master); }
+.tap-button:hover { border-color: var(--vz-main); color: var(--vz-main); }
 .tap-button:active, .tap-button.flash {
-    background: var(--vz-master);
+    background: var(--vz-main);
     color: var(--hf-bg-base, #000);
     transform: scale(0.96);
 }
@@ -187,9 +187,9 @@ select:focus-visible,
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
-    background-color: color-mix(in srgb, var(--vz-master) 8%, transparent);
+    background-color: color-mix(in srgb, var(--vz-main) 8%, transparent);
     color: var(--vz-text);
-    border: 1px solid color-mix(in srgb, var(--vz-master) 25%, transparent);
+    border: 1px solid color-mix(in srgb, var(--vz-main) 25%, transparent);
     border-radius: 4px;
     padding: 2px 14px 2px 6px;
     font-family: 'Noto Sans Mono', monospace;
@@ -205,16 +205,16 @@ select:focus-visible,
     margin: 0 4px;
 }
 .bpm-divider:hover {
-    background-color: color-mix(in srgb, var(--vz-master) 18%, transparent);
-    border-color: color-mix(in srgb, var(--vz-master) 50%, transparent);
+    background-color: color-mix(in srgb, var(--vz-main) 18%, transparent);
+    border-color: color-mix(in srgb, var(--vz-main) 50%, transparent);
 }
-.bpm-divider:focus { border-color: var(--vz-master); }
+.bpm-divider:focus { border-color: var(--vz-main); }
 .bpm-divider option { background: var(--hf-bg-base, #0a0a0f); color: var(--vz-text); }
 
 /* When BPM is being driven by MIDI clock, retint the bpm-label to signal
    that the value isn't user-set. */
-.bpm-block.midi-sync .bpm-label { color: var(--vz-master); }
-.bpm-block.midi-sync #bpm-input { color: var(--vz-master); }
+.bpm-block.midi-sync .bpm-label { color: var(--vz-main); }
+.bpm-block.midi-sync #bpm-input { color: var(--vz-main); }
 
 .beat-indicator {
     display: flex;
@@ -230,8 +230,8 @@ select:focus-visible,
 }
 
 .beat-dot.active {
-    background: var(--vz-master);
-    box-shadow: 0 0 10px var(--vz-master);
+    background: var(--vz-main);
+    box-shadow: 0 0 10px var(--vz-main);
     transform: scale(1.3);
 }
 
@@ -322,7 +322,7 @@ select:focus-visible,
     outline: none;
     transition: border-color 0.15s ease;
 }
-#library-search:focus { border-color: var(--vz-master); }
+#library-search:focus { border-color: var(--vz-main); }
 
 .library-grid {
     flex: 1;
@@ -430,9 +430,9 @@ select:focus-visible,
     transition: all 0.1s ease;
     white-space: nowrap;
 }
-.ghost-button:hover { border-color: var(--vz-master); color: var(--vz-master); }
+.ghost-button:hover { border-color: var(--vz-main); color: var(--vz-main); }
 
-/* ─────────────── stage (decks + master) ─────────────── */
+/* ─────────────── stage (decks + main) ─────────────── */
 .stage {
     grid-area: stage;
     display: grid;
@@ -496,7 +496,7 @@ select:focus-visible,
     cursor: pointer;
     transition: all 0.1s ease;
 }
-.deck-load-random:hover { color: var(--vz-master); border-color: var(--vz-master); }
+.deck-load-random:hover { color: var(--vz-main); border-color: var(--vz-main); }
 
 .deck-canvas-wrap {
     position: relative;
@@ -534,8 +534,8 @@ select:focus-visible,
     font-style: italic;
 }
 
-/* ─────────────── master ─────────────── */
-.master {
+/* ─────────────── main ─────────────── */
+.main {
     display: grid;
     grid-template-rows: auto 1fr auto;
     background: var(--vz-glass-strong);
@@ -545,7 +545,7 @@ select:focus-visible,
     min-height: 0;
 }
 
-.master-head {
+.main-head {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -554,14 +554,14 @@ select:focus-visible,
     font-family: 'Noto Sans Mono', monospace;
 }
 
-.master-label {
+.main-label {
     font-size: 11px;
     font-weight: 700;
-    color: var(--vz-master);
+    color: var(--vz-main);
     letter-spacing: 0.2em;
 }
 
-.master-meter {
+.main-meter {
     flex: 1;
     display: flex;
     gap: 6px;
@@ -587,22 +587,22 @@ select:focus-visible,
 }
 
 .audio-band.low b { background: var(--vz-deck-a); }
-.audio-band.mid b { background: var(--vz-master); }
+.audio-band.mid b { background: var(--vz-main); }
 .audio-band.high b { background: var(--vz-deck-b); }
 
-.master-res {
+.main-res {
     font-size: 11px;
     color: var(--vz-text-dim);
 }
 
-.master-canvas-wrap {
+.main-canvas-wrap {
     position: relative;
     background: #000;
     min-height: 0;
     overflow: hidden;
 }
 
-.master-canvas {
+.main-canvas {
     width: 100%;
     height: 100%;
     object-fit: contain;
@@ -610,11 +610,11 @@ select:focus-visible,
     image-rendering: auto;
 }
 
-.master-canvas.invert { filter: invert(1) hue-rotate(180deg); }
-.master-canvas.bw { filter: grayscale(1) contrast(1.1); }
-.master-canvas.invert.bw { filter: invert(1) grayscale(1) contrast(1.1); }
+.main-canvas.invert { filter: invert(1) hue-rotate(180deg); }
+.main-canvas.bw { filter: grayscale(1) contrast(1.1); }
+.main-canvas.invert.bw { filter: invert(1) grayscale(1) contrast(1.1); }
 
-.master-fx-overlay {
+.main-fx-overlay {
     position: absolute;
     inset: 0;
     pointer-events: none;
@@ -623,19 +623,19 @@ select:focus-visible,
     transition: opacity 0.06s ease-out;
 }
 
-.master-fx-overlay.flash {
+.main-fx-overlay.flash {
     opacity: 0.9;
     transition: opacity 0.3s ease-out;
 }
 
-.master-fx-overlay.strobe { opacity: 1; transition: none; }
+.main-fx-overlay.strobe { opacity: 1; transition: none; }
 
-.master-canvas-wrap.zoomed .master-canvas {
+.main-canvas-wrap.zoomed .main-canvas {
     transform: scale(1.15);
     transition: transform 0.08s ease-out;
 }
 
-.master-fx {
+.main-fx {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
     gap: 6px;
@@ -659,10 +659,10 @@ select:focus-visible,
 
 .fx-button:hover { color: var(--vz-text); border-color: var(--vz-border-strong); }
 .fx-button.active {
-    background: var(--vz-master);
+    background: var(--vz-main);
     color: var(--hf-bg-base, #000);
-    border-color: var(--vz-master);
-    box-shadow: 0 0 12px color-mix(in srgb, var(--vz-master) 60%, transparent);
+    border-color: var(--vz-main);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--vz-main) 60%, transparent);
 }
 
 /* ─────────────── controls bar ─────────────── */
@@ -749,7 +749,7 @@ input[type="range"]::-moz-range-thumb {
     cursor: grab;
 }
 
-input[type="range"]:hover::-webkit-slider-thumb { background: var(--vz-master); transform: scale(1.15); }
+input[type="range"]:hover::-webkit-slider-thumb { background: var(--vz-main); transform: scale(1.15); }
 input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
 
 .big-toggle {
@@ -769,18 +769,18 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     flex: 0 0 auto;
 }
 
-.big-toggle:hover { border-color: var(--vz-master); }
+.big-toggle:hover { border-color: var(--vz-main); }
 .big-toggle[data-state="on"] {
-    background: var(--vz-master);
+    background: var(--vz-main);
     color: var(--hf-bg-base, #000);
-    border-color: var(--vz-master);
-    box-shadow: 0 0 16px color-mix(in srgb, var(--vz-master) 60%, transparent);
+    border-color: var(--vz-main);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--vz-main) 60%, transparent);
     animation: pulse 1s ease-in-out infinite;
 }
 
 @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 16px color-mix(in srgb, var(--vz-master) 60%, transparent); }
-    50% { box-shadow: 0 0 24px color-mix(in srgb, var(--vz-master) 80%, transparent); }
+    0%, 100% { box-shadow: 0 0 16px color-mix(in srgb, var(--vz-main) 60%, transparent); }
+    50% { box-shadow: 0 0 24px color-mix(in srgb, var(--vz-main) 80%, transparent); }
 }
 
 .automix-config {
@@ -909,7 +909,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     transition: all 0.1s ease;
 }
 
-.quick-cut:hover { border-color: var(--vz-master); }
+.quick-cut:hover { border-color: var(--vz-main); }
 #cut-a:hover { border-color: var(--vz-deck-a); color: var(--vz-deck-a); }
 #cut-b:hover { border-color: var(--vz-deck-b); color: var(--vz-deck-b); }
 
@@ -1023,7 +1023,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     font-size: 11px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: var(--vz-master);
+    color: var(--vz-main);
     margin-bottom: 12px;
     font-family: 'Noto Sans Mono', monospace;
 }
@@ -1058,7 +1058,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
 .settings-row input[type="number"] { max-width: 80px; }
 
 .settings-row select:focus,
-.settings-row input:focus { border-color: var(--vz-master); }
+.settings-row input:focus { border-color: var(--vz-main); }
 
 .settings-row input[type="range"] {
     flex: 1 1 120px;
@@ -1090,7 +1090,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
 }
 
 .settings-credit a {
-    color: var(--vz-master);
+    color: var(--vz-main);
     text-decoration: none;
 }
 .settings-credit a:hover { text-decoration: underline; }
@@ -1150,8 +1150,8 @@ kbd {
 }
 
 .midi-learn-row.learning {
-    border-color: var(--vz-master);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--vz-master) 50%, transparent);
+    border-color: var(--vz-main);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--vz-main) 50%, transparent);
     animation: pulse-soft 1s ease-in-out infinite;
 }
 
@@ -1161,7 +1161,7 @@ kbd {
 }
 
 .midi-learn-row .ml-target { color: var(--vz-text); }
-.midi-learn-row .ml-cc { color: var(--vz-master); }
+.midi-learn-row .ml-cc { color: var(--vz-main); }
 
 .midi-learn-row button {
     appearance: none;
@@ -1195,13 +1195,13 @@ kbd {
     transition: border-color 0.1s ease;
 }
 
-.scene-row:hover { border-color: var(--vz-master); }
+.scene-row:hover { border-color: var(--vz-main); }
 
 .scene-row .sr-key {
-    color: var(--vz-master);
+    color: var(--vz-main);
     font-size: 10px;
     text-align: center;
-    background: color-mix(in srgb, var(--vz-master) 20%, transparent);
+    background: color-mix(in srgb, var(--vz-main) 20%, transparent);
     border-radius: 3px;
     padding: 1px 0;
 }
@@ -1305,7 +1305,7 @@ kbd {
     font-weight: 700;
     letter-spacing: 0.16em;
     margin-bottom: 8px;
-    background: linear-gradient(90deg, var(--vz-deck-a), var(--vz-master), var(--vz-deck-b));
+    background: linear-gradient(90deg, var(--vz-deck-a), var(--vz-main), var(--vz-deck-b));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -1360,7 +1360,7 @@ kbd {
 }
 
 /* ─────────────── fullscreen state ─────────────── */
-#app.fullscreen-master .master {
+#app.fullscreen-main .main {
     position: fixed;
     inset: 0;
     z-index: 50;
@@ -1369,10 +1369,10 @@ kbd {
     background: black;
 }
 
-#app.fullscreen-master .master-head,
-#app.fullscreen-master .master-fx { display: none; }
+#app.fullscreen-main .main-head,
+#app.fullscreen-main .main-fx { display: none; }
 
-#app.fullscreen-master .master-canvas-wrap {
+#app.fullscreen-main .main-canvas-wrap {
     height: 100vh;
     width: 100vw;
 }

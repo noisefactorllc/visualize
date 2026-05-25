@@ -1,8 +1,8 @@
 /**
- * OutputWindow — opens a separate browser window showing only the master
+ * OutputWindow — opens a separate browser window showing only the main
  * canvas, ideal for dragging onto a projector / second display.
  *
- * Strategy: the popup builds its own canvas and we copy the master canvas
+ * Strategy: the popup builds its own canvas and we copy the main canvas
  * into it via drawImage() in a rAF loop run from the main window. This
  * works across HTMLCanvasElements from different documents because
  * drawImage accepts any CanvasImageSource.

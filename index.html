@@ -89,7 +89,7 @@
                     <span class="status-text"><span id="fps-value">0</span> fps</span>
                 </div>
                 <button class="icon-button" id="settings-toggle" title="Settings (S)" aria-label="Open settings">⚙</button>
-                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen master (F)" aria-label="Toggle fullscreen">⛶</button>
+                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen main (F)" aria-label="Toggle fullscreen">⛶</button>
             </div>
         </header>
 
@@ -121,21 +121,21 @@
                 </div>
             </div>
 
-            <div class="master">
-                <div class="master-head">
-                    <span class="master-label">MASTER</span>
-                    <span class="master-meter">
+            <div class="main">
+                <div class="main-head">
+                    <span class="main-label">MAIN</span>
+                    <span class="main-meter">
                         <span class="audio-band low" id="meter-low"><b></b></span>
                         <span class="audio-band mid" id="meter-mid"><b></b></span>
                         <span class="audio-band high" id="meter-high"><b></b></span>
                     </span>
-                    <span class="master-res" id="master-res">1280×720</span>
+                    <span class="main-res" id="main-res">1280×720</span>
                 </div>
-                <div class="master-canvas-wrap">
-                    <canvas class="master-canvas" id="master-canvas"></canvas>
-                    <div class="master-fx-overlay" id="master-fx-overlay"></div>
+                <div class="main-canvas-wrap">
+                    <canvas class="main-canvas" id="main-canvas"></canvas>
+                    <div class="main-fx-overlay" id="main-fx-overlay"></div>
                 </div>
-                <div class="master-fx">
+                <div class="main-fx">
                     <button class="fx-button" data-fx="strobe" title="Strobe on beat (1) — may trigger photosensitive epilepsy">STROBE</button>
                     <button class="fx-button" data-fx="invert" title="Invert colors (2)">INVERT</button>
                     <button class="fx-button" data-fx="bw" title="Black &amp; white (3)">B&amp;W</button>
@@ -264,10 +264,10 @@
             </section>
 
             <section class="settings-section">
-                <h3>master</h3>
+                <h3>main</h3>
                 <div class="settings-row">
-                    <label for="master-resolution">resolution</label>
-                    <select id="master-resolution">
+                    <label for="main-resolution">resolution</label>
+                    <select id="main-resolution">
                         <option value="640x360">640×360 (low)</option>
                         <option value="1280x720" selected>1280×720 (HD)</option>
                         <option value="1920x1080">1920×1080 (full HD)</option>
@@ -276,7 +276,7 @@
                 </div>
                 <div class="settings-row">
                     <label>loop duration</label>
-                    <span class="settings-hint" id="master-loop-derived">derived from BPM ÷ divider in the topbar</span>
+                    <span class="settings-hint" id="main-loop-derived">derived from BPM ÷ divider in the topbar</span>
                 </div>
                 <div class="settings-row">
                     <label class="checkbox-row">
@@ -291,12 +291,12 @@
                 <div class="shortcut-grid">
                     <div><kbd>Space</kbd> toggle auto-VJ</div>
                     <div><kbd>T</kbd> tap tempo</div>
-                    <div><kbd>F</kbd> fullscreen master</div>
+                    <div><kbd>F</kbd> fullscreen main</div>
                     <div><kbd>S</kbd> settings</div>
                     <div><kbd>R</kbd> toggle record</div>
                     <div><kbd>Z / X / C</kbd> cut A / auto / cut B</div>
                     <div><kbd>← / →</kbd> nudge crossfader</div>
-                    <div><kbd>1–6</kbd> master FX</div>
+                    <div><kbd>1–6</kbd> main FX</div>
                     <div><kbd>Q / W</kbd> random load A / B</div>
                     <div><kbd>Shift</kbd>+<kbd>S</kbd> scenes</div>
                     <div><kbd>Shift</kbd>+<kbd>1–9</kbd> recall scene</div>
@@ -325,7 +325,7 @@
                     <button id="scene-save" class="ghost-button">save</button>
                 </div>
                 <p class="settings-hint">
-                    Snapshots both decks (DSL + speed), crossfader, BPM, master FX, and auto-VJ config. Recall is instant — for animated transitions, use auto-VJ.
+                    Snapshots both decks (DSL + speed), crossfader, BPM, main FX, and auto-VJ config. Recall is instant — for animated transitions, use auto-VJ.
                 </p>
             </section>
 

@@ -1,5 +1,5 @@
 /**
- * Recorder — capture the master canvas to a downloadable webm via
+ * Recorder — capture the main canvas to a downloadable webm via
  * MediaRecorder + canvas.captureStream().
  *
  * Bitrate choice (8 Mbps) keeps quality high enough for VJ archives

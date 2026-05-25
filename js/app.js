@@ -2,7 +2,7 @@
  * Visualize — main entry point.
  *
  * Wires together: two Decks, the SharedAudio analyzer, SharedMidi router,
- * BeatScheduler, MasterCompositor (with FX), Library, AutoMix, Recorder,
+ * BeatScheduler, MainCompositor (with FX), Library, AutoMix, Recorder,
  * and OutputWindow. Also owns keyboard shortcuts and the settings drawer.
  *
  * Boot flow:
@@ -16,7 +16,7 @@ import { Deck } from './noisemaker/deck.js'
 import { SharedAudio } from './audio.js'
 import { SharedMidi } from './midi.js'
 import { BeatScheduler } from './bpm.js'
-import { MasterCompositor } from './compositor.js'
+import { MainCompositor } from './compositor.js'
 import { Library } from './library.js'
 import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
@@ -27,7 +27,7 @@ const $ = (id) => document.getElementById(id)
 
 const state = {
     decks: { A: null, B: null },
-    masterRes: { width: 1280, height: 720 },
+    mainRes: { width: 1280, height: 720 },
     loopDuration: 10,
     preferWebGPU: false,
     crossfade: 0
@@ -60,12 +60,12 @@ async function boot() {
 
     // Construct decks
     state.decks.A = new Deck($('deck-a-canvas'), {
-        id: 'deckA', width: state.masterRes.width, height: state.masterRes.height,
+        id: 'deckA', width: state.mainRes.width, height: state.mainRes.height,
         loopDuration: state.loopDuration, preferWebGPU: state.preferWebGPU,
         onError: (err) => console.error('[deckA]', err)
     })
     state.decks.B = new Deck($('deck-b-canvas'), {
-        id: 'deckB', width: state.masterRes.width, height: state.masterRes.height,
+        id: 'deckB', width: state.mainRes.width, height: state.mainRes.height,
         loopDuration: state.loopDuration, preferWebGPU: state.preferWebGPU,
         onError: (err) => console.error('[deckB]', err)
     })
@@ -89,12 +89,12 @@ async function boot() {
         return
     }
 
-    // Compositor (master)
-    const compositor = new MasterCompositor(
-        $('master-canvas'),
+    // Compositor (main)
+    const compositor = new MainCompositor(
+        $('main-canvas'),
         state.decks.A,
         state.decks.B,
-        { width: state.masterRes.width, height: state.masterRes.height }
+        { width: state.mainRes.width, height: state.mainRes.height }
     )
     compositor.start()
 
@@ -139,7 +139,7 @@ async function boot() {
     const xfaderEl = $('crossfader')
     const fpsEl = $('fps-value')
     const bpmInputEl = $('bpm-input')
-    const flashOverlayEl = $('master-fx-overlay')
+    const flashOverlayEl = $('main-fx-overlay')
 
     function updateLiveIndicator() {
         const aLive = state.crossfade < 0.5
@@ -154,7 +154,7 @@ async function boot() {
     scheduler.start()
     const bpmDividerEl = $('bpm-divider')
     const bpmLabelEl = $('bpm-label')
-    const masterLoopDerivedEl = $('master-loop-derived')
+    const mainLoopDerivedEl = $('main-loop-derived')
     const bpmBlockEl = document.querySelector('.bpm-block')
     if (bpmDividerEl) bpmDividerEl.value = String(scheduler.divider)
 
@@ -163,8 +163,8 @@ async function boot() {
         state.loopDuration = sec
         state.decks.A.setBaseLoopDuration(sec)
         state.decks.B.setBaseLoopDuration(sec)
-        if (masterLoopDerivedEl) {
-            masterLoopDerivedEl.textContent =
+        if (mainLoopDerivedEl) {
+            mainLoopDerivedEl.textContent =
                 `${sec.toFixed(2)}s — ${scheduler.bpm.toFixed(1)} BPM ÷ ${scheduler.divider} (one bar = ${(60 / scheduler.bpm).toFixed(2)}s)`
         }
     }
@@ -227,7 +227,7 @@ async function boot() {
     compositor.onFrame(() => autoMix.tickFrame())
 
     // Recorder
-    const recorder = new Recorder($('master-canvas'), {
+    const recorder = new Recorder($('main-canvas'), {
         onTick: (ms) => { $('record-time').textContent = formatRecTime(ms) },
         onStateChange: (recording) => {
             const btn = $('record-toggle')
@@ -243,7 +243,7 @@ async function boot() {
     }
 
     // Output window
-    const outputWin = new OutputWindow($('master-canvas'))
+    const outputWin = new OutputWindow($('main-canvas'))
 
     // ── Wire UI ───────────────────────────────────────────────────────────
 
@@ -411,7 +411,7 @@ async function boot() {
         if (compositor.strobe) compositor.strobeBlink()
     })
 
-    // Master FX buttons
+    // Main FX buttons
     document.querySelectorAll('.fx-button').forEach(btn => {
         const fx = btn.dataset.fx
         btn.addEventListener('click', () => toggleFx(fx, btn))
@@ -459,17 +459,17 @@ async function boot() {
     // Fullscreen
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
     document.addEventListener('fullscreenchange', () => {
-        document.getElementById('app').classList.toggle('fullscreen-master', !!document.fullscreenElement)
+        document.getElementById('app').classList.toggle('fullscreen-main', !!document.fullscreenElement)
     })
 
     function toggleFullscreen() {
         const app = document.getElementById('app')
         if (!document.fullscreenElement) {
-            app.classList.add('fullscreen-master')
-            app.requestFullscreen?.().catch(() => app.classList.remove('fullscreen-master'))
+            app.classList.add('fullscreen-main')
+            app.requestFullscreen?.().catch(() => app.classList.remove('fullscreen-main'))
         } else {
             document.exitFullscreen?.()
-            app.classList.remove('fullscreen-master')
+            app.classList.remove('fullscreen-main')
         }
     }
 
@@ -589,15 +589,15 @@ async function boot() {
     renderLearnRows(midi.getLearnView(), midi)
     $('midi-learn-clear').addEventListener('click', () => midi.clearAllAssignments())
 
-    // Master resolution / loop / WebGPU
-    $('master-resolution').addEventListener('change', (e) => {
+    // Main resolution / loop / WebGPU
+    $('main-resolution').addEventListener('change', (e) => {
         const [w, h] = e.target.value.split('x').map(Number)
-        state.masterRes = { width: w, height: h }
+        state.mainRes = { width: w, height: h }
         state.decks.A.resize(w, h)
         state.decks.B.resize(w, h)
         compositor.resize(w, h)
-        $('master-res').textContent = `${w}×${h}`
-        toast(`master: ${w}×${h}`)
+        $('main-res').textContent = `${w}×${h}`
+        toast(`main: ${w}×${h}`)
     })
     // FPS readout
     setInterval(() => {

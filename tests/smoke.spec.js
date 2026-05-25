@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 /**
  * Smoke test — boots the app, loads the shader bundle from CDN, verifies
- * both decks compile, the master compositor actually changes output when
- * the crossfader moves, the live indicator follows xfade, master FX
+ * both decks compile, the main compositor actually changes output when
+ * the crossfader moves, the live indicator follows xfade, main FX
  * toggle, tap-tempo registers, auto-VJ activates, and scenes round-trip
  * through localStorage + Shift+1 recall.
  *
@@ -36,7 +36,7 @@ test('end-to-end smoke', async ({ page }) => {
     const libCount = await page.textContent('#library-count')
     expect(libCount).toMatch(/\d+ programs?/)
 
-    // Give the compositor a few frames so master canvas accumulates content
+    // Give the compositor a few frames so main canvas accumulates content
     await page.waitForTimeout(800)
 
     // Sample a 5x5 grid; at least one pixel must be non-black
@@ -69,14 +69,14 @@ test('end-to-end smoke', async ({ page }) => {
     expect(deckA.max).toBeGreaterThan(0)
     expect(deckB.max).toBeGreaterThan(0)
 
-    // Crossfader drives the master output: x=0 should be different from x=1
+    // Crossfader drives the main output: x=0 should be different from x=1
     await page.evaluate(() => {
         const s = document.getElementById('crossfader')
         s.value = '0'
         s.dispatchEvent(new Event('input', { bubbles: true }))
     })
     await page.waitForTimeout(400)
-    const masterAtZero = await samplePixels('master-canvas')
+    const mainAtZero = await samplePixels('main-canvas')
 
     await page.evaluate(() => {
         const s = document.getElementById('crossfader')
@@ -84,11 +84,11 @@ test('end-to-end smoke', async ({ page }) => {
         s.dispatchEvent(new Event('input', { bubbles: true }))
     })
     await page.waitForTimeout(400)
-    const masterAtOne = await samplePixels('master-canvas')
+    const mainAtOne = await samplePixels('main-canvas')
 
-    // The two master samples should not be identical — otherwise the
+    // The two main samples should not be identical — otherwise the
     // crossfader isn't actually mixing decks.
-    expect(Math.abs(masterAtZero.avg - masterAtOne.avg)).toBeGreaterThan(2)
+    expect(Math.abs(mainAtZero.avg - mainAtOne.avg)).toBeGreaterThan(2)
 
     // Live indicator: at xfade=1, deck B has .live and deck A doesn't.
     const live = await page.evaluate(() => ({
@@ -97,11 +97,11 @@ test('end-to-end smoke', async ({ page }) => {
     }))
     expect(live).toEqual({ a: false, b: true })
 
-    // Invert FX toggles the master canvas class
+    // Invert FX toggles the main canvas class
     await page.click('.fx-button[data-fx="invert"]')
     await page.waitForTimeout(100)
     const invertOn = await page.evaluate(() =>
-        document.getElementById('master-canvas').classList.contains('invert'))
+        document.getElementById('main-canvas').classList.contains('invert'))
     expect(invertOn).toBe(true)
 
     // Tap tempo: four taps at ~500ms should give ~120 BPM
