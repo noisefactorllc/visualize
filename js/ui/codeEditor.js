@@ -19,7 +19,7 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
         code-editor {
             display: block;
             position: relative;
-            font-family: var(--code-editor-font, 'Noto Sans Mono', 'Noto Sans Mono Block');
+            font-family: var(--code-editor-font, 'Noto Sans Mono', 'Noto Sans Mono Blank');
             font-size: var(--code-editor-font-size, 0.875rem);
             line-height: var(--code-editor-line-height, 1.6);
             overflow: hidden;

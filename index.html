@@ -17,55 +17,75 @@
         { "imports": { "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js" } }
     </script>
 
-    <!-- Handfish zero-CLS font loading — preloaded + declared inline in
-         <head> so the font stack is established before any external CSS
-         loads. tokens.css also declares these, but tokens.css doesn't
-         resolve until after first paint — without inline declarations
-         the browser falls back to system serif (Times New Roman) for the
-         first frame. Mirrors handfish/index.html. -->
+    <!-- Preload the always-needed blanks + the icon font so any element
+         using class="icon" never hits a fallback. The active theme's
+         blank (if it's not Nunito/Noto Sans Mono) is preloaded by the
+         inline script below based on the saved theme. -->
     <link rel="preload" href="https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://fonts.noisefactor.io/fonts/material-symbols-outlined/material-symbols-outlined.woff2" as="font" type="font/woff2" crossorigin>
+
     <style>
-        @font-face {
-            font-family: 'Nunito Blank';
-            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2') format('woff2');
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: block;
-        }
-        @font-face {
-            font-family: Nunito;
-            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito[wght].woff2') format('woff2');
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: swap;
-        }
-        @font-face {
-            font-family: 'Noto Sans Mono Blank';
-            src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2') format('woff2');
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: block;
-        }
-        @font-face {
-            font-family: 'Noto Sans Mono';
-            src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono[wdth,wght].woff2') format('woff2');
-            font-weight: 100 900;
-            font-style: normal;
-            font-display: swap;
-        }
+        /* Blank placeholders for every theme's font — declared inline so
+           a theme's font-family fallback chain (e.g. 'Cabin Blank') can
+           always resolve. @font-face declarations are cheap and don't
+           trigger a download until the font is actually requested.
+
+           Note: handfish's stock theme CSS lists *only* the real font for
+           several themes (dusk, gothic, etc) without a Blank fallback —
+           the per-theme :root rule in app.css patches that omission by
+           appending 'X Blank' to --hf-font-family. */
+        @font-face { font-family: 'Nunito Blank';                src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2') format('woff2');                                          font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Noto Sans Mono Blank';        src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2') format('woff2');                            font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Inter Blank';                 src: url('https://fonts.noisefactor.io/fonts/inter/Inter-Blank.woff2') format('woff2');                                            font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Cabin Blank';                 src: url('https://fonts.noisefactor.io/fonts/cabin/Cabin-Blank.woff2') format('woff2');                                            font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Crimson Pro Blank';           src: url('https://fonts.noisefactor.io/fonts/crimson-pro/CrimsonPro-Blank.woff2') format('woff2');                                  font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Roboto Slab Blank';           src: url('https://fonts.noisefactor.io/fonts/roboto-slab/RobotoSlab-Blank.woff2') format('woff2');                                  font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Baloo 2 Blank';               src: url('https://fonts.noisefactor.io/fonts/baloo-2/Baloo2-Blank.woff2') format('woff2');                                          font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Atkinson Hyperlegible Blank'; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2') format('woff2');              font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Lora Blank';                  src: url('https://fonts.noisefactor.io/fonts/lora/Lora-Blank.woff2') format('woff2');                                              font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Poppins Blank';               src: url('https://fonts.noisefactor.io/fonts/poppins/Poppins-Blank.woff2') format('woff2');                                        font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Quicksand Blank';             src: url('https://fonts.noisefactor.io/fonts/quicksand/Quicksand-Blank.woff2') format('woff2');                                    font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Tomorrow Blank';              src: url('https://fonts.noisefactor.io/fonts/tomorrow/Tomorrow-Blank.woff2') format('woff2');                                      font-weight: 100 900; font-display: block; }
+        @font-face { font-family: 'Comfortaa Blank';             src: url('https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa-Blank.woff2') format('woff2');                                    font-weight: 100 900; font-display: block; }
+
+        /* Real fonts: font-display: swap. Only Nunito and Noto Sans Mono
+           are declared here because they're the base fonts; theme-specific
+           real fonts (Inter, Cabin, …) are declared by the loaded theme
+           CSS at the moment that theme actually applies. */
+        @font-face { font-family: Nunito;            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito[wght].woff2') format('woff2');                                font-weight: 100 900; font-display: swap; }
+        @font-face { font-family: 'Noto Sans Mono';  src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono[wdth,wght].woff2') format('woff2');             font-weight: 100 900; font-display: swap; }
+
+        /* Default fallback chain: real font → blank placeholder. No
+           generics. Themes override --hf-font-family in their own CSS;
+           the app.css per-theme rules ensure each override ends in a
+           matching Blank. */
         html { font-family: Nunito, 'Nunito Blank'; }
+        :root {
+            --hf-font-family: Nunito, 'Nunito Blank';
+            --hf-font-family-mono: 'Noto Sans Mono', 'Noto Sans Mono Blank';
+            --hf-font-family-icon: 'Material Symbols Outlined';
+        }
+
+        /* Icon font — handfish doesn't ship a Blank for icons, so we
+           preload + font-display: block to keep glyph spans invisible
+           while loading rather than flashing the ligature name in a
+           fallback font. */
+        @font-face {
+            font-family: 'Material Symbols Outlined';
+            src: url('https://fonts.noisefactor.io/fonts/material-symbols-outlined/material-symbols-outlined.woff2') format('woff2');
+            font-display: block;
+        }
     </style>
 
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
 
-    <!-- Apply the saved handfish theme synchronously to avoid a flash from
-         the default dark palette to the user's chosen theme on every load.
-         The script appends the theme <link> AFTER tokens.css so it wins the
-         cascade (both selectors are specificity (0,1,0), later loses-then-
-         wins on source order). Keep this mapping in sync with
-         js/handfish-theme.js (THEMES). -->
+    <!-- Apply the saved handfish theme synchronously and preload that
+         theme's Blank metric placeholder so the page never falls back to a
+         system font during the gap between theme CSS load and the real
+         font's swap-in. Keep these maps in sync with js/handfish-theme.js
+         (THEMES + THEME_BLANK). -->
     <script>
     (function () {
         var FILES = {
@@ -79,10 +99,43 @@
             'cyberpunk': 'cyberpunk', 'synthwave': 'synthwave',
             'rave': 'rave', 'kawaii': 'kawaii'
         }
+        // Per-theme Blank font to preload (in addition to the always-on
+        // Nunito Blank + NotoSansMono Blank already preloaded above).
+        // null = the active theme uses one of the always-on fonts.
+        var THEME_BLANK = {
+            'neutral-dark': null, 'neutral-light': null,
+            'gray-dark': null, 'gray-light': null,
+            'brutalist': null, 'cyberpunk': null, 'terminal': null,
+            'corporate':           'https://fonts.noisefactor.io/fonts/inter/Inter-Blank.woff2',
+            'high-contrast-dark':  'https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2',
+            'high-contrast-light': 'https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2',
+            'newspaper':           'https://fonts.noisefactor.io/fonts/lora/Lora-Blank.woff2',
+            'gothic':              'https://fonts.noisefactor.io/fonts/crimson-pro/CrimsonPro-Blank.woff2',
+            'ocean':               'https://fonts.noisefactor.io/fonts/poppins/Poppins-Blank.woff2',
+            'dusk':                'https://fonts.noisefactor.io/fonts/cabin/Cabin-Blank.woff2',
+            'sunset':              'https://fonts.noisefactor.io/fonts/quicksand/Quicksand-Blank.woff2',
+            'earthy':              'https://fonts.noisefactor.io/fonts/roboto-slab/RobotoSlab-Blank.woff2',
+            'organic':             null,   // Avenir has no Blank variant; org's stack falls back to Nunito Blank
+            'synthwave':           'https://fonts.noisefactor.io/fonts/tomorrow/Tomorrow-Blank.woff2',
+            'rave':                'https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa-Blank.woff2',
+            'kawaii':              'https://fonts.noisefactor.io/fonts/baloo-2/Baloo2-Blank.woff2'
+        }
         var stored = null
         try { stored = localStorage.getItem('visualize.theme.v1') } catch (e) {}
         var theme = (stored && FILES[stored]) ? stored : 'neutral-dark'
         document.documentElement.setAttribute('data-theme', theme)
+
+        var blankUrl = THEME_BLANK[theme]
+        if (blankUrl) {
+            var pre = document.createElement('link')
+            pre.rel = 'preload'
+            pre.as = 'font'
+            pre.type = 'font/woff2'
+            pre.crossOrigin = 'anonymous'
+            pre.href = blankUrl
+            document.head.appendChild(pre)
+        }
+
         var link = document.createElement('link')
         link.id = 'hf-theme-link'
         link.rel = 'stylesheet'
@@ -420,9 +473,9 @@
                     Browser-based, no install.
                 </p>
                 <p class="boot-small-screen-warning">
-                    <span class="icon">warning</span> This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
+                    This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
                 </p>
-                <button id="boot-start" class="boot-button"><span class="icon">play_arrow</span> START SET</button>
+                <button id="boot-start" class="boot-button">START SET</button>
                 <p class="boot-hint">press start, then enable audio input from the settings panel</p>
             </div>
         </div>

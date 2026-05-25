@@ -4,15 +4,23 @@
    This file owns only the bespoke grid for the deck/main/library workspace.
    ========================================================================== */
 
-/* Handfish tokens.css names Material Symbols as the icon family but only
-   declares the @font-face in its index.css. We don't pull index.css, so
-   declare it here ourselves. */
-@font-face {
-    font-family: 'Material Symbols Outlined';
-    font-style: normal;
-    font-display: block;
-    src: url('https://fonts.noisefactor.io/fonts/material-symbols-outlined/material-symbols-outlined.woff2') format('woff2');
-}
+/* Handfish theme CSS lists --hf-font-family for several themes WITHOUT a
+   Blank metric-matched fallback (only Cabin / Lora / Atkinson / etc, no
+   "X Blank"). Patch each to end in its matching Blank so the browser has
+   somewhere to fall back to while the real font downloads. The Blank
+   @font-faces are declared inline in index.html, and the active theme's
+   Blank is preloaded by the inline boot script. */
+[data-theme="dusk"]                { --hf-font-family: 'Cabin', 'Cabin Blank'; }
+[data-theme="gothic"]              { --hf-font-family: 'Crimson Pro', 'Crimson Pro Blank'; }
+[data-theme="earthy"]              { --hf-font-family: 'Roboto Slab', 'Roboto Slab Blank'; }
+[data-theme="kawaii"]              { --hf-font-family: 'Baloo 2', 'Baloo 2 Blank'; }
+[data-theme="high-contrast-dark"],
+[data-theme="high-contrast-light"] { --hf-font-family: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Blank'; }
+[data-theme="newspaper"]           { --hf-font-family: 'Lora', 'Lora Blank'; }
+[data-theme="ocean"]               { --hf-font-family: 'Poppins', 'Poppins Blank'; }
+[data-theme="sunset"]              { --hf-font-family: 'Quicksand', 'Quicksand Blank'; }
+[data-theme="synthwave"]           { --hf-font-family: 'Tomorrow', 'Tomorrow Blank'; }
+[data-theme="rave"]                { --hf-font-family: 'Comfortaa', 'Comfortaa Blank'; }
 
 :root {
     /* Layout */
