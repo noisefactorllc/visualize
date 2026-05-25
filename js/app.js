@@ -122,6 +122,13 @@ async function boot() {
         if (msg) toast(msg)
     })
 
+    // Test / debug hook — lets Playwright drive audio + MIDI flows
+    // without scraping the DOM. Set as soon as the inputs exist so
+    // boot races (initial deck compile, etc.) can't strand the test
+    // waiting for a handle. Other entries (scheduler, autoMix, ...)
+    // are attached below once they're constructed.
+    window.__visualize = { audio, midi, decks: state.decks }
+
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
     // first use (e.g. compositor frame hook firing during boot).
@@ -484,27 +491,59 @@ async function boot() {
         const cur = sel.value
         const devices = await audio.listDevices()
         sel.innerHTML = '<option value="">— pick to enable —</option>'
-        for (const d of devices) {
+
+        // Before mic permission has been granted, Chrome returns devices
+        // with empty deviceId + empty label per entry. Rendering those
+        // as <option value=""> makes every entry collide with the
+        // placeholder above, so the browser silently drops the change
+        // event when the user picks one — that's the "selecting a
+        // device does nothing" bug. Safari returns an empty list before
+        // permission. Either way: fall back to a single sentinel entry
+        // that maps to getUserMedia({audio:true}); once permission is
+        // granted the next refresh shows real labelled devices.
+        const labelled = devices.filter(d => d.label && d.deviceId)
+        if (labelled.length > 0) {
+            for (const d of labelled) {
+                const opt = document.createElement('option')
+                opt.value = d.deviceId
+                opt.textContent = d.label
+                sel.appendChild(opt)
+            }
+        } else {
             const opt = document.createElement('option')
-            opt.value = d.deviceId
-            opt.textContent = d.label || `Audio input ${d.deviceId.slice(0, 6)}`
+            opt.value = '__default__'
+            opt.textContent = 'Enable audio (default device)'
             sel.appendChild(opt)
         }
+
         if (audio.enabled && audio.currentDeviceId) {
             sel.value = audio.currentDeviceId
-        } else if (cur) {
+        } else if (cur && [...sel.options].some(o => o.value === cur)) {
             sel.value = cur
         }
     }
 
     $('audio-device').addEventListener('change', async (e) => {
-        const id = e.target.value
-        if (!id) {
+        const sel = e.target
+        const value = sel.value
+        if (!value) {
             await audio.disable()
             return
         }
-        const ok = await audio.enable(id)
-        if (ok) await refreshAudioDevices()
+        // '__default__' is the sentinel we render when no device labels
+        // are visible (pre-permission). enable('') falls through to the
+        // browser's default audioinput, which prompts for permission and
+        // gives us labels on the next refresh.
+        const deviceId = value === '__default__' ? '' : value
+        const ok = await audio.enable(deviceId)
+        if (ok) {
+            await refreshAudioDevices()
+        } else {
+            // enable() failed (likely permission denied). Reset to the
+            // placeholder so re-selecting the same option dispatches
+            // 'change' again — otherwise the user is stuck.
+            sel.value = ''
+        }
     })
     $('audio-sensitivity').addEventListener('input', (e) => {
         const v = parseFloat(e.target.value)

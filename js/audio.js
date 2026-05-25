@@ -100,6 +100,13 @@ export class SharedAudio {
         this._deviceLabel = track?.label || 'default'
 
         this._audioContext = new AudioContext()
+        // The AudioContext is constructed after an awaited getUserMedia,
+        // which puts us outside the user-gesture scope. Browsers that
+        // enforce the autoplay policy create the context in 'suspended'
+        // state in that case, so getByteFrequencyData() returns all zeros
+        // forever (the visible bug: device picks "succeed" but meters
+        // never move). resume() is a no-op when already running.
+        try { await this._audioContext.resume() } catch {}
         this._analyser = this._audioContext.createAnalyser()
         this._analyser.fftSize = 256
         this._analyser.smoothingTimeConstant = 0.8
