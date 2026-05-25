@@ -251,6 +251,18 @@ select:focus-visible,
 .status-pill[data-state="on"] .status-icon { color: var(--hf-green); }
 .status-pill[data-state="warn"] { color: var(--hf-red); border-color: color-mix(in srgb, var(--hf-red) 50%, transparent); }
 
+/* Audio/MIDI pills double as click-to-toggle buttons. */
+button.status-pill {
+    appearance: none;
+    cursor: pointer;
+    font: inherit;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+}
+button.status-pill:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
+button.status-pill:hover .status-icon { color: var(--hf-text-bright); }
+button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color: var(--hf-green); }
+
 .icon-button {
     appearance: none;
     background: var(--hf-bg-elevated);

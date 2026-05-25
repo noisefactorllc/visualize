@@ -51,13 +51,10 @@ function setStatusPill(id, text, state) {
 }
 
 async function boot() {
-    // Boot overlay — required for browsers to allow audio later
-    await new Promise((resolve) => {
-        $('boot-start').addEventListener('click', () => {
-            $('boot-overlay').classList.add('hidden')
-            resolve()
-        }, { once: true })
-    })
+    // Boot overlay — the click listener is wired by an inline script in
+    // index.html that runs before any module imports, so a fast click
+    // (test rig, eager user) doesn't race the deferred module graph.
+    await window.__visualizeBootGesture
 
     // Construct decks
     state.decks.A = new Deck($('deck-a-canvas'), {
@@ -560,6 +557,24 @@ async function boot() {
 
     // MIDI
     $('midi-enable').addEventListener('click', async () => {
+        const on = await midi.toggle()
+        $('midi-enable').textContent = on ? 'disable MIDI' : 'enable MIDI'
+    })
+
+    // Quick-toggle audio/MIDI from the topbar pills. Audio enable falls
+    // back to the OS default mic — once permission is granted, the device
+    // dropdown in settings repopulates with labelled devices so users can
+    // pick a specific input.
+    $('audio-status').addEventListener('click', async () => {
+        if (audio.enabled) {
+            await audio.disable()
+        } else {
+            const ok = await audio.enable('')
+            if (!ok) toast('audio: enable failed (check mic permission)')
+            else await refreshAudioDevices()
+        }
+    })
+    $('midi-status').addEventListener('click', async () => {
         const on = await midi.toggle()
         $('midi-enable').textContent = on ? 'disable MIDI' : 'enable MIDI'
     })

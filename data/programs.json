@@ -1,18 +1,18 @@
 [
   {
     "title": "Bass Bloom",
-    "tagline": "Kicks pulse the rotation; sub flexes the scale",
+    "tagline": "Bass swirls the hue; sub flexes the scale",
     "tint": "#4ea8ff",
     "tags": [
       "reactive",
       "bass",
       "noise"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 0, max: 1)\nlet sub = audio(band: 0, min: 50, max: 130)\nlet bassHue = audio(band: 0, min: 0, max: 360)\nnoise(hueRange: 60, hueRotation: bassHue, speed: 35, refractAmt: 70, ridges: true, wrap: true, xScale: sub, yScale: sub, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nlet sub = audio(band: 0, min: 50, max: 130)\nlet bassHue = audio(band: 0, min: 0, max: 360)\nnoise(hueRange: 60, hueRotation: bassHue, speed: 35, refractAmt: 70, ridges: true, wrap: true, xScale: sub, yScale: sub, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
   },
   {
     "title": "Mid Mirror",
-    "tagline": "Mids drive a six-fold kaleidoscope",
+    "tagline": "Mids open the kaleidoscope and sweep the hue",
     "tint": "#ff5fc0",
     "tags": [
       "reactive",
@@ -34,7 +34,7 @@
   },
   {
     "title": "Full Spectrum",
-    "tagline": "Bass scales, mids rotate, highs hue",
+    "tagline": "Bass scales, mids refract, highs sweep the hue",
     "tint": "#4ed99b",
     "tags": [
       "reactive",
@@ -57,7 +57,7 @@
   },
   {
     "title": "Synth Wash",
-    "tagline": "Mids paint the field, treble adds grain",
+    "tagline": "Mids speed the field; highs blend in the palette wash",
     "tint": "#8a47ae",
     "tags": [
       "reactive",
@@ -79,14 +79,15 @@
   },
   {
     "title": "Volume Mandala",
-    "tagline": "Overall loudness opens up the mandala",
+    "tagline": "Bass opens the mandala; mids sweep the hue",
     "tint": "#4a88fb",
     "tags": [
       "reactive",
-      "vol",
+      "bass",
+      "mid",
       "kaleido"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet vol = audio(band: 0, min: 3, max: 18)\nlet volHue = audio(band: 1, min: 0, max: 360)\nnoise(hueRotation: volHue, kaleido: vol, metric: circle, palette: royal, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 98, yScale: 98, octaves: 1).write(o0)\nrender(o0)"
+    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 3, max: 18)\nlet midHue = audio(band: 1, min: 0, max: 360)\nnoise(hueRotation: midHue, kaleido: bass, metric: circle, palette: royal, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 98, yScale: 98, octaves: 1).write(o0)\nrender(o0)"
   },
   {
     "title": "Glitch Wave",
@@ -102,7 +103,7 @@
   },
   {
     "title": "Fractal Pulse",
-    "tagline": "Julia set zooms with bass, palette spins on highs",
+    "tagline": "Julia set zooms with bass; highs rotate the frame",
     "tint": "#ff5fc0",
     "tags": [
       "reactive",
@@ -124,16 +125,16 @@
     "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 5, max: 40)\nlet bassMix = audio(band: 0, min: -50, max: 50)\ncellNoise(colorMode: palette, speed: 1, palette: justGreen, scale: bass, cellScale: 75, smooth: 50, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(hueRange: 89, hueRotation: 27, speed: 100, loopOffset: sine, loopScale: 100, refractAmt: 49, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 65, yScale: 65, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: bassMix).write(o1)\nrender(o1)"
   },
   {
-    "title": "Strobe Field",
-    "tagline": "Volume drives a high-contrast strobe field",
+    "title": "Bass Dot Field",
+    "tagline": "Bass refracts the noise and blends it through a dot pattern",
     "tint": "#ffffff",
     "tags": [
       "reactive",
-      "vol",
-      "strobe",
+      "bass",
+      "pattern",
       "bright"
     ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet vol = audio(band: 0, min: 0, max: 100)\nlet volMix = audio(band: 0, min: -100, max: 100)\npattern(fgColor: #ffffff, bgColor: #000000, rotation: 0, scale: 8, type: dots, speed: 1, animation: panX).write(o0)\nnoise(hueRange: 0, hueRotation: 0, speed: 50, refractAmt: vol, ridges: true, wrap: true, xScale: 80, yScale: 80, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: hardLight, mix: volMix).write(o1)\nrender(o1)"
+    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 0, max: 100)\nlet bassMix = audio(band: 0, min: -100, max: 100)\npattern(fgColor: #ffffff, bgColor: #000000, rotation: 0, scale: 8, type: dots, speed: 1, animation: panX).write(o0)\nnoise(hueRange: 0, hueRotation: 0, speed: 50, refractAmt: bass, ridges: true, wrap: true, xScale: 80, yScale: 80, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: hardLight, mix: bassMix).write(o1)\nrender(o1)"
   },
   {
     "title": "RGB Static",

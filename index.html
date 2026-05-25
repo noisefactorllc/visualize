@@ -11,6 +11,14 @@
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
     <link rel="preconnect" href="https://handfish.noisefactor.io" crossorigin>
 
+    <!-- Preload the metric-matched Blank placeholder fonts so handfish's
+         zero-CLS strategy kicks in. Without these, browsers optimize away
+         the Nunito Blank / NotoSansMono Blank fallbacks (they sit at the
+         end of the font stack and get skipped if Nunito loads quickly),
+         and the page reflows when the real fonts arrive. -->
+    <link rel="preload" href="https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2" as="font" type="font/woff2" crossorigin>
+
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
 
@@ -81,14 +89,14 @@
                 </div>
             </div>
             <div class="topbar-right">
-                <div class="status-pill" id="audio-status" data-state="off" title="Audio status">
+                <button class="status-pill status-toggle" id="audio-status" data-state="off" title="Toggle audio input">
                     <span class="status-icon icon">music_note</span>
                     <span class="status-text">audio off</span>
-                </div>
-                <div class="status-pill" id="midi-status" data-state="off" title="MIDI status">
+                </button>
+                <button class="status-pill status-toggle" id="midi-status" data-state="off" title="Toggle MIDI">
                     <span class="status-icon icon">piano</span>
                     <span class="status-text">midi off</span>
-                </div>
+                </button>
                 <div class="status-pill" id="fps-status" title="Frames per second">
                     <span class="status-icon icon">bolt</span>
                     <span class="status-text"><span id="fps-value">0</span> fps</span>
@@ -375,6 +383,19 @@
 
     </div>
 
+    <!-- Wire the START SET click synchronously so a fast click (test rig,
+         eager user) doesn't race the deferred module graph. The shader
+         bundle uses a top-level `await import()` from the shaders CDN, so
+         app.js doesn't reach its event-wiring code until that round-trip
+         finishes; without this inline shim the first click is dropped. -->
+    <script>
+    window.__visualizeBootGesture = new Promise(function (resolve) {
+        document.getElementById('boot-start').addEventListener('click', function () {
+            document.getElementById('boot-overlay').classList.add('hidden')
+            resolve()
+        }, { once: true })
+    })
+    </script>
     <script type="module" src="js/app.js"></script>
 </body>
 </html>
