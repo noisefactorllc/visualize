@@ -26,6 +26,10 @@ import { mountThemePicker } from './handfish-theme.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer.
 import { dslTokenizer } from 'handfish'
+// Injects the polymorphic/noisedeck editor styles (transparent overlay
+// with per-segment darkening + syntax colors) and exports the
+// enhanceCodeEditor helper for the Cmd/Ctrl+Shift+Enter binding.
+import { enhanceCodeEditor } from './ui/codeEditor.js'
 
 const $ = (id) => document.getElementById(id)
 
@@ -367,23 +371,18 @@ async function boot() {
         syncDeckEditor(deckId)
     }
 
-    /** Wire the per-deck DSL editor toggle, compile, and Ctrl+Enter binding. */
+    /** Wire the per-deck DSL editor toggle and Ctrl+Enter compile. */
     function wireDeckEditors() {
         for (const deckId of ['A', 'B']) {
             const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
             const panel = deckEl.querySelector('.deck-editor')
             const editor = deckEl.querySelector('code-editor')
-            const compileBtn = deckEl.querySelector('.deck-editor-compile')
             const toggleBtn = deckEl.querySelector('.deck-edit-toggle')
 
-            // Apply DSL syntax highlighting. setTokenizer may not exist yet
-            // on first paint if the handfish bundle is still resolving, so
-            // we retry once a frame later as a belt-and-braces measure.
-            const applyTokenizer = () => editor.setTokenizer?.(dslTokenizer)
-            applyTokenizer()
-            if (typeof editor.setTokenizer !== 'function') {
-                requestAnimationFrame(applyTokenizer)
-            }
+            // Apply DSL syntax highlighting + polymorphic-style behaviors
+            // (per-segment darkening already injected at module load).
+            editor.setTokenizer?.(dslTokenizer)
+            enhanceCodeEditor(editor)
 
             toggleBtn.addEventListener('click', () => {
                 const opening = panel.hidden
@@ -414,8 +413,8 @@ async function boot() {
                 toast(`${deckId}: compiled`)
             }
 
-            compileBtn.addEventListener('click', compileFromEditor)
-            // <code-editor> fires forcerecompile on Ctrl/Cmd+Enter.
+            // <code-editor> fires forcerecompile on Cmd/Ctrl+Enter
+            // (handfish built-in). Polymorphic uses the same binding.
             editor.addEventListener('forcerecompile', compileFromEditor)
         }
     }

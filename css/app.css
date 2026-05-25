@@ -502,65 +502,19 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     pointer-events: none;
 }
 
-/* DSL editor — optionally overlays the deck canvas when the user clicks
-   the </> button. Canvas keeps rendering behind so compiled changes are
-   visible the moment "compile" runs. */
+/* DSL editor — per-deck overlay. Styling for the <code-editor> element
+   itself is injected by js/ui/codeEditor.js (ported verbatim from
+   polymorphic/noisedeck so the editor looks identical to those apps).
+   This rule just positions the overlay; the editor's transparent bg
+   keeps the deck canvas visible behind it, and per-segment darkening
+   handles code readability. */
 .deck-editor {
     position: absolute;
     inset: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--hf-bg-base);
     z-index: 10;
 }
 .deck-editor[hidden] { display: none; }
-
-.deck-editor-code {
-    flex: 1 1 auto;
-    min-height: 0;
-    background: var(--hf-bg-base);
-    color: var(--hf-text-normal);
-    --code-editor-font: var(--hf-font-family-mono);
-    --code-editor-font-size: var(--hf-size-xs);
-    --code-editor-line-height: 1.5;
-    --code-editor-gutter-bg: var(--hf-bg-surface);
-    --code-editor-gutter-width: 2.5em;
-    --code-editor-line-number-color: var(--hf-text-dim);
-    --code-editor-caret-color: var(--hf-accent);
-}
-
-.deck-editor-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--hf-space-2);
-    padding: var(--hf-space-1) var(--hf-space-2);
-    background: var(--hf-bg-surface);
-    border-top: var(--hf-border-width) solid var(--hf-border-subtle);
-    flex: 0 0 auto;
-}
-
-.deck-editor-hint {
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    color: var(--hf-text-dim);
-}
-
-.deck-editor-compile {
-    appearance: none;
-    background: var(--hf-accent);
-    color: var(--hf-bg-base);
-    border: var(--hf-border-width) solid var(--hf-accent);
-    border-radius: var(--hf-radius-sm);
-    padding: var(--hf-space-1) var(--hf-space-3);
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    font-weight: var(--hf-weight-bold);
-    letter-spacing: var(--hf-tracking-wide);
-    cursor: pointer;
-    transition: var(--hf-transition-bg);
-}
-.deck-editor-compile:hover { background: var(--hf-accent-hover); }
+.deck-editor code-editor { width: 100%; height: 100%; }
 
 .deck-meta {
     padding: var(--hf-space-1) var(--hf-space-3);
