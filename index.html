@@ -17,13 +17,45 @@
         { "imports": { "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js" } }
     </script>
 
-    <!-- Preload the metric-matched Blank placeholder fonts so handfish's
-         zero-CLS strategy kicks in. Without these, browsers optimize away
-         the Nunito Blank / NotoSansMono Blank fallbacks (they sit at the
-         end of the font stack and get skipped if Nunito loads quickly),
-         and the page reflows when the real fonts arrive. -->
+    <!-- Handfish zero-CLS font loading — preloaded + declared inline in
+         <head> so the font stack is established before any external CSS
+         loads. tokens.css also declares these, but tokens.css doesn't
+         resolve until after first paint — without inline declarations
+         the browser falls back to system serif (Times New Roman) for the
+         first frame. Mirrors handfish/index.html. -->
     <link rel="preload" href="https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2" as="font" type="font/woff2" crossorigin>
+    <style>
+        @font-face {
+            font-family: 'Nunito Blank';
+            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2') format('woff2');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: block;
+        }
+        @font-face {
+            font-family: Nunito;
+            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito[wght].woff2') format('woff2');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
+        @font-face {
+            font-family: 'Noto Sans Mono Blank';
+            src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2') format('woff2');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: block;
+        }
+        @font-face {
+            font-family: 'Noto Sans Mono';
+            src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono[wdth,wght].woff2') format('woff2');
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
+        html { font-family: Nunito, 'Nunito Blank'; }
+    </style>
 
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
@@ -59,7 +91,7 @@
     })()
     </script>
 
-    <style>* { margin: 0; padding: 0; box-sizing: border-box; }</style>
+    <style>* { box-sizing: border-box; margin: 0; padding: 0; }</style>
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
