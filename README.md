@@ -1,17 +1,25 @@
 # Visualize
 
-**Ultimate music visualizer & VJ gig player.** Two decks. Crossfader. Audio-reactive shaders. MIDI control. Auto-VJ mode. Browser-based, no install.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![No build step](https://img.shields.io/badge/build-none-success.svg)](#run)
+[![Node 18+](https://img.shields.io/badge/node-%E2%89%A518-43853d.svg)](https://nodejs.org/)
 
-Built on the [Noisemaker](https://shaders.noisedeck.app/) shader engine, [Noisedeck/Polymorphic](https://polymorphic.noisedeck.app/) program library, and the [Handfish](https://handfish.noisefactor.io/) design system.
+**Ultimate music visualizer & VJ gig player.** Two decks. Crossfader. Audio-reactive shaders. MIDI control. Auto-VJ mode. Scenes. Browser-based, no install for end users.
+
+Built on the [Noisemaker](https://shaders.noisedeck.app/) shader engine, [Noisedeck](https://noisedeck.app/) / [Polymorphic](https://polymorphic.noisedeck.app/) program library, and the [Handfish](https://handfish.noisefactor.io/) design system.
 
 ## Run
 
-```
-python3 -m http.server 8765
-# open http://localhost:8765/
+Requires [Node.js](https://nodejs.org/) 18+.
+
+```bash
+npm install
+npm run dev
 ```
 
-Click **START SET**, then **⚙ → audio device** to enable mic/loopback input.
+Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device** to enable mic/loopback input.
+
+> No-Node alternative: any static server will do — `python3 -m http.server 3007` works too.
 
 ## Features
 
@@ -71,3 +79,20 @@ Programs are written in the [Polymorphic Shader Language (DSL)](https://polymorp
 For audio reactivity, declare `let name = audio(band: 0|1|2, min: ..., max: ...)` and use the name as a parameter value. Band 0 = bass, 1 = mid, 2 = treble.
 
 Edit the file and reload — no build step.
+
+## Testing
+
+```bash
+npx playwright install   # first time only
+npm test
+```
+
+The smoke test boots a local server and drives a headless Chromium through a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall. Catches regressions in any of the above before they hit production.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) © Noise Factor LLC

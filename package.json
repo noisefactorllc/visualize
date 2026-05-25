@@ -1,0 +1,37 @@
+{
+  "name": "visualize",
+  "version": "0.1.0",
+  "description": "Browser-based music visualizer and VJ gig player. Two decks, crossfader, audio-reactive shaders, MIDI, auto-VJ. Built on Noisemaker.",
+  "type": "module",
+  "author": "Noise Factor LLC",
+  "license": "MIT",
+  "homepage": "https://github.com/noisefactorllc/visualize",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/noisefactorllc/visualize.git"
+  },
+  "bugs": {
+    "url": "https://github.com/noisefactorllc/visualize/issues"
+  },
+  "keywords": [
+    "vj",
+    "visualizer",
+    "music",
+    "shaders",
+    "webgl",
+    "midi",
+    "audio-reactive",
+    "noisemaker"
+  ],
+  "scripts": {
+    "dev": "npx http-server . -p 3007 -c-1",
+    "test": "npx playwright test",
+    "lint": "node --check js/*.js js/noisemaker/*.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
