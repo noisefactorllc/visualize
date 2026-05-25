@@ -56,6 +56,7 @@ export class Scenes {
             xfade: getXfade(),
             curve: getCurve(),
             bpm: scheduler.bpm,
+            divider: scheduler.divider,
             fx: getFxState(),
             autoMix: getAutoMixConfig()
         }
@@ -122,6 +123,7 @@ export class Scenes {
         }
         refreshAudio?.()
         if (typeof snapshot.bpm === 'number') scheduler.bpm = snapshot.bpm
+        if (typeof snapshot.divider === 'number') scheduler.divider = snapshot.divider
         if (snapshot.curve) setCurve(snapshot.curve)
         if (typeof snapshot.xfade === 'number') setXfade(snapshot.xfade)
         if (snapshot.fx) setFx(snapshot.fx)

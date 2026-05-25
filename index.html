@@ -57,7 +57,15 @@
                     <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">TAP</button>
                     <div class="bpm-display" aria-live="polite" aria-atomic="true">
                         <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
-                        <span class="bpm-label">BPM</span>
+                        <select id="bpm-divider" class="bpm-divider" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
+                            <option value="1">/1</option>
+                            <option value="2">/2</option>
+                            <option value="4" selected>/4</option>
+                            <option value="8">/8</option>
+                            <option value="16">/16</option>
+                            <option value="32">/32</option>
+                        </select>
+                        <span class="bpm-label" id="bpm-label">BPM</span>
                     </div>
                     <div class="beat-indicator" id="beat-indicator">
                         <span class="beat-dot" data-beat="0"></span>
@@ -267,9 +275,8 @@
                     </select>
                 </div>
                 <div class="settings-row">
-                    <label for="master-loop">loop duration</label>
-                    <input id="master-loop" type="number" min="1" max="120" step="0.5" value="10">
-                    <span class="settings-hint">seconds (lower = faster animation)</span>
+                    <label>loop duration</label>
+                    <span class="settings-hint" id="master-loop-derived">derived from BPM ÷ divider in the topbar</span>
                 </div>
                 <div class="settings-row">
                     <label class="checkbox-row">

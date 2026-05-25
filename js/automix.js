@@ -21,7 +21,7 @@ const FADE_CURVES = {
 }
 
 export class AutoMix {
-    constructor({ library, decks, compositor, scheduler, getXfade, setXfade, onStatus }) {
+    constructor({ library, decks, compositor, scheduler, getXfade, setXfade, onStatus, onLoad }) {
         this.library = library
         this.decks = decks
         this.compositor = compositor
@@ -29,6 +29,10 @@ export class AutoMix {
         this.getXfade = getXfade
         this.setXfade = setXfade
         this.onStatus = onStatus || (() => {})
+        // Invoked after a successful swap so the UI can refresh deck
+        // labels / tagline / audio routing. AutoMix only knows about
+        // decks, not DOM.
+        this.onLoad = onLoad || (() => {})
 
         this._enabled = false
         this._barsPerScene = 8
@@ -116,10 +120,13 @@ export class AutoMix {
         const target = current < 0.5 ? 1 : 0
         // Load a fresh program into the INCOMING deck (the side the
         // fade is moving TOWARD) so we hear the change as we cross over.
-        // The currently-live deck keeps playing untouched.
+        // The currently-live deck keeps playing untouched. Exclude BOTH
+        // decks' current programs so A and B never end up identical (a
+        // crossfade between two identical visuals is a non-event).
         const incomingDeckId = target > 0.5 ? 'B' : 'A'
+        const otherDeckId = incomingDeckId === 'A' ? 'B' : 'A'
         const deck = this.decks[incomingDeckId]
-        const exclude = deck?.currentName || ''
+        const exclude = [deck?.currentName, this.decks[otherDeckId]?.currentName]
         const program = this.library.randomExcept(exclude)
         if (!program) return
 
@@ -130,6 +137,7 @@ export class AutoMix {
                 return
             }
             this.onStatus(`auto: ${incomingDeckId} ← ${program.title}`, true)
+            this.onLoad(incomingDeckId, program)
         } catch (err) {
             console.error('[AutoMix] load error', err)
             return

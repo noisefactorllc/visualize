@@ -1,10 +1,18 @@
 /**
- * BeatScheduler — drives a beat-level callback at the current BPM.
+ * BeatScheduler — drives a beat-level callback at the current BPM, and
+ * owns the tempo-divider used to convert BPM into a deck loop duration.
  *
  * Two ways to set tempo:
  *   - manual:    set the BPM directly (UI input or MIDI clock follower)
  *   - tap tempo: tap() repeatedly; rolling average of inter-tap intervals
  *                becomes the BPM
+ *
+ * Divider stretches one bar across `divider` repetitions before the
+ * shader cycles. /1 = animations cycle every bar (snappy), /4 = once
+ * every 4 bars (default, matches polymorphic — generative shaders
+ * usually want to breathe rather than strobe per-beat). The app wires
+ * onChange/onDividerChange to push barSeconds() into both decks'
+ * loopDuration.
  *
  * Uses setTimeout (not requestAnimationFrame) so beats keep firing when
  * the tab is backgrounded — Chrome throttles rAF to ~1Hz on hidden
@@ -16,6 +24,18 @@
 
 const MIN_BPM = 40
 const MAX_BPM = 300
+const DIVIDER_STORAGE_KEY = 'visualize.bpm.divider'
+
+export const DIVIDER_OPTIONS = [1, 2, 4, 8, 16, 32]
+
+/**
+ * Pure helper exposed for unit testing. Bar = 4 beats; divider stretches
+ * the visible cycle so one "bar" of animation spans `divider` musical
+ * bars.
+ */
+export function computeBarSeconds(bpm, divider = 1) {
+    return (60 / bpm) * 4 * divider
+}
 
 export class BeatScheduler {
     constructor(initialBpm = 120) {
@@ -25,20 +45,61 @@ export class BeatScheduler {
         this._running = false
         this._timeoutId = null
         this._listeners = []
+        this._changeListeners = []
+        this._dividerListeners = []
+        this._tapListeners = []
         this._tapTimes = []
         this._tapResetMs = 2000
+        this._divider = this._loadDivider()
     }
 
     get bpm() { return this._bpm }
     set bpm(v) {
         const n = Number(v)
         if (!Number.isFinite(n) || n <= 0) return
-        this._bpm = Math.max(MIN_BPM, Math.min(MAX_BPM, n))
+        const clamped = Math.max(MIN_BPM, Math.min(MAX_BPM, n))
+        if (clamped === this._bpm) return
+        this._bpm = clamped
+        for (const cb of this._changeListeners) cb(this._bpm)
+    }
+
+    get divider() { return this._divider }
+    set divider(v) {
+        const n = Number(v)
+        if (!DIVIDER_OPTIONS.includes(n)) return
+        if (n === this._divider) return
+        this._divider = n
+        this._saveDivider(n)
+        for (const cb of this._dividerListeners) cb(this._divider)
+    }
+
+    /** Seconds per visible animation cycle at the current BPM × divider. */
+    barSeconds() {
+        return computeBarSeconds(this._bpm, this._divider)
+    }
+
+    /** Subscribe to bpm changes (any source: UI, tap, MIDI). */
+    onChange(cb) { this._changeListeners.push(cb) }
+    /** Subscribe to divider changes (UI). */
+    onDividerChange(cb) { this._dividerListeners.push(cb) }
+    /** Subscribe to user taps — UI uses this to flash the Tap button. */
+    onTap(cb) { this._tapListeners.push(cb) }
+
+    _loadDivider() {
+        try {
+            const n = parseInt(localStorage.getItem(DIVIDER_STORAGE_KEY), 10)
+            return DIVIDER_OPTIONS.includes(n) ? n : 4
+        } catch { return 4 }
+    }
+
+    _saveDivider(n) {
+        try { localStorage.setItem(DIVIDER_STORAGE_KEY, String(n)) } catch { /* ignore */ }
     }
 
     /** beats per second */
     get bps() { return this._bpm / 60 }
     get beatIntervalMs() { return 60000 / this._bpm }
+    get running() { return this._running }
 
     onBeat(cb) { this._listeners.push(cb) }
 
@@ -113,6 +174,7 @@ export class BeatScheduler {
         }
         this._tapTimes.push(now)
         if (this._tapTimes.length > 8) this._tapTimes.shift()
+        for (const cb of this._tapListeners) cb()
         if (this._tapTimes.length < 2) return 0
         const intervals = []
         for (let i = 1; i < this._tapTimes.length; i++) {

@@ -33,18 +33,19 @@ export class Library {
     }
 
     /**
-     * Pick a random program that isn't the given one (to avoid loading
-     * the same thing into a deck twice in a row).
+     * Pick a random program whose title is not in `exclude`. Accepts a
+     * single title or an array of titles. Falls back to a plain random
+     * pick if the exclusion list covers (almost) the whole library.
      */
-    randomExcept(excludeTitle) {
-        if (this.programs.length <= 1) return this.random()
-        let p
-        let attempts = 0
-        do {
-            p = this.random()
-            attempts++
-        } while (p?.title === excludeTitle && attempts < 10)
-        return p
+    randomExcept(exclude) {
+        if (!this.programs.length) return null
+        const excludeSet = new Set(
+            (Array.isArray(exclude) ? exclude : [exclude]).filter(Boolean)
+        )
+        // If excluding would eliminate every option, just pick randomly.
+        const eligible = this.programs.filter(p => !excludeSet.has(p.title))
+        if (eligible.length === 0) return this.random()
+        return eligible[Math.floor(Math.random() * eligible.length)]
     }
 
     /** Find a program by title. */

@@ -7,14 +7,45 @@
  *     touches a control on the controller to bind it.
  *  2. Forward CC + note state into each deck's midiState bag so DSL
  *     programs using midi() automation also react.
- *  3. Decode MIDI clock (0xF8 ticks) into a live BPM estimate that the
- *     BPM module can optionally follow.
+ *  3. Decode MIDI System Real-Time messages (clock + transport) into a
+ *     live BPM estimate and transport events that the BPM module can
+ *     optionally follow. Mirrors polymorphic's MidiClock: a 24-tick
+ *     sliding window smoothed with an EMA, plus start/stop/continue
+ *     transport handling and a no-clock watchdog so the UI can show
+ *     a meaningful status (no-device / no-clock / synced / stopped).
  *
  * Persists learn assignments to localStorage so a controller stays bound
  * between sessions.
  */
 
 const STORAGE_KEY = 'visualize.midi.learn.v1'
+
+// MIDI System Real-Time. Public so unit tests can pin the constants.
+export const MIDI_TICKS_PER_BEAT = 24
+const WINDOW_TICKS = 24       // sliding window of one beat
+const SMOOTHING_ALPHA = 0.2   // EMA factor for incoming BPM samples
+const NO_CLOCK_TIMEOUT_MS = 2000
+
+/** Map a status byte → transport event name (or null for non-transport). */
+export function parseMidiStatus(byte) {
+    switch (byte) {
+        case 0xF8: return 'clock'
+        case 0xFA: return 'start'
+        case 0xFB: return 'continue'
+        case 0xFC: return 'stop'
+        default: return null
+    }
+}
+
+/** BPM derived from a sliding window of clock-tick timestamps (ms). */
+export function bpmFromTickIntervals(timestamps) {
+    if (!Array.isArray(timestamps) || timestamps.length < 2) return null
+    let sum = 0
+    for (let i = 1; i < timestamps.length; i++) sum += timestamps[i] - timestamps[i - 1]
+    const avgInterval = sum / (timestamps.length - 1)
+    if (!Number.isFinite(avgInterval) || avgInterval <= 0) return null
+    return 60_000 / (avgInterval * MIDI_TICKS_PER_BEAT)
+}
 
 export class SharedMidi {
     constructor() {
@@ -37,33 +68,49 @@ export class SharedMidi {
         this._learnCommitTimer = null
 
         this._followClock = false
-        this._clockTickCount = 0
-        this._clockStartMs = 0
-        this._lastBpm = 0
-        // Rolling-average BPM samples (one sample per quarter note).
-        // 4 samples ≈ 1 bar of smoothing — long enough to absorb USB
-        // jitter, short enough to follow real tempo changes within a
-        // bar or two.
-        this._bpmSamples = []
-        this._bpmSampleSize = 4
+        // Sliding window of recent clock-tick timestamps (one beat's
+        // worth = 24 ticks). EMA smoothing on top absorbs USB jitter
+        // without lagging real tempo changes.
+        this._tickTimes = []
+        this._smoothedBpm = null
+        this._lastTickAt = 0
+        this._noClockTimer = null
+        this._clockStatus = 'no-device'   // no-device | no-clock | synced | stopped
 
         this._onStatus = null
         this._onLearnUpdate = null
         this._onBpm = null
+        this._onTransport = null
+        this._onClockStatusChange = null
     }
 
     onStatusChange(cb) { this._onStatus = cb }
     onLearnUpdate(cb) { this._onLearnUpdate = cb }
     onBpm(cb) { this._onBpm = cb }
+    /** Subscribe to MIDI transport events: 'start' | 'stop' | 'continue'. */
+    onTransport(cb) { this._onTransport = cb }
+    /** Subscribe to MIDI clock status changes. */
+    onClockStatus(cb) { this._onClockStatusChange = cb }
+    /** Last reported clock status (no-device / no-clock / synced / stopped). */
+    get clockStatus() { return this._clockStatus }
 
     get enabled() { return this._enabled }
     get inputCount() { return this._inputs.length }
     get followClock() { return this._followClock }
     set followClock(v) {
-        this._followClock = !!v
-        this._clockTickCount = 0
-        this._clockStartMs = 0
-        this._bpmSamples = []
+        const next = !!v
+        if (next === this._followClock) return
+        this._followClock = next
+        // Reset estimate so a stale BPM doesn't carry across a toggle.
+        this._tickTimes = []
+        this._smoothedBpm = null
+        if (next && this._enabled) {
+            this._setClockStatus(this._inputs.length ? 'no-clock' : 'no-device')
+            this._armNoClockWatchdog()
+        } else if (!next) {
+            this._clearNoClockWatchdog()
+            this._setClockStatus(this._enabled && this._inputs.length ? 'no-clock' : 'no-device')
+        }
     }
 
     get assignments() {
@@ -131,51 +178,83 @@ export class SharedMidi {
             this._notify(`MIDI access denied: ${err?.message || err}`)
             return false
         }
-        this._inputs = Array.from(this._access.inputs.values())
-        for (const input of this._inputs) {
-            input.onmidimessage = (msg) => this._onMessage(msg)
-        }
+        this._attachInputs()
         this._access.onstatechange = () => {
-            this._inputs = Array.from(this._access.inputs.values())
-            for (const input of this._inputs) {
-                if (!input.onmidimessage) input.onmidimessage = (m) => this._onMessage(m)
-            }
+            this._attachInputs()
             this._notify(`MIDI: ${this._inputs.length} input(s)`)
         }
         this._enabled = true
         this._notify(`MIDI: ${this._inputs.length} input(s)`)
+        if (this._followClock) {
+            this._setClockStatus(this._inputs.length ? 'no-clock' : 'no-device')
+            this._armNoClockWatchdog()
+        }
         return true
     }
 
     /** Toggle on/off — disable just detaches listeners; access stays. */
     async toggle() {
         if (!this._enabled) return this.enable()
-        // Re-read inputs from the access object before detaching — any
-        // device hot-plugged between enable() and toggle() wouldn't be
-        // in our cached `_inputs` array otherwise.
-        if (this._access) {
-            this._inputs = Array.from(this._access.inputs.values())
-        }
-        for (const input of this._inputs) input.onmidimessage = null
+        this._detachInputs()
         this._enabled = false
+        this._tickTimes = []
+        this._smoothedBpm = null
+        this._clearNoClockWatchdog()
+        this._setClockStatus('no-device')
         this._notify('MIDI off')
         return false
     }
 
+    /**
+     * (Re)attach midimessage listeners to current inputs without leaking
+     * subscriptions across hot-plug events. Uses addEventListener so we
+     * coexist with anything else listening on the same input (matches
+     * polymorphic's defensive attach pattern).
+     */
+    _attachInputs() {
+        if (!this._access) return
+        const next = Array.from(this._access.inputs.values())
+        const seen = new Set(next)
+        // Remove listeners for inputs that disappeared
+        this._inputs = this._inputs.filter(({ input, listener }) => {
+            if (seen.has(input)) return true
+            try { input.removeEventListener('midimessage', listener) } catch { /* ignore */ }
+            return false
+        })
+        // Attach to any new inputs
+        const known = new Set(this._inputs.map(e => e.input))
+        for (const input of next) {
+            if (known.has(input)) continue
+            const listener = (event) => this._onMessage(event)
+            input.addEventListener('midimessage', listener)
+            if (input.connection !== 'open') {
+                try { input.open() } catch { /* ignore */ }
+            }
+            this._inputs.push({ input, listener })
+        }
+    }
+
+    _detachInputs() {
+        for (const { input, listener } of this._inputs) {
+            try { input.removeEventListener('midimessage', listener) } catch { /* ignore */ }
+        }
+        this._inputs = []
+    }
+
     _onMessage(msg) {
         const data = msg.data
+        if (!data || data.length < 1) return
         const status = data[0] & 0xF0
         const channel = data[0] & 0x0F
 
-        // MIDI clock
-        if (data[0] === 0xF8) {
+        // System Real-Time (clock + transport)
+        const transport = parseMidiStatus(data[0])
+        if (transport === 'clock') {
             this._onClockTick()
             return
         }
-        if (data[0] === 0xFA || data[0] === 0xFB) {
-            // start / continue — restart estimate
-            this._clockTickCount = 0
-            this._clockStartMs = 0
+        if (transport) {
+            this._onTransportMsg(transport)
             return
         }
 
@@ -264,12 +343,6 @@ export class SharedMidi {
         }
     }
 
-    /**
-     * 24 ticks per quarter note. We estimate BPM over a 24-tick window
-     * and feed the result into a rolling-average buffer so per-quarter
-     * jitter (common over USB-MIDI from DAWs) doesn't visibly wobble
-     * the BPM readout.
-     */
     _commitLearn() {
         if (!this._learningControlId || !this._learningCapture) return
         const id = this._learningControlId
@@ -291,31 +364,67 @@ export class SharedMidi {
         this._notify(`learned: ${id} ← CC ${cap.cc} ch ${cap.ch + 1} (${min}-${max})`)
     }
 
+    /**
+     * MIDI clock is 24 PPQN. Keep a sliding 24-tick window of
+     * timestamps; each tick refines the instant BPM. An EMA on top of
+     * that absorbs USB jitter (DAWs are particularly noisy) without
+     * adding the latency of a fixed sample buffer.
+     */
     _onClockTick() {
+        if (!this._followClock) return
         const now = performance.now()
-        if (this._clockTickCount === 0) {
-            this._clockStartMs = now
+        this._lastTickAt = now
+        this._tickTimes.push(now)
+        if (this._tickTimes.length > WINDOW_TICKS) this._tickTimes.shift()
+        const raw = bpmFromTickIntervals(this._tickTimes)
+        if (raw == null || !Number.isFinite(raw) || raw < 20 || raw > 400) return
+        this._smoothedBpm = this._smoothedBpm == null
+            ? raw
+            : this._smoothedBpm + SMOOTHING_ALPHA * (raw - this._smoothedBpm)
+        if (this._clockStatus !== 'synced') this._setClockStatus('synced')
+        this._armNoClockWatchdog()
+        if (this._onBpm) this._onBpm(this._smoothedBpm)
+    }
+
+    _onTransportMsg(kind) {
+        if (this._onTransport) this._onTransport(kind)
+        if (!this._followClock) return
+        if (kind === 'stop') {
+            this._tickTimes = []
+            this._setClockStatus('stopped')
+            this._clearNoClockWatchdog()
+        } else if (kind === 'start' || kind === 'continue') {
+            // Reset the window so post-transport BPM derives from new ticks.
+            this._tickTimes = []
+            this._smoothedBpm = null
+            this._setClockStatus('no-clock')
+            this._armNoClockWatchdog()
         }
-        this._clockTickCount++
-        if (this._clockTickCount >= 24) {
-            const elapsedSec = (now - this._clockStartMs) / 1000
-            if (elapsedSec > 0) {
-                const instantBpm = 60 / elapsedSec
-                if (Number.isFinite(instantBpm) && instantBpm > 20 && instantBpm < 400) {
-                    this._bpmSamples.push(instantBpm)
-                    if (this._bpmSamples.length > this._bpmSampleSize) {
-                        this._bpmSamples.shift()
-                    }
-                    const avg = this._bpmSamples.reduce((a, b) => a + b, 0) / this._bpmSamples.length
-                    this._lastBpm = avg
-                    if (this._followClock && this._onBpm) {
-                        this._onBpm(avg)
-                    }
-                }
+    }
+
+    _armNoClockWatchdog() {
+        this._clearNoClockWatchdog()
+        this._noClockTimer = setTimeout(() => {
+            this._noClockTimer = null
+            if (!this._enabled || !this._followClock) return
+            if (this._clockStatus === 'stopped') return  // stop is intentional
+            if (performance.now() - this._lastTickAt >= NO_CLOCK_TIMEOUT_MS) {
+                this._setClockStatus(this._inputs.length ? 'no-clock' : 'no-device')
             }
-            this._clockTickCount = 0
-            this._clockStartMs = now
+        }, NO_CLOCK_TIMEOUT_MS + 50)
+    }
+
+    _clearNoClockWatchdog() {
+        if (this._noClockTimer) {
+            clearTimeout(this._noClockTimer)
+            this._noClockTimer = null
         }
+    }
+
+    _setClockStatus(status) {
+        if (this._clockStatus === status) return
+        this._clockStatus = status
+        if (this._onClockStatusChange) this._onClockStatusChange(status)
     }
 
     getLearnView() {

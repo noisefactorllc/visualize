@@ -177,7 +177,44 @@ select:focus-visible,
     font-size: 10px;
     color: var(--vz-text-dim);
     letter-spacing: 0.15em;
+    white-space: nowrap;
 }
+
+/* Tempo divider — slows the deck animation cycle to BPM × divider so
+   shaders don't strobe at higher tempos. Chevron-styled to match
+   polymorphic's status-row divider chip. */
+.bpm-divider {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-color: color-mix(in srgb, var(--vz-master) 8%, transparent);
+    color: var(--vz-text);
+    border: 1px solid color-mix(in srgb, var(--vz-master) 25%, transparent);
+    border-radius: 4px;
+    padding: 2px 14px 2px 6px;
+    font-family: 'Noto Sans Mono', monospace;
+    font-size: 10px;
+    line-height: 1.3;
+    cursor: pointer;
+    outline: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5' fill='%23ffd24e'%3E%3Cpath d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    background-size: 6px;
+    transition: background-color 0.1s, border-color 0.1s;
+    margin: 0 4px;
+}
+.bpm-divider:hover {
+    background-color: color-mix(in srgb, var(--vz-master) 18%, transparent);
+    border-color: color-mix(in srgb, var(--vz-master) 50%, transparent);
+}
+.bpm-divider:focus { border-color: var(--vz-master); }
+.bpm-divider option { background: var(--hf-bg-base, #0a0a0f); color: var(--vz-text); }
+
+/* When BPM is being driven by MIDI clock, retint the bpm-label to signal
+   that the value isn't user-set. */
+.bpm-block.midi-sync .bpm-label { color: var(--vz-master); }
+.bpm-block.midi-sync #bpm-input { color: var(--vz-master); }
 
 .beat-indicator {
     display: flex;
@@ -390,6 +427,7 @@ select:focus-visible,
     letter-spacing: 0.05em;
     cursor: pointer;
     transition: all 0.1s ease;
+    white-space: nowrap;
 }
 .ghost-button:hover { border-color: var(--vz-master); color: var(--vz-master); }
 
@@ -655,14 +693,18 @@ select:focus-visible,
     text-transform: uppercase;
     color: var(--vz-text-dim);
     font-family: 'Noto Sans Mono', monospace;
-    min-width: 50px;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .control-value {
     font-size: 11px;
     color: var(--vz-text);
     font-family: 'Noto Sans Mono', monospace;
+    white-space: nowrap;
+    flex: 0 0 auto;
     min-width: 40px;
+    text-align: right;
 }
 
 input[type="range"] {
@@ -722,6 +764,8 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     letter-spacing: 0.15em;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .big-toggle:hover { border-color: var(--vz-master); }
@@ -751,6 +795,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     display: flex;
     align-items: center;
     gap: 4px;
+    white-space: nowrap;
 }
 
 .automix-config select {
@@ -886,6 +931,8 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     letter-spacing: 0.15em;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
+    flex: 0 0 auto;
 }
 
 .record-dot {

@@ -140,13 +140,56 @@ async function boot() {
         deckEls.B.classList.toggle('live', !aLive)
     }
 
-    // BPM / scheduler
+    // BPM / scheduler. Divider × BPM drives both decks' base loop
+    // duration so animations stay sized to the music without users
+    // hand-tuning a "loop duration" number (mirrors polymorphic).
     const scheduler = new BeatScheduler(120)
     scheduler.start()
+    const bpmDividerEl = $('bpm-divider')
+    const bpmLabelEl = $('bpm-label')
+    const masterLoopDerivedEl = $('master-loop-derived')
+    const bpmBlockEl = document.querySelector('.bpm-block')
+    if (bpmDividerEl) bpmDividerEl.value = String(scheduler.divider)
+
+    function applyLoopFromBpm() {
+        const sec = scheduler.barSeconds()
+        state.loopDuration = sec
+        state.decks.A.setBaseLoopDuration(sec)
+        state.decks.B.setBaseLoopDuration(sec)
+        if (masterLoopDerivedEl) {
+            masterLoopDerivedEl.textContent =
+                `${sec.toFixed(2)}s — ${scheduler.bpm.toFixed(1)} BPM ÷ ${scheduler.divider} (one bar = ${(60 / scheduler.bpm).toFixed(2)}s)`
+        }
+    }
+    applyLoopFromBpm()
+    scheduler.onChange(() => applyLoopFromBpm())
+    scheduler.onDividerChange((d) => {
+        if (bpmDividerEl && bpmDividerEl.value !== String(d)) bpmDividerEl.value = String(d)
+        applyLoopFromBpm()
+    })
+
     midi.onBpm((bpm) => {
         if (!midi.followClock) return
         scheduler.bpm = bpm
         bpmInputEl.value = bpm.toFixed(1)
+    })
+    // MIDI transport: start/continue resume the scheduler; stop pauses
+    // it so beat-driven FX freeze instead of free-running.
+    midi.onTransport((kind) => {
+        if (!midi.followClock) return
+        if (kind === 'start' || kind === 'continue') {
+            scheduler.resetPhase()
+            if (!scheduler.running) scheduler.start()
+        } else if (kind === 'stop') {
+            scheduler.stop()
+        }
+    })
+    midi.onClockStatus((status) => {
+        // Reflect MIDI-clock status in the bpm label so users can see
+        // why the BPM stopped updating without opening DevTools.
+        const showStatus = midi.followClock && status !== 'synced'
+        if (bpmLabelEl) bpmLabelEl.textContent = showStatus ? `midi: ${status}` : 'BPM'
+        if (bpmBlockEl) bpmBlockEl.classList.toggle('midi-sync', midi.followClock && status === 'synced')
     })
 
     // Auto-mix
@@ -159,7 +202,18 @@ async function boot() {
             xfaderEl.value = String(v)
             updateLiveIndicator()
         },
-        onStatus: (msg) => toast(msg)
+        onStatus: (msg) => toast(msg),
+        // Refresh deck name/tagline + audio routing whenever AutoMix
+        // swaps a program in. Otherwise the topbar label stays stuck on
+        // whatever was loaded manually before AutoMix took over.
+        onLoad: (deckId, program) => {
+            audio.refreshDeckStates()
+            const labels = deckLabels[deckId]
+            if (labels) {
+                labels.name.textContent = program.title
+                labels.tag.textContent = program.tagline || ''
+            }
+        }
     })
     // Drive the AutoMix fade per-frame for smooth interpolation
     // (per-beat would only give ~4 visible steps across a 1-bar fade).
@@ -318,6 +372,17 @@ async function boot() {
     bpmInputEl.addEventListener('change', (e) => {
         scheduler.bpm = parseFloat(e.target.value)
         scheduler.resetPhase()
+    })
+    if (bpmDividerEl) {
+        bpmDividerEl.addEventListener('change', (e) => {
+            scheduler.divider = parseInt(e.target.value, 10)
+        })
+    }
+    // Mirror bpm changes (e.g. tap, MIDI) back into the input.
+    scheduler.onChange((bpm) => {
+        if (document.activeElement !== bpmInputEl) {
+            bpmInputEl.value = bpm.toFixed(1)
+        }
     })
     const tapBtn = $('tap-tempo')
     function doTap() {
@@ -495,14 +560,6 @@ async function boot() {
         $('master-res').textContent = `${w}×${h}`
         toast(`master: ${w}×${h}`)
     })
-    $('master-loop').addEventListener('change', (e) => {
-        const sec = parseFloat(e.target.value)
-        if (!Number.isFinite(sec) || sec <= 0) return
-        state.loopDuration = sec
-        state.decks.A.setBaseLoopDuration(sec)
-        state.decks.B.setBaseLoopDuration(sec)
-    })
-
     // FPS readout
     setInterval(() => {
         fpsEl.textContent = String(compositor.fps)
