@@ -36,14 +36,13 @@ export class AutoMix {
 
         this._enabled = false
         this._barsPerScene = 8
-        this._fadeBars = 4
+        this._fadeDurSec = 3        // wall-clock seconds (shared with the manual auto-fade button)
         this._curve = 'dipped'
 
         this._lastSwitchBeat = 0
-        this._fadeStart = null
+        this._fadeStartMs = null
         this._fadeStartXfade = 0
         this._fadeTargetXfade = 0
-        this._fadeBeats = 0
         this._userOverride = false
         this._userOverrideUntil = 0
 
@@ -56,7 +55,7 @@ export class AutoMix {
             this._lastSwitchBeat = this.scheduler.beatIndex
             this.onStatus('auto-VJ ON', true)
         } else {
-            this._fadeStart = null
+            this._fadeStartMs = null
             this.onStatus('auto-VJ off', false)
         }
     }
@@ -69,7 +68,7 @@ export class AutoMix {
     get enabled() { return this._enabled }
 
     setBarsPerScene(n) { this._barsPerScene = Math.max(1, Number(n) || 8) }
-    setFadeBars(n) { this._fadeBars = Math.max(0, Number(n) || 4) }
+    setFadeDurationSec(s) { this._fadeDurSec = Math.max(0, Number(s) || 0) }
     setCurve(name) { if (FADE_CURVES[name]) this._curve = name }
 
     /**
@@ -77,7 +76,7 @@ export class AutoMix {
      * Halts the auto-mix animation but doesn't disable the feature.
      */
     noteUserOverride() {
-        this._fadeStart = null
+        this._fadeStartMs = null
         this._userOverride = true
         this._userOverrideUntil = performance.now() + 1500
     }
@@ -94,20 +93,20 @@ export class AutoMix {
     }
 
     /**
-     * Called from the compositor's per-frame callback. Uses the
-     * scheduler's fractional beat position so the crossfade is smooth
-     * instead of stepping once per beat (the old behaviour gave a
-     * jerky 4-step fade across a 1-bar transition).
+     * Called from the compositor's per-frame callback. Wall-clock
+     * timed (the fade duration is in seconds, set by the user via
+     * the fade-duration slider in the mixer-controls panel) rather
+     * than beat-locked.
      */
     tickFrame() {
-        if (this._fadeStart === null) return
+        if (this._fadeStartMs === null) return
         if (this._isUserOverriding()) return
-        const beatsElapsed = (this.scheduler.beatIndex + this.scheduler.beatPhase) - this._fadeStart
-        const t = Math.max(0, Math.min(1, beatsElapsed / Math.max(0.0001, this._fadeBeats)))
+        const elapsed = (performance.now() - this._fadeStartMs) / 1000
+        const t = Math.max(0, Math.min(1, elapsed / Math.max(0.0001, this._fadeDurSec)))
         const eased = FADE_CURVES[this._curve](t)
         const value = this._fadeStartXfade + (this._fadeTargetXfade - this._fadeStartXfade) * eased
         this.setXfade(value)
-        if (t >= 1) this._fadeStart = null
+        if (t >= 1) this._fadeStartMs = null
     }
 
     _isUserOverriding() {
@@ -144,17 +143,16 @@ export class AutoMix {
         }
 
         // Cut-mode: snap immediately
-        if (this._curve === 'cut' || this._fadeBars <= 0) {
+        if (this._curve === 'cut' || this._fadeDurSec <= 0) {
             this.setXfade(target)
             return
         }
 
-        // Otherwise animate over fadeBars worth of beats. We store the
-        // fractional beat position so the per-frame tick can interpolate
-        // smoothly even between beat events.
-        this._fadeStart = this.scheduler.beatIndex + this.scheduler.beatPhase
+        // Otherwise animate over the configured fade duration in
+        // seconds; tickFrame() reads wall-clock elapsed and applies
+        // the easing curve.
+        this._fadeStartMs = performance.now()
         this._fadeStartXfade = current
         this._fadeTargetXfade = target
-        this._fadeBeats = Math.max(1, this._fadeBars * 4)
     }
 }

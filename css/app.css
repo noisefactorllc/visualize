@@ -1769,13 +1769,68 @@ kbd {
    ────────────────────────────────────────────────────────────── */
 .mixer-controls {
     padding: var(--hf-space-3);
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--hf-space-2) var(--hf-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--hf-space-2);
     background: var(--hf-bg-elevated);
 }
 
 .mixer-controls[hidden] { display: none; }
+
+/* Static fade-controls row that lives ABOVE the per-mixer-effect
+   param rows. Curve selector hugs the left edge, duration slider
+   hugs the right. Both feed the same `state.fadeDurSec` / curve
+   used by the auto-fade button and auto-VJ transitions. */
+.mixer-fade-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--hf-space-3);
+    align-items: center;
+}
+
+.mixer-fade-cell {
+    display: grid;
+    grid-template-columns: 5.5em 1fr;
+    align-items: center;
+    gap: var(--hf-space-2);
+    min-width: 0;
+}
+
+.mixer-fade-cell #automix-curve {
+    appearance: none;
+    background: var(--hf-bg-base);
+    color: var(--hf-text-normal);
+    border-radius: var(--hf-radius-sm);
+    padding: 3px 22px 3px 8px;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    cursor: pointer;
+    background-image:
+        linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 9px top 50%, right 5px top 50%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+}
+
+.mixer-fade-cell #fade-duration {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
+    min-width: 0;
+    width: 100%;
+    min-height: 28px;
+}
+
+/* The per-mixer-effect rows still use the two-column 1fr 1fr grid
+   they had on the parent .mixer-controls before the fade row moved
+   in — apply that here so split / shape / pattern still render in
+   pairs side by side. */
+.mixer-effect-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--hf-space-2) var(--hf-space-4);
+}
 
 /* 2-column row: label | control. Control is either a slider-value
    (which we flex inline so the value-display sits next to the

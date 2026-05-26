@@ -49,7 +49,13 @@ const state = {
     deckDensity: {
         A: { mode: 'auto', value: 1.0 },
         B: { mode: 'auto', value: 1.0 }
-    }
+    },
+    // Seconds for the manual auto-fade (X key) AND auto-VJ scene
+    // transitions. Read by the auto-fade button and pushed into
+    // AutoMix; UI source of truth is #fade-duration in the mixer
+    // controls panel.
+    fadeDurSec: 3,
+    curve: 'dipped'
 }
 
 // Cycle order for the deck-density button. AUTO → 100 → 75 → 50 → 25 → AUTO.
@@ -331,10 +337,10 @@ async function boot() {
     })
     $('auto-fade').addEventListener('click', () => {
         const target = state.crossfade < 0.5 ? 1 : 0
-        animateXfade(target, 1.5)
+        animateXfade(target, state.fadeDurSec)
     })
 
-    function animateXfade(target, durSec = 1) {
+    function animateXfade(target, durSec = state.fadeDurSec) {
         autoMix.noteUserOverride()
         const start = state.crossfade
         const startMs = performance.now()
@@ -549,7 +555,10 @@ async function boot() {
      * mixer-effect dropdown changes via wireMixerPicker().
      */
     function wireMixerControls(mixer) {
-        const root = $('mixer-controls')
+        // Per-effect param rows live in a nested container so the
+        // sibling .mixer-fade-row (curve + duration) survives the
+        // MixerControls.show()'s innerHTML reset.
+        const root = $('mixer-effect-controls')
         if (!root) return
         mixerControlsPanel = new MixerControls(root, mixer)
         mixerControlsPanel.show(mixer.currentMixer.id)
@@ -755,6 +764,22 @@ async function boot() {
         autoMix.setCurve(e.target.value)
         compositor.setCurve(e.target.value)
     })
+
+    // Fade duration — single source of truth for both the manual
+    // auto-fade button and auto-VJ scene transitions. Stored on
+    // state and pushed into AutoMix so its tickFrame uses the
+    // user-set number of seconds instead of a bars-derived value.
+    const fadeDurEl = $('fade-duration')
+    if (fadeDurEl) {
+        fadeDurEl.value = state.fadeDurSec
+        fadeDurEl.addEventListener('input', () => {
+            const v = Number(fadeDurEl.value)
+            if (!Number.isFinite(v) || v <= 0) return
+            state.fadeDurSec = v
+            autoMix.setFadeDurationSec(v)
+        })
+        autoMix.setFadeDurationSec(state.fadeDurSec)
+    }
 
     // Record
     $('record-toggle').addEventListener('click', () => recorder.toggle())
