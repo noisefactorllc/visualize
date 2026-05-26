@@ -975,10 +975,15 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .status-field select:hover  { border-color: var(--hf-accent); }
 .status-field select:focus  { outline: none; border-color: var(--hf-accent); }
 
+/* AUTO-VJ active state — bg fills with the app accent so the "on"
+   state reads decisively against the muted status row. Default
+   (data-state="off") inherits the plain .status-pill look. */
 .status-automix[data-state="on"] {
-    background: var(--hf-accent);
+    background: color-mix(in srgb, var(--hf-accent) 88%, var(--hf-bg-base));
     color: var(--hf-bg-base);
-    border-color: var(--hf-accent);
+}
+.status-automix[data-state="on"]:hover {
+    background: var(--hf-accent);
 }
 
 .control-group { display: flex; align-items: center; gap: var(--hf-space-2); min-width: 0; }
