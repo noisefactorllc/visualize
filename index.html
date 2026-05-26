@@ -248,28 +248,7 @@
                     <button class="fx-button" data-fx="flash" title="Flash white (6)">FLASH</button>
                 </div>
 
-                <div class="mixer-controls" id="mixer-controls">
-                    <!-- Fade controls: applies to BOTH the manual
-                         auto-fade button (X key) AND auto-VJ scene
-                         transitions. Curve selector on the left,
-                         duration slider on the right. -->
-                    <div class="mixer-fade-row">
-                        <div class="mixer-fade-cell mixer-fade-curve">
-                            <span class="mixer-control-label">fade</span>
-                            <select id="automix-curve">
-                                <option value="linear">linear</option>
-                                <option value="dipped" selected>dipped</option>
-                                <option value="sharp">sharp</option>
-                                <option value="cut">cut</option>
-                            </select>
-                        </div>
-                        <div class="mixer-fade-cell mixer-fade-duration">
-                            <span class="mixer-control-label">duration</span>
-                            <slider-value id="fade-duration" type="float" min="0.1" max="16" step="0.1" value="3"></slider-value>
-                        </div>
-                    </div>
-                    <div class="mixer-effect-controls" id="mixer-effect-controls"></div>
-                </div>
+                <div class="mixer-controls" id="mixer-controls" hidden></div>
             </div>
 
             <div class="deck deck-b" data-deck="B">
@@ -323,9 +302,24 @@
                         <span class="xfader-label-b">B</span>
                     </div>
                     <div class="xfader-quick">
-                        <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
-                        <button class="quick-cut" id="auto-fade" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
-                        <button class="quick-cut" id="cut-b" title="Cut to B (C)"><span class="icon">last_page</span></button>
+                        <div class="xfader-fade xfader-fade-left">
+                            <span class="xfader-fade-label">fade</span>
+                            <select id="automix-curve" class="xfader-fade-curve" title="Fade curve (used by auto-fade + auto-VJ)">
+                                <option value="linear">linear</option>
+                                <option value="dipped" selected>dipped</option>
+                                <option value="sharp">sharp</option>
+                                <option value="cut">cut</option>
+                            </select>
+                        </div>
+                        <div class="xfader-cuts">
+                            <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
+                            <button class="quick-cut" id="auto-fade" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
+                            <button class="quick-cut" id="cut-b" title="Cut to B (C)"><span class="icon">last_page</span></button>
+                        </div>
+                        <div class="xfader-fade xfader-fade-right">
+                            <slider-value id="fade-duration" class="xfader-fade-duration" type="float" min="0.1" max="16" step="0.1" value="3" title="Fade time in seconds"></slider-value>
+                            <span class="xfader-fade-label">fade time</span>
+                        </div>
                     </div>
                 </div>
 

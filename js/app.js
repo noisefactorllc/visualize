@@ -555,10 +555,7 @@ async function boot() {
      * mixer-effect dropdown changes via wireMixerPicker().
      */
     function wireMixerControls(mixer) {
-        // Per-effect param rows live in a nested container so the
-        // sibling .mixer-fade-row (curve + duration) survives the
-        // MixerControls.show()'s innerHTML reset.
-        const root = $('mixer-effect-controls')
+        const root = $('mixer-controls')
         if (!root) return
         mixerControlsPanel = new MixerControls(root, mixer)
         mixerControlsPanel.show(mixer.currentMixer.id)
