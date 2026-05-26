@@ -38,6 +38,18 @@
     --hf-size-lg:   1.3125rem;  /* 21px (handfish: 18px) */
     --hf-size-xl:   1.5rem;     /* 24px (handfish: 20px) */
     --hf-size-2xl:  1.6875rem;  /* 27px (handfish: 24px) */
+
+    /* Noisedeck visual language: borders off by default; layer
+       distinction comes from bg color contrast (--hf-bg-base /
+       -surface / -elevated) and 0.5rem-ish gaps. Per-element borders
+       reintroduced where they actually carry information (focus
+       rings, slider rims, manual-mode hint on density button). */
+    --hf-border-width: 0;
+
+    /* Near-invisible accent-tinted hairline for section dividers
+       *inside* a panel (e.g. deck head / panel-head bottom rules).
+       Panel-to-panel boundaries rely on bg contrast instead. */
+    --vz-hairline: 1px solid color-mix(in srgb, var(--hf-text-bright) 8%, transparent);
 }
 
 html, body {
@@ -1709,4 +1721,98 @@ kbd {
 @media (max-width: 600px) {
     .boot-small-screen-warning { display: block !important; }
     .boot-title { font-size: 38px; }
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Noisedeck visual-language overrides
+   ──────────────────────────────────────────────────────────────
+   With --hf-border-width:0 globally, all the .foo:hover {
+   border-color: var(--hf-accent) } rules above become no-ops.
+   This block re-establishes the missing affordances using the
+   noisedeck pattern: bg-color contrast between layers + filled
+   hover states + glow box-shadows where a stroke used to live.
+*/
+
+/* Section "heads" — elevated bg one tier above their parent panel.
+   Replaces the now-zero `border-bottom: 1px solid border-subtle`
+   that used to separate a header from its panel body. */
+.panel-head,
+.deck-head,
+.library-footer,
+.main-head,
+.main-fx,
+.deck-meta {
+    background: var(--hf-bg-elevated);
+}
+
+/* The deck panel itself sits on bg-surface; head + meta become
+   slightly elevated (above) for in-panel separation. Same idea for
+   the main pane and its head/fx strips. */
+
+/* Live deck indicator — was a 1px accent border, now a 2px outline
+   via box-shadow so it shows up over the borderless panel. */
+.deck.live {
+    box-shadow: 0 0 0 2px var(--hf-accent);
+}
+
+/* Hover bg-fills for interactive surfaces. Each rule lifts the
+   element a step toward the accent so the hover reads even without
+   a stroke. color-mix keeps the tint consistent across themes. */
+.tap-button:hover,
+.bpm-divider:hover,
+.icon-button:hover,
+button.status-pill:hover,
+.deck-edit-toggle:hover,
+.deck-density:hover,
+.deck-load-random:hover,
+.fx-button:hover,
+.big-toggle:hover,
+.quick-cut:hover,
+.ghost-button:hover,
+.mixer-select:hover,
+.status-field select:hover {
+    background: color-mix(in srgb, var(--hf-accent) 18%, var(--hf-bg-elevated));
+    color: var(--hf-text-bright);
+}
+
+.record-button:hover {
+    background: color-mix(in srgb, var(--hf-red) 18%, var(--hf-bg-elevated));
+    color: var(--hf-text-bright);
+}
+
+/* "On" state pills (audio-on / midi-on / AUTO-VJ engaged) — was
+   accent border, now accent fill. */
+.status-pill[data-state="on"] {
+    background: color-mix(in srgb, var(--hf-green) 22%, var(--hf-bg-elevated));
+    color: var(--hf-green);
+}
+.status-pill[data-state="warn"] {
+    background: color-mix(in srgb, var(--hf-red) 22%, var(--hf-bg-elevated));
+    color: var(--hf-red);
+}
+button.status-pill[data-state="on"]:hover {
+    background: color-mix(in srgb, var(--hf-green) 32%, var(--hf-bg-elevated));
+}
+
+/* Density-button manual override needs *some* visual cue — was a
+   coloured border. Now a tinted bg + a 1px ring via box-shadow
+   inset so it doesn't shift the layout. */
+.deck-density[data-mode="manual"] {
+    background: color-mix(in srgb, var(--hf-accent) 12%, var(--hf-bg-elevated));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hf-accent) 50%, transparent);
+}
+
+/* Program card hover — bg lift instead of border. */
+.program-card:hover {
+    background: color-mix(in srgb, var(--hf-accent) 8%, var(--hf-bg-base));
+}
+
+/* Library search + per-effect "mode" dropdowns: focus ring as a
+   box-shadow so we don't need a border. */
+#library-search:focus,
+.mixer-select:focus,
+.status-field select:focus,
+.bpm-divider:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--hf-accent);
 }
