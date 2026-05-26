@@ -25,6 +25,7 @@ import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import { Scenes } from './scenes.js'
 import { mountThemePicker } from './handfish-theme.js'
+import { aboutDialog } from './about-dialog.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer.
 import { dslTokenizer } from 'handfish'
@@ -756,6 +757,7 @@ async function boot() {
 
     // Fullscreen
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
+    $('about-btn').addEventListener('click', () => aboutDialog.show())
     document.addEventListener('fullscreenchange', () => {
         document.getElementById('app').classList.toggle('fullscreen-main', !!document.fullscreenElement)
     })
