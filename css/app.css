@@ -879,10 +879,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     grid-area: ctl;
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr;
+    grid-template-rows: auto auto;
     grid-template-areas:
         "transport"
-        "utility";
+        "status";
     gap: var(--hf-space-2);
     padding: var(--hf-space-2) var(--hf-space-3);
     background: var(--hf-bg-surface);
@@ -909,26 +909,67 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 .controls-transport > .control-group { min-width: 0; }
 
-/* Utility row tracks the same 1fr 2fr 1fr columns so AUTO-VJ sits
-   under deck A and the record/scenes/output group sits under deck B,
-   keeping the bottom strip readable as two stacked rails. */
-.controls-utility {
-    grid-area: utility;
-    display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
-    gap: var(--hf-space-3);
+/* Polymorphic-style status bar — single horizontal strip that unifies
+   audio / midi / fps status pills + auto-VJ config + scenes / REC /
+   output. Centered. Items separate visually via .status-divider
+   spacers between logical groups. Falls back to wrap on narrow
+   viewports rather than truncating. */
+.status-bar {
+    grid-area: status;
+    display: flex;
     align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--hf-space-2);
     min-width: 0;
 }
 
+.status-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--hf-border-subtle);
+    margin: 0 var(--hf-space-1);
+}
+
+.status-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.status-field select {
+    appearance: none;
+    background: var(--hf-bg-base);
+    color: var(--hf-text-normal);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border-radius: var(--hf-radius-sm);
+    padding: 3px 18px 3px 7px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    text-transform: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 7px top 50%, right 3px top 50%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+}
+.status-field select:hover  { border-color: var(--hf-accent); }
+.status-field select:focus  { outline: none; border-color: var(--hf-accent); }
+
+.status-automix[data-state="on"] {
+    background: var(--hf-accent);
+    color: var(--hf-bg-base);
+    border-color: var(--hf-accent);
+}
+
 .control-group { display: flex; align-items: center; gap: var(--hf-space-2); min-width: 0; }
-.controls-left  { display: flex; gap: var(--hf-space-3); min-width: 0; align-items: center; flex-wrap: wrap; }
-.controls-right { display: flex; gap: var(--hf-space-3); min-width: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
-/* In the utility row, controls-left aligns under deck A (centered) and
-   controls-right aligns under deck B (centered). The middle column is
-   reserved for follow-up controls; for now it just stays empty. */
-.controls-utility > .controls-left  { grid-column: 1; justify-content: center; }
-.controls-utility > .controls-right { grid-column: 3; justify-content: center; }
 
 /* Constrain the speed sliders so the bottom toolbar fits a 1280px viewport
    instead of stretching to whatever flex-grow gives them. */
@@ -1068,6 +1109,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
 .mixer-picker {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: var(--hf-space-2);
 }
 
@@ -1164,6 +1206,7 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
 
 .xfader-quick {
     display: flex;
+    justify-content: center;
     gap: var(--hf-space-2);
 }
 
@@ -1208,10 +1251,11 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
 }
 
 .record-dot {
-    width: 14px;
-    height: 14px;
+    width: 10px;
+    height: 10px;
     background: var(--hf-red);
     border-radius: var(--hf-radius-full);
+    flex: 0 0 auto;
 }
 
 .record-button:hover { border-color: var(--hf-red); }
