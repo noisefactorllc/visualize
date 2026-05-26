@@ -647,15 +647,17 @@ async function boot() {
 
     wireDeckEditors()
 
-    // Drag-drop on deck preview
-    document.querySelectorAll('.deck-canvas-wrap').forEach(wrap => {
-        const deck = wrap.closest('.deck')
+    // Drag-drop on deck panel. Bound to the .deck root rather than
+    // the canvas-wrap (which is now absolute-positioned + z-index:0
+    // behind the head/content/meta strips, so it never receives
+    // dragover/drop on its own).
+    document.querySelectorAll('.deck').forEach(deck => {
         const deckId = deck.dataset.deck
-        wrap.addEventListener('dragover', (e) => { e.preventDefault(); wrap.classList.add('drag-over') })
-        wrap.addEventListener('dragleave', () => wrap.classList.remove('drag-over'))
-        wrap.addEventListener('drop', async (e) => {
+        deck.addEventListener('dragover', (e) => { e.preventDefault(); deck.classList.add('drag-over') })
+        deck.addEventListener('dragleave', () => deck.classList.remove('drag-over'))
+        deck.addEventListener('drop', async (e) => {
             e.preventDefault()
-            wrap.classList.remove('drag-over')
+            deck.classList.remove('drag-over')
             const title = e.dataTransfer.getData('text/program-title')
             const p = library.byTitle(title)
             if (p) await loadProgram(deckId, p)
