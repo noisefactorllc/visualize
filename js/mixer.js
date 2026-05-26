@@ -179,6 +179,11 @@ export class MixerRenderer {
             return
         }
         this._refreshStepIndices()
+        // The new pipeline has fresh media steps with no imageSize set
+        // — must push it again on the next frame, even if the deck
+        // buffer dimensions haven't changed. Clear the cache so the
+        // dirty check in _setImageSize doesn't silently no-op.
+        this._lastImageSize = {}
         if (!this.renderer.isRunning) this.renderer.start()
     }
 
@@ -239,12 +244,23 @@ export class MixerRenderer {
         let uploadedA = false
         let uploadedB = false
         try {
+            // imageSize must match the mixer's *output* resolution, not
+            // the deck's buffer dimensions: the media shader uses
+            //   st = gl_FragCoord.xy / imageSize
+            // for its UV lookup, so size = output makes st sweep 0..1
+            // across the canvas and the texture fills the frame. If
+            // imageSize is smaller than output (e.g. a 50%-density deck
+            // buffer of 640×360), the shader rejects fragCoords outside
+            // [0,imageSize] and the right + bottom of the output stays
+            // bgColor (black) — which is exactly the aspect-bug the
+            // user was seeing after each mixer swap.
             if (this._deckACanvas?.width > 0 && this._deckACanvas.height > 0) {
                 this.renderer.updateTextureFromSource(
                     `imageTex_step_${this._mediaStepA}`,
                     this._deckACanvas,
                     { flipY: false }
                 )
+                this._setImageSize(this._mediaStepA, this.width, this.height)
                 uploadedA = true
             }
             if (this._deckBCanvas?.width > 0 && this._deckBCanvas.height > 0) {
@@ -253,12 +269,32 @@ export class MixerRenderer {
                     this._deckBCanvas,
                     { flipY: false }
                 )
+                this._setImageSize(this._mediaStepB, this.width, this.height)
                 uploadedB = true
             }
         } catch (err) {
             // Pipeline mid-recompile — skip this frame, try again next.
         }
         if (uploadedA && uploadedB) this._uploadedAtLeastOnce = true
+    }
+
+    /**
+     * Push imageSize into the media step's uniforms. The synth/media
+     * shader uses imageSize for its aspect-ratio + crop math; without
+     * this the input texture renders stretched (most visibly when the
+     * deck buffer is at non-default resolution, e.g. 640×360 from
+     * auto-step-down pixel density). Skips the write when the size
+     * hasn't changed since last frame to avoid uniform churn.
+     */
+    _setImageSize(stepIndex, w, h) {
+        const cache = (this._lastImageSize ||= {})
+        if (cache[stepIndex] && cache[stepIndex][0] === w && cache[stepIndex][1] === h) return
+        cache[stepIndex] = [w, h]
+        try {
+            this.renderer.applyStepParameterValues?.({
+                [`step_${stepIndex}`]: { imageSize: [w, h] }
+            })
+        } catch {}
     }
 
     resize(width, height) {

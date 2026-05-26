@@ -519,14 +519,13 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .ghost-button:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
 
 /* ─────────────── stage (decks + main) ─────────────── */
-/* Equal-width columns — deck A, main (mixer output), deck B all render
-   at the same display size. Aligns with the 1fr 1fr 1fr controls grid
-   below so each canvas has its own dedicated column of controls under
-   it. */
+/* Main canvas (mixer output) is twice as wide as either deck preview
+   so the user can read the live mixer at full resolution while the
+   deck previews stay just-readable thumbnails. */
 .stage {
     grid-area: stage;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 1fr;
     gap: var(--hf-space-3);
     padding: var(--hf-space-3);
     min-height: 0;
@@ -547,13 +546,32 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
    color theming. Live indicator just tints the panel border. */
 .deck.live { border-color: var(--hf-accent); }
 
+/* Two-row deck head: row 1 = identity (label + program name with
+   room to breathe), row 2 = action buttons (density, edit, shuffle).
+   Single-row was truncating the program name and clipping the
+   shuffle button at the narrower deck-column widths the 1fr 2fr 1fr
+   stage grid gives us. */
 .deck-head {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-2);
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: var(--hf-space-1);
     padding: var(--hf-space-2) var(--hf-space-3);
     border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
     font-family: var(--hf-font-family-mono);
+}
+
+.deck-head-identity {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    min-width: 0;
+}
+
+.deck-head-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
+    justify-content: flex-end;
 }
 
 .deck-label {
@@ -621,21 +639,27 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     border-color: color-mix(in srgb, var(--hf-accent) 60%, transparent);
 }
 
+/* The wrap is a thin frame around the canvas — height is driven
+   entirely by the canvas's intrinsic aspect ratio (width:100% +
+   height:auto means the browser sizes height from the canvas's
+   buffer dimensions, which are always 16:9). No `aspect-ratio` on
+   the wrap because the parent grid's 1fr row would otherwise stretch
+   it tall and break the ratio. `align-self: start` keeps the wrap
+   from getting stretched vertically by the grid row. */
 .deck-canvas-wrap {
     position: relative;
     background: var(--hf-bg-base);
-    min-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 100%;
+    max-width: 100%;
     overflow: hidden;
+    align-self: start;
 }
 
 .deck-canvas {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
     display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
 }
 
 .deck-overlay {
@@ -644,16 +668,28 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     pointer-events: none;
 }
 
-/* DSL editor — per-deck overlay. Styling for the <code-editor> element
-   itself is injected by js/ui/codeEditor.js (ported verbatim from
-   polymorphic/noisedeck so the editor looks identical to those apps).
-   This rule just positions the overlay; the editor's transparent bg
-   keeps the deck canvas visible behind it, and per-segment darkening
-   handles code readability. */
+/* Holds both the canvas wrap (aspect-locked, top-anchored) and the
+   DSL editor overlay. The editor takes position:absolute inset:0 of
+   this container, which now fills the whole 1fr row of .deck — so
+   when the editor opens it expands across the entire deck content
+   area, not just the 16:9 canvas patch at the top. */
+.deck-content {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* DSL editor — per-deck overlay. Fills the .deck-content container,
+   which means it stretches across the whole deck panel below the
+   head, not just the canvas's 16:9 region. Per-segment darkening
+   (injected by js/ui/codeEditor.js) keeps code legible over the
+   live canvas content behind it. Font size knocked down a notch
+   from the default 0.875rem since the deck columns are narrow. */
 .deck-editor {
     position: absolute;
     inset: 0;
     z-index: 10;
+    --code-editor-font-size: 0.75rem;
 }
 .deck-editor[hidden] { display: none; }
 .deck-editor code-editor { width: 100%; height: 100%; }
@@ -763,18 +799,23 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     color: var(--hf-text-dim);
 }
 
+/* Same approach as the deck wraps — canvas intrinsic aspect drives
+   the wrap's height; align-self keeps the grid row from stretching
+   the wrap vertically. */
 .main-canvas-wrap {
     position: relative;
     background: var(--hf-bg-base);
-    min-height: 0;
+    width: 100%;
+    max-width: 100%;
     overflow: hidden;
+    align-self: start;
 }
 
 .main-canvas {
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
     display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
     image-rendering: auto;
 }
 
@@ -849,14 +890,14 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     z-index: 5;
 }
 
-/* Three-column grid matching the stage's 1fr 1fr 1fr — each child
+/* Three-column grid matching the stage's 1fr 2fr 1fr — each child
    centers in its column so speed-A lands under deck-A, the mixer
    centers under the main canvas, and speed-B lands under deck-B
    regardless of how wide the mixer's content actually is. */
 .controls-transport {
     grid-area: transport;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 1fr;
     gap: var(--hf-space-3);
     align-items: center;
     min-width: 0;
@@ -868,13 +909,13 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 .controls-transport > .control-group { min-width: 0; }
 
-/* Utility row tracks the same 1fr 1fr 1fr columns so AUTO-VJ sits
+/* Utility row tracks the same 1fr 2fr 1fr columns so AUTO-VJ sits
    under deck A and the record/scenes/output group sits under deck B,
    keeping the bottom strip readable as two stacked rails. */
 .controls-utility {
     grid-area: utility;
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 2fr 1fr;
     gap: var(--hf-space-3);
     align-items: center;
     min-width: 0;
