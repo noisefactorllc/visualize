@@ -1322,10 +1322,16 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
 }
 .xfader-fade-curve:hover { border-color: var(--hf-accent); }
 
-/* Duration slider — same width as the curve dropdown. The chained
-   selector beats handfish's injected `slider-value { width: 100% }`
-   on specificity, so the explicit width here actually sticks. */
-.xfader-fade-right .xfader-fade-duration {
+/* Duration slider sizing. handfish gives <slider-value> a
+   `display: contents` host, so width on the host itself is
+   ignored — its children flow up into .xfader-fade's flex layout
+   and stretch. Wrapping the element in a fixed-width flex box
+   gives the children a 110px layout context that matches the
+   curve dropdown opposite. */
+.xfader-fade-duration-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
     width: 110px;
     flex: 0 0 110px;
     min-height: 26px;
