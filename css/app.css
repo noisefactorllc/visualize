@@ -524,6 +524,39 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck-editor[hidden] { display: none; }
 .deck-editor code-editor { width: 100%; height: 100%; }
 
+/* DSL compile error — same treatment as polymorphic's #compiler-error:
+   pinned to the bottom of the editor pane, red text with a dark
+   per-line backdrop so it stays legible over the canvas. */
+.deck-editor-error {
+    position: absolute;
+    left: 0.5em;
+    right: 0.5em;
+    bottom: 0.5em;
+    padding: 0;
+    background: transparent;
+    color: #ff6b6b;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    line-height: 1.45;
+    z-index: 11;
+    cursor: pointer;
+    user-select: text;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    max-height: 35%;
+    overflow-y: auto;
+}
+.deck-editor-error[hidden] { display: none; }
+.deck-editor-error span {
+    display: inline;
+    background: rgba(0, 0, 0, 0.85);
+    color: #ff6b6b;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    padding: 0 0.15em;
+}
+
 .deck-meta {
     padding: var(--hf-space-1) var(--hf-space-3);
     border-top: var(--hf-border-width) solid var(--hf-border-subtle);

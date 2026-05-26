@@ -371,18 +371,29 @@ async function boot() {
         syncDeckEditor(deckId)
     }
 
-    /** Wire the per-deck DSL editor toggle and Ctrl+Enter compile. */
+    /** Wire the per-deck DSL editor toggle, hot reload, and Cmd+Enter. */
     function wireDeckEditors() {
         for (const deckId of ['A', 'B']) {
             const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
             const panel = deckEl.querySelector('.deck-editor')
             const editor = deckEl.querySelector('code-editor')
+            const errorEl = deckEl.querySelector('.deck-editor-error')
             const toggleBtn = deckEl.querySelector('.deck-edit-toggle')
 
-            // Apply DSL syntax highlighting + polymorphic-style behaviors
-            // (per-segment darkening already injected at module load).
             editor.setTokenizer?.(dslTokenizer)
             enhanceCodeEditor(editor)
+
+            function showError(msg) {
+                errorEl.innerHTML = ''
+                const span = document.createElement('span')
+                span.textContent = msg
+                errorEl.appendChild(span)
+                errorEl.hidden = false
+            }
+            function clearError() {
+                errorEl.hidden = true
+                errorEl.innerHTML = ''
+            }
 
             toggleBtn.addEventListener('click', () => {
                 const opening = panel.hidden
@@ -390,32 +401,54 @@ async function boot() {
                 toggleBtn.classList.toggle('active', opening)
                 if (opening) {
                     editor.value = state.deckDsl[deckId] || ''
-                    // Defer focus so the show transition + textarea init settle
+                    clearError()
                     requestAnimationFrame(() => editor.focus?.())
                 }
             })
 
+            let inFlight = false
+            let hotReloadTimer = null
             async function compileFromEditor() {
+                if (inFlight) return
                 const dsl = editor.value
                 if (!dsl.trim()) return
-                const res = await state.decks[deckId].load(dsl, '(custom)')
-                if (!res.success) {
-                    toast(`${deckId}: ${res.error.slice(0, 60)}`, 4000)
-                    return
+                inFlight = true
+                try {
+                    const res = await state.decks[deckId].load(dsl, '(custom)')
+                    if (!res.success) {
+                        showError(res.error || 'compile failed')
+                        return
+                    }
+                    clearError()
+                    state.deckDsl[deckId] = dsl
+                    audio.refreshDeckStates()
+                    const labels = deckLabels[deckId]
+                    if (labels) {
+                        labels.name.textContent = '(custom)'
+                        labels.tag.textContent = ''
+                    }
+                } finally {
+                    inFlight = false
                 }
-                state.deckDsl[deckId] = dsl
-                audio.refreshDeckStates()
-                const labels = deckLabels[deckId]
-                if (labels) {
-                    labels.name.textContent = '(custom)'
-                    labels.tag.textContent = ''
-                }
-                toast(`${deckId}: compiled`)
             }
 
-            // <code-editor> fires forcerecompile on Cmd/Ctrl+Enter
-            // (handfish built-in). Polymorphic uses the same binding.
-            editor.addEventListener('forcerecompile', compileFromEditor)
+            // Hot reload — recompile 500ms after the user stops typing.
+            // Mirrors polymorphic's behavior; no compile button needed.
+            editor.addEventListener('input', () => {
+                if (hotReloadTimer) clearTimeout(hotReloadTimer)
+                hotReloadTimer = setTimeout(() => {
+                    hotReloadTimer = null
+                    compileFromEditor()
+                }, 500)
+            })
+            // Cmd/Ctrl+Enter forces an immediate recompile.
+            editor.addEventListener('forcerecompile', () => {
+                if (hotReloadTimer) {
+                    clearTimeout(hotReloadTimer)
+                    hotReloadTimer = null
+                }
+                compileFromEditor()
+            })
         }
     }
 
