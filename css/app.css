@@ -341,7 +341,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     overflow-y: auto;
     padding: var(--hf-space-2);
     display: grid;
-    grid-template-columns: 1fr;
+    /* Two-up grid: each card is a compact 16:9 tile with title + load
+       buttons superimposed on the rendered thumbnail. At 380px library
+       width that's ~180px per card → ~100px tall. */
+    grid-template-columns: repeat(2, 1fr);
     grid-auto-rows: max-content;
     gap: var(--hf-space-2);
     scrollbar-width: thin;
@@ -352,30 +355,26 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .library-grid::-webkit-scrollbar-thumb { background: var(--hf-border-subtle); border-radius: 3px; }
 
 .program-card {
+    aspect-ratio: 16 / 9;
     background: var(--hf-bg-base);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-md);
+    border-radius: var(--hf-radius-sm);
     overflow: hidden;
     cursor: grab;
     transition: var(--hf-transition-border);
     position: relative;
-    display: flex;
-    flex-direction: column;
 }
 
 .program-card:hover { border-color: var(--hf-accent); }
 .program-card:active { cursor: grabbing; }
 
-/* Thumbnail slot: tinted skeleton until the lazy-render lands. The
-   ::after stripe is a barely-visible gradient cued by --card-tint so an
-   un-rendered card still hints at the entry's accent, and the skeleton
-   fades out the moment .pc-thumb-ready lands on the parent card. */
+/* Thumbnail layer: fills the entire card. Until the WebP arrives the
+   skeleton ::after stripe gives the tile a tint cued by --card-tint so
+   it's not just a blank rectangle. */
 .program-card .pc-thumb {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 16 / 9;
+    position: absolute;
+    inset: 0;
     background: var(--hf-bg-elevated);
-    overflow: hidden;
 }
 
 .program-card .pc-thumb::after {
@@ -383,9 +382,9 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     position: absolute;
     inset: 0;
     background: linear-gradient(135deg,
-        color-mix(in srgb, var(--card-tint, var(--hf-accent)) 18%, transparent),
+        color-mix(in srgb, var(--card-tint, var(--hf-accent)) 22%, transparent),
         transparent 65%);
-    opacity: 0.55;
+    opacity: 0.7;
     transition: opacity 0.25s ease;
     pointer-events: none;
 }
@@ -402,51 +401,93 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .program-card.pc-thumb-ready .pc-thumb-img { opacity: 1; }
 .program-card.pc-thumb-failed .pc-thumb-img { display: none; }
 
-.program-card .pc-body {
-    padding: var(--hf-space-2) var(--hf-space-3) 0;
+/* Overlay: title / tagline / load-buttons floated over the thumb with
+   a bottom-up dark gradient so labels stay legible regardless of how
+   bright the program renders. Pointer events pass through except for
+   the buttons (re-enabled below) so dragging the card stays easy. */
+.program-card .pc-overlay {
+    position: absolute;
+    inset: 0;
+    padding: 5px 7px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    color: #fff;
+    pointer-events: none;
+    background: linear-gradient(to top,
+        rgba(0, 0, 0, 0.85) 0%,
+        rgba(0, 0, 0, 0.55) 40%,
+        rgba(0, 0, 0, 0) 75%);
 }
 
 .program-card .pc-title {
-    font-size: var(--hf-size-sm);
+    font-size: 11px;
     font-weight: var(--hf-weight-semibold);
-    color: var(--hf-text-bright);
-    margin-bottom: 2px;
+    line-height: 1.15;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
 }
 
 .program-card .pc-tagline {
-    font-size: var(--hf-size-xs);
-    color: var(--hf-text-dim);
+    margin-top: 1px;
+    font-size: 9px;
+    line-height: 1.1;
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.program-card .pc-attrib {
-    margin-top: var(--hf-space-1);
-    font-size: var(--hf-size-xs);
-    font-family: var(--hf-font-family-mono);
-    color: var(--hf-text-dim);
-    opacity: 0.7;
-    letter-spacing: 0.04em;
+/* Imported entries get a tiny corner indicator so attribution stays
+   visible without taking layout space (full credit on hover-tooltip). */
+.program-card[data-imported="1"]::before {
+    content: '';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--card-tint, var(--hf-accent));
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+    z-index: 2;
+    pointer-events: none;
 }
 
 .program-card .pc-actions {
     display: flex;
-    gap: var(--hf-space-1);
-    margin: var(--hf-space-2) var(--hf-space-3) var(--hf-space-2);
+    gap: 3px;
+    margin-top: 4px;
+    pointer-events: auto;
 }
 
 .program-card .pc-load {
     flex: 1;
     appearance: none;
-    background: var(--hf-bg-elevated);
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    color: var(--hf-text-normal);
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    color: #fff;
     border-radius: var(--hf-radius-sm);
-    padding: 3px 6px;
-    font-size: var(--hf-size-xs);
+    padding: 2px 0;
+    font-size: 10px;
+    font-weight: var(--hf-weight-bold);
     font-family: var(--hf-font-family-mono);
+    line-height: 1;
     cursor: pointer;
-    transition: var(--hf-transition-border), var(--hf-transition-color);
+    transition: background 0.12s, border-color 0.12s;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
 }
-.program-card .pc-load:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
+.program-card .pc-load:hover {
+    background: rgba(255, 255, 255, 0.28);
+    border-color: rgba(255, 255, 255, 0.55);
+}
 
 .library-footer {
     display: flex;

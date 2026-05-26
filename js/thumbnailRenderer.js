@@ -22,7 +22,7 @@ import { Deck } from './noisemaker/deck.js'
 
 const THUMB_W = 240
 const THUMB_H = 135
-const SETTLE_MS = 600           // let the shader develop a frame
+const SETTLE_MS = 300           // let the shader develop a frame (~18 frames at 60fps)
 const WEBP_QUALITY = 0.78
 
 let _instance = null

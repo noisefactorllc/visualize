@@ -200,9 +200,9 @@ export class Library {
         card.dataset.title = p.title
         card.dataset.dsl = p.dsl
 
-        // Thumbnail slot — img stays blank until the IntersectionObserver
-        // triggers a render or hit on the IndexedDB cache. CSS provides
-        // a tinted skeleton while it's pending.
+        // Thumbnail layer — fills the entire card. Stays blank until
+        // the IntersectionObserver triggers a render or hits the
+        // IndexedDB cache; CSS draws a tinted skeleton meanwhile.
         const thumb = document.createElement('div')
         thumb.className = 'pc-thumb'
         const img = document.createElement('img')
@@ -213,28 +213,35 @@ export class Library {
         thumb.appendChild(img)
         card.appendChild(thumb)
 
-        const body = document.createElement('div')
-        body.className = 'pc-body'
+        // Overlay: title / tagline / attribution / load buttons stacked
+        // on top of the thumbnail with a bottom-up dark gradient so the
+        // text stays legible regardless of how bright the program
+        // renders. Pointer events are disabled on the overlay itself so
+        // dragging the card from a blank patch still works; the buttons
+        // re-enable pointer events for themselves.
+        const overlay = document.createElement('div')
+        overlay.className = 'pc-overlay'
 
         const titleEl = document.createElement('div')
         titleEl.className = 'pc-title'
         titleEl.textContent = p.title
-        body.appendChild(titleEl)
+        // Move full tagline / attribution into the tooltip so the
+        // compact card stays readable while losing no information.
+        const tooltipParts = [p.tagline]
+        if (p.source?.username) {
+            tooltipParts.push(`by ${p.source.username} · ${p.source.app || 'noisedeck'} · ${p.source.code}`)
+        }
+        titleEl.title = tooltipParts.filter(Boolean).join('\n')
+        overlay.appendChild(titleEl)
 
         const tagEl = document.createElement('div')
         tagEl.className = 'pc-tagline'
         tagEl.textContent = p.tagline || ''
-        body.appendChild(tagEl)
+        overlay.appendChild(tagEl)
 
         if (p.source?.username) {
-            const attrib = document.createElement('div')
-            attrib.className = 'pc-attrib'
-            attrib.textContent = `by ${p.source.username}`
-            attrib.title = `Imported from ${p.source.app || 'noisedeck'} composition ${p.source.code}`
-            body.appendChild(attrib)
+            card.dataset.imported = '1'
         }
-
-        card.appendChild(body)
 
         const actions = document.createElement('div')
         actions.className = 'pc-actions'
@@ -242,7 +249,8 @@ export class Library {
         const loadA = document.createElement('button')
         loadA.className = 'pc-load'
         loadA.dataset.deck = 'A'
-        loadA.textContent = '→ A'
+        loadA.textContent = 'A'
+        loadA.title = 'Load into Deck A'
         loadA.addEventListener('click', (e) => {
             e.stopPropagation()
             this._onLoadToDeck?.('A', p)
@@ -251,7 +259,8 @@ export class Library {
         const loadB = document.createElement('button')
         loadB.className = 'pc-load'
         loadB.dataset.deck = 'B'
-        loadB.textContent = '→ B'
+        loadB.textContent = 'B'
+        loadB.title = 'Load into Deck B'
         loadB.addEventListener('click', (e) => {
             e.stopPropagation()
             this._onLoadToDeck?.('B', p)
@@ -259,7 +268,9 @@ export class Library {
 
         actions.appendChild(loadA)
         actions.appendChild(loadB)
-        card.appendChild(actions)
+        overlay.appendChild(actions)
+
+        card.appendChild(overlay)
 
         card.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/program-title', p.title)

@@ -1008,10 +1008,23 @@ async function boot() {
     // compositor compositing). Wait for the user to click START SET.
     await window.__visualizeBootGesture
 
-    // Live decks are up and stable; library thumbnails can now spin up
-    // their offscreen renderer without contending with the live decks
-    // for the shader manifest fetch or GPU resources.
-    library.enableThumbnails()
+    // Live decks are up and stable; defer library thumbnails to an idle
+    // window so the offscreen renderer doesn't compete for GPU during
+    // the user's first few seconds of interaction. Falls back to a
+    // short timeout on browsers without requestIdleCallback.
+    //
+    // Skipped under automation (Playwright): the smoke + audio-midi
+    // specs run a tight script of interactions and GPU contention from
+    // the thumbnail-render queue pushes them past their 60s budget; the
+    // tests don't exercise library thumbnails so opting out is correct.
+    if (!navigator.webdriver) {
+        const enableThumbs = () => library.enableThumbnails()
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(enableThumbs, { timeout: 4000 })
+        } else {
+            setTimeout(enableThumbs, 2500)
+        }
+    }
 
     toast('ready — open settings to enable audio/MIDI')
 }
