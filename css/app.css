@@ -26,7 +26,7 @@
     /* Layout */
     --topbar-h: 72px;
     --controls-h: 168px;       /* two rows now */
-    --library-w: 380px;
+    --library-w: 190px;        /* single-column card list */
 
     /* Handfish's default size scale is tuned for dense designer dashboards;
        this app gets read from a typical music-desk distance, not 2ft from
@@ -356,10 +356,11 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     overflow-y: auto;
     padding: var(--hf-space-2);
     display: grid;
-    /* Two-up grid: each card is a compact 16:9 tile with title + load
-       buttons superimposed on the rendered thumbnail. At 380px library
-       width that's ~180px per card → ~100px tall. */
-    grid-template-columns: repeat(2, 1fr);
+    /* Single-column card list. Each card stays a compact 16:9 tile
+       with title + load buttons superimposed on the rendered
+       thumbnail; at 190px library width that's ~175px per card →
+       ~98px tall. */
+    grid-template-columns: 1fr;
     grid-auto-rows: max-content;
     gap: var(--hf-space-2);
     scrollbar-width: thin;
