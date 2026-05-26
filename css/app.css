@@ -1768,14 +1768,16 @@ kbd {
 }
 
 /* Flatten slider-value's stacked children (slider track + value-
-   display) into a single horizontal row. Without this they stack
-   vertically and the value appears on a new line below the slider. */
+   display) into a single horizontal row. min-height accommodates
+   the 22px thumb so the knob centers vertically without getting
+   clipped by the 14px-tall flex line height. */
 .mixer-control-row slider-value {
     display: flex;
     align-items: center;
     gap: var(--hf-space-1);
     min-width: 0;
     width: 100%;
+    min-height: 28px;
 }
 .mixer-control-row slider-value .slider,
 .mixer-control-row slider-value input[type="range"] {
@@ -1789,14 +1791,24 @@ kbd {
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);
     text-align: right;
+    line-height: 28px;
 }
 
 /* Select-dropdown gets a visibly distinct fill from the panel bg
-   so it reads as an interactive control rather than blending in. */
+   so it reads as an interactive control rather than blending in.
+   The dropdown MENU also needs a solid bg — when it opens over the
+   live canvas its options were rendering with the canvas bleeding
+   through, which read to the user as the content shifting upward
+   into the dropdown space. */
 .mixer-control-row select-dropdown {
     min-width: 0;
     width: 100%;
     background: var(--hf-bg-base);
+    border-radius: var(--hf-radius-sm);
+}
+.mixer-control-row select-dropdown .inline-dropdown {
+    background: var(--hf-bg-elevated);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
     border-radius: var(--hf-radius-sm);
 }
 
