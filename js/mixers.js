@@ -26,9 +26,9 @@
  * as soon as the panel exposes it.
  */
 
-// mixer/blendMode + alphaMask + applyMode + centerMask all share the
-// same `mix` semantics: GLSL uniform is `mixAmt` ∈ [-100, 100], where
-// -100 = pure A, 0 = pure middle blend, +100 = pure B.
+// mixer/blendMode + applyMode + centerMask all share the same `mix`
+// semantics: GLSL uniform is `mixAmt` ∈ [-100, 100], where -100 = pure
+// A, 0 = pure middle blend, +100 = pure B.
 const mix100 = (x) => x * 200 - 100
 
 export const MIXERS = [
@@ -39,13 +39,6 @@ export const MIXERS = [
         driverFormula: mix100,
         defaults: { mode: 'mix' },
         modes: ['mix', 'add', 'multiply', 'screen', 'overlay', 'softLight', 'hardLight', 'darken', 'lighten', 'subtract', 'diff', 'exclusion', 'phoenix', 'dodge', 'burn', 'negation'],
-    },
-    {
-        id: 'mixer/alphaMask',
-        label: 'alpha',
-        driver: 'mix',
-        driverFormula: mix100,
-        defaults: { maskMode: 0 },
     },
     {
         id: 'mixer/applyMode',
