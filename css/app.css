@@ -26,7 +26,7 @@
     /* Layout */
     --topbar-h: 72px;
     --controls-h: 148px;
-    --library-w: 320px;
+    --library-w: 380px;
 
     /* Handfish's default size scale is tuned for dense designer dashboards;
        this app gets read from a typical music-desk distance, not 2ft from
@@ -355,14 +355,56 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     background: var(--hf-bg-base);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-md);
-    padding: var(--hf-space-2) var(--hf-space-3);
+    overflow: hidden;
     cursor: grab;
     transition: var(--hf-transition-border);
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .program-card:hover { border-color: var(--hf-accent); }
 .program-card:active { cursor: grabbing; }
+
+/* Thumbnail slot: tinted skeleton until the lazy-render lands. The
+   ::after stripe is a barely-visible gradient cued by --card-tint so an
+   un-rendered card still hints at the entry's accent, and the skeleton
+   fades out the moment .pc-thumb-ready lands on the parent card. */
+.program-card .pc-thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--hf-bg-elevated);
+    overflow: hidden;
+}
+
+.program-card .pc-thumb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--card-tint, var(--hf-accent)) 18%, transparent),
+        transparent 65%);
+    opacity: 0.55;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+.program-card.pc-thumb-ready .pc-thumb::after { opacity: 0; }
+
+.program-card .pc-thumb-img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.program-card.pc-thumb-ready .pc-thumb-img { opacity: 1; }
+.program-card.pc-thumb-failed .pc-thumb-img { display: none; }
+
+.program-card .pc-body {
+    padding: var(--hf-space-2) var(--hf-space-3) 0;
+}
 
 .program-card .pc-title {
     font-size: var(--hf-size-sm);
@@ -376,10 +418,19 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     color: var(--hf-text-dim);
 }
 
+.program-card .pc-attrib {
+    margin-top: var(--hf-space-1);
+    font-size: var(--hf-size-xs);
+    font-family: var(--hf-font-family-mono);
+    color: var(--hf-text-dim);
+    opacity: 0.7;
+    letter-spacing: 0.04em;
+}
+
 .program-card .pc-actions {
     display: flex;
     gap: var(--hf-space-1);
-    margin-top: var(--hf-space-2);
+    margin: var(--hf-space-2) var(--hf-space-3) var(--hf-space-2);
 }
 
 .program-card .pc-load {

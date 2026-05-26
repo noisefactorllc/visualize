@@ -1007,6 +1007,12 @@ async function boot() {
     // App is now fully running behind the boot overlay (decks rendering,
     // compositor compositing). Wait for the user to click START SET.
     await window.__visualizeBootGesture
+
+    // Live decks are up and stable; library thumbnails can now spin up
+    // their offscreen renderer without contending with the live decks
+    // for the shader manifest fetch or GPU resources.
+    library.enableThumbnails()
+
     toast('ready — open settings to enable audio/MIDI')
 }
 

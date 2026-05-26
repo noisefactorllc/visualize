@@ -397,5 +397,1145 @@
       "noise"
     ],
     "dsl": "search classicNoisedeck, synth, filter\nlet mid = audio(band: 1, min: 0, max: 360)\nnoise(hueRange: 27, hueRotation: mid, speed: 100, octaves: 4, refractAmt: 100, ridges: true, type: simplex, colorMode: hsv, kaleido: 1, xScale: 100, yScale: 100).write(o0)\nrender(o0)"
+  },
+  {
+    "title": "demon spiral",
+    "tagline": "mids drives the cSpeed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\nlet midsReact = audio(band: 1, min: 0.145, max: 0.493)\n\njulia(\n  poi: galaxy,\n  outputMode: stripeAverage,\n  iterations: 1000,\n  cReal: -1.36,\n  cImag: -1.448,\n  centerX: -0.53,\n  centerY: -0.216,\n  rotation: 125.6,\n  cSpeed: midsReact,\n  cRadius: 0.178,\n  zoomDepth: 2.629,\n  stripeFreq: 4.539,\n  trapShape: circle,\n  lightAngle: 229.347\n)\n  .tetraCosine(\n    colorMode: oklab,\n    offsetR: 0.85,\n    offsetG: 0.697,\n    offsetB: 0.876,\n    ampR: 0.99,\n    ampG: 0.21,\n    ampB: 0.356,\n    freqR: 3,\n    freqG: 4,\n    phaseR: 0.519,\n    phaseG: 0.71,\n    phaseB: 0.942,\n    repeat: 3,\n    offset: 0.62,\n    alpha: 0.938\n  )\n  .lighting(_skip: true)\n  .grain(alpha: 0.2, pause: true)\n  .adjust(\n    rotation: -16.4,\n    hueRange: 102.78,\n    saturation: 0.81,\n    brightness: 0.78,\n    contrast: 0.68\n  )\n  .subchain(name: \"lens effects\", id: \"016z\") {\n    .chromaticAberration(aberration: 13.98)\n    .bloom(threshold: 0.35, taps: 15)\n    .lens(displacement: -0.53)\n    .vignette(alpha: 0.76)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "DvENtw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779653194184,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "firestorm",
+    "tagline": "mids drives the cSpeed",
+    "tint": "#4ea8ff",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter\nlet midsReact = audio(band: 1, min: 0.145, max: 0.493)\n\njulia(\n  poi: galaxy,\n  outputMode: stripeAverage,\n  iterations: 1000,\n  cReal: -1.36,\n  cImag: -1.448,\n  centerX: -0.53,\n  centerY: -0.241,\n  rotation: 161.27,\n  cSpeed: midsReact,\n  cRadius: 0.178,\n  zoomDepth: 2.824,\n  stripeFreq: 4.539,\n  trapShape: circle,\n  lightAngle: 229.347\n)\n  .tetraCosine(\n    colorMode: oklab,\n    offsetR: 0.85,\n    offsetG: 0.697,\n    offsetB: 0.876,\n    ampR: 0.99,\n    ampG: 0.21,\n    ampB: 0.356,\n    freqR: 3,\n    freqG: 4,\n    phaseR: 0.519,\n    phaseG: 0.71,\n    phaseB: 0.942,\n    rotation: fwd,\n    repeat: 3,\n    offset: 0.62,\n    alpha: 0.86\n  )\n  .lighting(normalStrength: 1.95, smoothing: 1.3)\n  .grain(alpha: 0.2, pause: true)\n  .adjust(\n    rotation: -34.98,\n    hueRange: 102.78,\n    saturation: 0.81,\n    brightness: 0.89,\n    contrast: 0.74\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Clf2Jw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779651921760,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "neurons",
+    "tagline": "highs drives the rotation",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\nlet highsReact = audio(band: 2, min: -62.909, max: -125.818)\n\nperlin(\n  scale: 18.75,\n  octaves: 2,\n  dimensions: 3,\n  ridges: true,\n  seed: 58\n)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 10,\n    reflection: 44,\n    refraction: 31.4,\n    aberration: 28.4\n  )\n  .subchain(name: \"particles\", id: \"se9k\") {\n    .pointsEmit(\n      stateSize: x64,\n      seed: 35,\n      attrition: 1.52\n    )\n    .flow(\n      behavior: chaotic,\n      stride: 25,\n      strideDeviation: 0.5,\n      kink: 2.2\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 41.01,\n      pointSize: 15,\n      sizeVariation: 100,\n      density: 20.93,\n      intensity: 74.91,\n      inputIntensity: 100\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 98.84,\n      inputIntensity: 59.39\n    )\n  }\n  .write(o0)\n\nperlin(scale: 22.15, dimensions: 3)\n  .adjust(\n    mode: hsv,\n    rotation: highsReact,\n    hueRange: 40.8,\n    saturation: 0.77,\n    brightness: 2.06\n  )\n  .coalesce(\n    tex: read(o0),\n    blendMode: multiply,\n    mix: -19.93\n  )\n  .lighting(normalStrength: 0, refraction: 22.2)\n  .subchain(name: \"lens effects\", id: \"a9tw\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.7,\n      intensity: 0.75,\n      taps: 30\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.08)\n  }\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "uKIV-w",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779646464085,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "multires reaction-diffusion",
+    "tagline": "bass drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter\n\nlet osc1 = osc(type: oscKind.sine)\nlet bassReact = audio(band: 0, min: 1.5, max: 11)\n\nperlin(\n  scale: 18.51,\n  dimensions: 3,\n  ridges: true,\n  seed: 15,\n  speed: bassReact\n)\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: bSpline4x4,\n  speed: 21.42,\n  sourceF: sliderInput,\n  feed: 81.56,\n  kill: 58.94,\n  rate1: 60.24,\n  rate2: 24.09,\n  weight: 100,\n  inputIntensity: 11.78\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  smoothing: catmullRom4x4,\n  speed: 21.27,\n  sourceF: brightness,\n  feed: 89.8,\n  kill: 49.29,\n  rate1: 97.32,\n  rate2: 22.07,\n  weight: 100,\n  inputIntensity: 70.19\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  speed: 24.79,\n  sourceF: brightness,\n  feed: 56.43,\n  kill: 57.61,\n  rate1: 81.44,\n  rate2: 23.67,\n  weight: 100,\n  inputIntensity: 88.4\n)\n  .tetraColorArray(\n    colorMode: oklch,\n    colorCount: 8,\n    color0: #59a726,\n    color1: #e164b4,\n    color2: #aa1eb7,\n    color3: #2ef755,\n    color4: #dc8740,\n    color5: #b992ec,\n    color6: #40a2a4,\n    color7: #f9c025,\n    pos0: 0.097,\n    pos1: 0.099,\n    pos2: 0.296,\n    pos3: 0.323,\n    pos4: 0.559,\n    pos5: 0.776,\n    pos6: 0.915,\n    pos7: 0.964,\n    rotation: back,\n    repeat: 3.07,\n    offset: 0.483,\n    alpha: 0.931,\n    smoothness: 0.475\n  )\n  .write(o3)\n\nread(o3)\n  .celShading(\n    levels: 5,\n    edgeThreshold: 0.56,\n    edgeColor: #ff00c5\n  )\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "oF-Zsw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779639000077,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "kaleido diffusion",
+    "tagline": "mids drives the rotation",
+    "tint": "#f43f5e",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, mixer\nlet midsReact = audio(band: 1, min: -90, max: -306)\n\nperlin(\n  scale: 14.19,\n  dimensions: 3,\n  ridges: true\n)\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  smoothing: bSpline3x3,\n  sourceF: brightness,\n  feed: 80.38,\n  kill: 56.89,\n  rate1: 99.98,\n  rate2: 28.03,\n  weight: 100,\n  inputIntensity: 36.31\n)\n  .tetraCosine(\n    colorMode: hsv,\n    offsetR: 0.274,\n    offsetG: 0.388,\n    offsetB: 0.53,\n    ampR: 0.782,\n    ampG: 0.28,\n    ampB: 0.461,\n    freqG: 0,\n    freqB: 3,\n    phaseR: 0.749,\n    phaseG: 0.093,\n    phaseB: 0.1,\n    rotation: fwd,\n    repeat: 2,\n    offset: 0.829,\n    alpha: 0.825\n  )\n  .tile(\n    symmetry: rotate6,\n    offsetY: 0.1,\n    angle: 43,\n    repeat: 1\n  )\n  .reverb(iterations: 8, alpha: 0.4)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 4.3,\n    specularIntensity: 0.83,\n    shininess: 133,\n    reflection: 21.3,\n    refraction: 15.1,\n    aberration: 19\n  )\n  .adjust(\n    rotation: midsReact,\n    hueRange: 200,\n    saturation: 0.54,\n    brightness: 1.03,\n    contrast: 0.69\n  )\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "bLBB4w",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779553839179,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "aqua fresh",
+    "tagline": "bass drives the speed",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth\nlet bassReact = audio(band: 0, min: -0.6, max: -4.4)\n\ngradient(\n  type: spiral,\n  rotation: -63.524,\n  speed: bassReact,\n  seed: 36,\n  color1: #ea76e8,\n  color2: #717da8,\n  color3: #cf5aa4,\n  color4: #de4aa0\n)\n  .tetraCosine(\n    offsetR: 0.916,\n    offsetG: 0.801,\n    offsetB: 0.94,\n    ampR: 0.879,\n    ampG: 0.933,\n    ampB: 0.344,\n    freqR: 3,\n    freqG: 4,\n    freqB: 2,\n    phaseR: 0.078,\n    phaseG: 0.808,\n    phaseB: 0.667,\n    repeat: 4,\n    offset: 0.498,\n    alpha: 0.542\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "zniavg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779041397188,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "stripes gradient",
+    "tagline": "highs drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth\nlet highsReact = audio(band: 2, min: 1.4, max: 2.8)\n\ngradient(\n  type: linear,\n  rotation: -63.524,\n  speed: highsReact,\n  seed: 36,\n  color1: #ea76e8,\n  color2: #717da8,\n  color3: #cf5aa4,\n  color4: #de4aa0\n)\n  .tetraCosine(\n    colorMode: oklab,\n    offsetR: 0.691,\n    offsetG: 0.074,\n    offsetB: 0.258,\n    ampR: 0.699,\n    ampG: 0.822,\n    ampB: 0.948,\n    freqR: 2,\n    freqG: 2,\n    freqB: 2,\n    phaseR: 0.334,\n    phaseG: 0.035,\n    phaseB: 0.35,\n    rotation: fwd,\n    repeat: 10,\n    offset: 0.426,\n    alpha: 0.57\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "yIUi8Q",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1779037123480,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "waiting room",
+    "tagline": "bass drives the rotation",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\nlet bassReact = audio(band: 0, min: 12.801, max: 93.874)\n\nmodPattern(\n  scale1: 16.72,\n  repeat1: 15.411,\n  shape2: diamond,\n  scale2: 8.48,\n  repeat2: 4.461,\n  shape3: plus,\n  scale3: 1.595,\n  repeat3: 2.172,\n  animMode: phase\n)\n  .tile(\n    symmetry: rotate6,\n    scale: 1.95,\n    offsetX: -0.07,\n    offsetY: -0.09,\n    angle: 151,\n    repeat: 1\n  )\n  .tetraCosine(\n    colorMode: hsv,\n    offsetR: 0.921,\n    offsetG: 0.897,\n    offsetB: 0.782,\n    ampR: 0.552,\n    ampG: 0.601,\n    ampB: 0.866,\n    freqR: 4,\n    freqG: 2,\n    freqB: 3,\n    phaseR: 0.724,\n    phaseG: 0.849,\n    phaseB: 0.355,\n    rotation: fwd,\n    repeat: 0.72,\n    offset: 0.576,\n    alpha: 0.76\n  )\n  .tunnel(\n    shape: square,\n    scale: -1,\n    center: -100\n  )\n  .lighting(\n    normalStrength: 2.13,\n    smoothing: 4.9,\n    reflection: 16,\n    aberration: 19.8\n  )\n  .subchain(name: \"lens effects\", id: \"jx9z\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -1)\n    .vignette(brightness: 0.14, alpha: 0.83)\n  }\n  .adjust(\n    rotation: bassReact,\n    hueRange: 200,\n    saturation: 1.88,\n    brightness: 1.04,\n    contrast: 0.52\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "t45Hpg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778900568911,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "the fabric",
+    "tagline": "mids drives the speed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, mixer, render, points\nlet midsReact = audio(band: 1, min: 0.5, max: 1.7)\n\npattern(\n  type: triangularGrid,\n  scale: 16.65,\n  thickness: 0.82,\n  smoothness: 1,\n  rotation: 45\n)\n  .blendMode(tex: read(o3), mode: softLight)\n  .subchain(name: \"feedback loop with waves\", id: \"n5un\") {\n    .loopBegin(alpha: 95.08, intensity: 99.28)\n    .warp(\n      strength: 14.05,\n      scale: 0.72,\n      speed: midsReact\n    )\n    .feedback(\n      mix: 74.58,\n      refractAAmt: 10.97,\n      refractBAmt: 6.31\n    )\n    .loopEnd()\n  }\n  .write(o0)\n\nread(o0)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 3.2,\n    specularIntensity: 0.41,\n    shininess: 77,\n    lightDirection: vec3(0.189, 0.356, 0.915),\n    reflection: 28.7,\n    refraction: 25.8,\n    aberration: 19.5\n  )\n  .write(o1)\n\nread(o0)\n  .normalMap()\n  .blendMode(\n    tex: read(o1),\n    mode: diff,\n    mix: -29.56\n  )\n  .adjust(\n    rotation: -142.01,\n    hueRange: 200,\n    saturation: 0.78,\n    brightness: 0.6,\n    contrast: 0.82\n  )\n  .subchain(name: \"lens effects\", id: \"oa4k\") {\n    .chromaticAberration(aberration: 19.65)\n    .bloom(taps: 15)\n    .lens(displacement: -0.45)\n    .vignette(brightness: 0.06, alpha: 0.9)\n  }\n  .write(o2)\n\nperlin()\n  .write(o3)\n\nrender(o2)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "AyZAVQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778818395059,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "forest floor",
+    "tagline": "mids drives the rotation",
+    "tint": "#4ed99b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\nlet midsReact = audio(band: 1, min: -38.62, max: -131.308)\n\nperlin(\n  scale: 15.58,\n  octaves: 2,\n  dimensions: 3,\n  seed: 17\n)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 10,\n    reflection: 44,\n    refraction: 31.4,\n    aberration: 28.4\n  )\n  .subchain(name: \"particles\", id: \"se9k\") {\n    .pointsEmit(\n      stateSize: x64,\n      seed: 35,\n      attrition: 1.52\n    )\n    .flow(\n      stride: 28,\n      strideDeviation: 0.5,\n      kink: 10\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 28.39,\n      pointSize: 27.7,\n      sizeVariation: 100,\n      density: 20.93,\n      intensity: 74.91,\n      inputIntensity: 100\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 98.84,\n      inputIntensity: 59.39\n    )\n  }\n  .write(o0)\n\nperlin(scale: 22.15, dimensions: 3)\n  .adjust(\n    mode: hsv,\n    rotation: midsReact,\n    hueRange: 44.24\n  )\n  .coalesce(\n    tex: read(o0),\n    blendMode: multiply,\n    mix: 14.77\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 3.9,\n    refraction: 22.2\n  )\n  .subchain(name: \"lens effects\", id: \"a9tw\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.7,\n      intensity: 0.75,\n      taps: 30\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.08)\n  }\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "4mbX9w",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778817050514,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "sparkling wigglers",
+    "tagline": "mids drives the rotation",
+    "tint": "#4ed99b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\nlet midsReact = audio(band: 1, min: -38.62, max: -131.308)\n\nperlin(\n  scale: 21.83,\n  octaves: 2,\n  colorMode: mono,\n  dimensions: 3,\n  seed: 17\n)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 10,\n    reflection: 44,\n    refraction: 31.4,\n    aberration: 28.4\n  )\n  .subchain(name: \"physarum particles\", id: \"se9k\") {\n    .pointsEmit(\n      stateSize: x64,\n      layout: center,\n      seed: 16,\n      attrition: 0.5\n    )\n    .flow(\n      behavior: chaotic,\n      stride: 17,\n      strideDeviation: 0.5,\n      kink: 10\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 28.39,\n      pointSize: 21.29,\n      sizeVariation: 100,\n      density: 21.8,\n      intensity: 74.91,\n      inputIntensity: 100\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 98.84,\n      inputIntensity: 59.39\n    )\n  }\n  .write(o0)\n\nperlin(scale: 22.15, dimensions: 3)\n  .adjust(\n    mode: hsv,\n    rotation: midsReact,\n    hueRange: 44.24\n  )\n  .coalesce(\n    tex: read(o0),\n    blendMode: multiply,\n    mix: -1.16\n  )\n  .subchain(name: \"lens effects\", id: \"a9tw\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.7,\n      intensity: 0.75,\n      taps: 30\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.08)\n  }\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "p_ULPA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778816663835,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "down the drain",
+    "tagline": "bass drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv, speed: bassReact)\nlet bassReact = audio(band: 0, min: 0.9, max: 6.6)\n\nnoise(\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 53,\n  ridges: true,\n  loopScale: 100,\n  speed: 100\n)\n  .seamless(blend: 0.18, repeat: 1)\n  .tunnel(\n    scale: -1,\n    speed: -5,\n    rotation: 2,\n    center: -95.58\n  )\n  .cellRefract(\n    amount: 100,\n    speed: 5,\n    shape: circle,\n    scale: 93.77,\n    cellScale: 95.62,\n    smooth: 100,\n    variation: 100,\n    seed: 73,\n    effectWidth: 6\n  )\n  .adjust(\n    rotation: 146.16,\n    hueRange: 76.05,\n    saturation: 0.71,\n    contrast: 0.67\n  )\n  .motionBlur(amount: 100)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 7.1,\n    specularIntensity: 1.19,\n    lightDirection: vec3(0.356, -0.278, 0.892),\n    reflection: 29.8,\n    refraction: 19,\n    aberration: 27.6\n  )\n  .subchain(name: \"lens effects\", id: \"0nhw\") {\n    .bloom(\n      threshold: 0.7,\n      intensity: 0.6,\n      taps: 15\n    )\n    .lens(displacement: -0.43)\n    .vignette(brightness: 0.14)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "a86kuw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778805942416,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "warp fingers",
+    "tagline": "bass drives the speed",
+    "tint": "#fb923c",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, mixer, render, points\nlet bassReact = audio(band: 0, min: 0.3, max: 2.2)\n\npattern(\n  type: dots,\n  scale: 16.68,\n  thickness: 0.52,\n  smoothness: 1,\n  rotation: 45\n)\n  .subchain(name: \"feedback loop with waves\", id: \"n5un\") {\n    .loopBegin(alpha: 98.44)\n    .warp(\n      strength: 4.5,\n      scale: 0.35,\n      speed: bassReact\n    )\n    .loopEnd()\n  }\n  .write(o0)\n\nread(o0)\n  .lighting(\n    normalStrength: 2.58,\n    smoothing: 3.4,\n    reflection: 28.7,\n    refraction: 25.8,\n    aberration: 19.5\n  )\n  .write(o1)\n\nread(o0)\n  .normalMap()\n  .blendMode(tex: read(o1), mode: hardLight)\n  .subchain(name: \"lens effects\", id: \"oa4k\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.25, alpha: 0.9)\n  }\n  .write(o2)\n\nrender(o2)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Lcu5gQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778787160584,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "vibrant flow",
+    "tagline": "mids drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv, speed: midsReact)\nlet midsReact = audio(band: 1, min: 1.5, max: 5.1)\n\nnoise(\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 53,\n  ridges: true,\n  loopScale: 100,\n  speed: 100\n)\n  .seamless(blend: 0.18, repeat: 1)\n  .adjust(\n    rotation: osc1,\n    hueRange: 33.48,\n    saturation: 2.68,\n    brightness: 1.45,\n    contrast: 0.44\n  )\n  .tunnel(\n    scale: -1,\n    speed: 5,\n    rotation: 1,\n    center: -63.98\n  )\n  .cellRefract(\n    amount: 31.23,\n    direction: 360,\n    speed: 5,\n    shape: circle,\n    scale: 91.09,\n    cellScale: 77.48,\n    smooth: 100,\n    variation: 100,\n    seed: 24,\n    effectWidth: 6\n  )\n  .adjust(\n    rotation: -73.72,\n    hueRange: 200,\n    saturation: 0.82,\n    contrast: 0.67\n  )\n  .motionBlur()\n  .lighting(\n    normalStrength: 5,\n    smoothing: 5.2,\n    specularIntensity: 1.19,\n    lightDirection: vec3(0.356, -0.278, 0.892),\n    reflection: 29.8,\n    refraction: 30.1,\n    aberration: 27.6\n  )\n  .subchain(name: \"lens effects\", id: \"0nhw\") {\n    .prismaticAberration(\n      aberration: 38.69,\n      modulate: true,\n      hueRange: 100,\n      saturation: -86.58,\n      passthru: 70.78\n    )\n    .bloom(intensity: 0.6, taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "igTpbw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778760271716,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "liquid crystal descent",
+    "tagline": "highs drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth, classicNoisedeck, render, points, mixer\nlet highsReact = audio(band: 2, min: 70, max: 140)\n\nnoise(\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 53,\n  ridges: true,\n  loopScale: 100,\n  speed: highsReact\n)\n  .seamless(blend: 0.32, repeat: 1)\n  .adjust(\n    hueRange: 33.48,\n    saturation: 2.68,\n    brightness: 1.45,\n    contrast: 0.44\n  )\n  .tunnel(\n    scale: -1,\n    speed: 5,\n    rotation: -2,\n    center: 48.67\n  )\n  .cellRefract(\n    amount: 37.83,\n    direction: 360,\n    speed: 5,\n    shape: circle,\n    scale: 91.09,\n    cellScale: 77.48,\n    smooth: 100,\n    variation: 100,\n    seed: 24,\n    effectWidth: 6\n  )\n  .adjust(\n    rotation: -73.72,\n    hueRange: 200,\n    saturation: 0.82\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 5.2,\n    specularIntensity: 1.19,\n    lightDirection: vec3(0.356, -0.278, 0.892),\n    reflection: 29.8,\n    refraction: 30.1,\n    aberration: 27.6\n  )\n  .subchain(name: \"lens effects\", id: \"0nhw\") {\n    .prismaticAberration(\n      aberration: 38.69,\n      modulate: true,\n      hueRange: 100,\n      saturation: -86.58,\n      passthru: 70.78\n    )\n    .bloom(intensity: 0.6, taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .adjust(\n    rotation: -90.28,\n    hueRange: 15.8,\n    saturation: 2.58,\n    brightness: 1.34\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Iaf_pQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778759917648,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "shiny",
+    "tagline": "highs drives the speed",
+    "tint": "#ffd24e",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth, classicNoisedeck, render, points, mixer\nlet highsReact = audio(band: 2, min: 70, max: 140)\n\nnoise(\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 53,\n  ridges: true,\n  loopScale: 100,\n  speed: highsReact\n)\n  .adjust(\n    rotation: -180,\n    hueRange: 200,\n    saturation: 4,\n    brightness: 0.39,\n    contrast: 0.36\n  )\n  .cellRefract(\n    amount: 19.96,\n    direction: 360,\n    speed: 5,\n    shape: circle,\n    scale: 51.4,\n    cellScale: 100,\n    smooth: 100,\n    variation: 100\n  )\n  .adjust(\n    rotation: -73.72,\n    hueRange: 200,\n    saturation: 0.82\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 3.6,\n    specularIntensity: 1.19,\n    lightDirection: vec3(0.356, -0.278, 0.892),\n    reflection: 29.8,\n    refraction: 30.1,\n    aberration: 27.6\n  )\n  .subchain(name: \"lens effects\", id: \"0nhw\") {\n    .prismaticAberration(\n      aberration: 100,\n      hueRange: 100,\n      saturation: -100,\n      passthru: 42.13\n    )\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .adjust(saturation: 1.33, brightness: 1.34)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "--4EFQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778758905891,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "incoming signal",
+    "tagline": "mids drives the speed",
+    "tint": "#4ea8ff",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sine)\nlet midsReact = audio(band: 1, min: 2.5, max: 8.5)\n\nshape(\n  loopBOffset: noiseBSpline4x4,\n  loopAScale: 38.67,\n  loopBScale: 26.95,\n  speedA: -7,\n  speedB: 0\n)\n  .tile(scale: 4, repeat: 3)\n  .historicPalette(\n    index: maoriCarving,\n    rotation: fwd,\n    repeat: 10,\n    alpha: 0.27,\n    smoothness: 1\n  )\n  .adjust(\n    rotation: -26.24,\n    hueRange: 200,\n    saturation: 3.03,\n    brightness: 0.5,\n    contrast: 0.89\n  )\n  .tunnel(\n    scale: -0.1,\n    speed: midsReact,\n    rotation: 2,\n    center: 0\n  )\n  .wormhole(\n    kink: 0.3,\n    stride: 0.85,\n    rotation: 98\n  )\n  .motionBlur(amount: 72.92)\n  .blur(radiusX: 3, radiusY: 3)\n  .adjust(\n    rotation: 113.03,\n    hueRange: 200,\n    brightness: 0.79,\n    contrast: 0.95\n  )\n  .snow(density: 24.24)\n  .crt(speed: 2.2)\n  .subchain(name: \"lens effects\", id: \"25k0\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(threshold: 0.45, taps: 15)\n    .lens(displacement: -0.86)\n    .vignette(brightness: 0.13)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "UCGI9g",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778697207306,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "warp flux 2",
+    "tagline": "bass drives the speed",
+    "tint": "#ff6b6b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.noise, max: 0.15, seed: 7292)\nlet osc2 = osc(type: oscKind.noise, max: 0.05)\nlet osc3 = osc(type: oscKind.noise, max: 0.23, seed: 7553)\nlet osc4 = osc(type: oscKind.sawInv, speed: bassReact)\nlet bassReact = audio(band: 0, min: 3, max: 22)\n\ngradient(\n  type: fourCorners,\n  rotation: 30.029,\n  repeat: 2,\n  speed: 1,\n  seed: 97,\n  color1: #fefaefff,\n  color2: #92a06bff,\n  color3: #222e76ff,\n  color4: #e19e47ff\n)\n  .seamless(blend: 0.18, repeat: 1)\n  .warp(\n    strength: 35.19,\n    scale: 0.68,\n    speed: 4\n  )\n  .historicPalette(\n    index: kenteCloth,\n    rotation: fwd,\n    offset: osc4,\n    repeat: 3,\n    alpha: 0.86,\n    smoothness: 1\n  )\n  .wormhole(\n    kink: 2.1,\n    stride: 2,\n    rotation: 31,\n    alpha: 0.979\n  )\n  .motionBlur(amount: 100)\n  .translate(x: osc1, y: osc3)\n  .rotate(rotation: osc2)\n  .blur(radiusX: 3, radiusY: 3)\n  .subchain(name: \"lens effects\", id: \"1epb\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.11)\n  }\n  .adjust(\n    rotation: -116.77,\n    hueRange: 200,\n    brightness: 1.44,\n    contrast: 0.58\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "8waOng",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778690723822,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "warp flux",
+    "tagline": "mids drives the speed",
+    "tint": "#ff6b6b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.noise, max: 0.15, seed: 7292)\nlet osc2 = osc(type: oscKind.noise, max: 0.05)\nlet osc3 = osc(type: oscKind.noise, max: 0.23, seed: 7553)\nlet midsReact = audio(band: 1, min: 0.5, max: 1.7)\n\ngradient(\n  type: fourCorners,\n  rotation: 30.029,\n  repeat: 2,\n  speed: midsReact,\n  seed: 97,\n  color1: #fefaefff,\n  color2: #92a06bff,\n  color3: #222e76ff,\n  color4: #e19e47ff\n)\n  .seamless(blend: 0.22, repeat: 1)\n  .warp(\n    strength: 35.19,\n    scale: 0.66,\n    speed: 2\n  )\n  .historicPalette(\n    index: kenteCloth,\n    rotation: fwd,\n    repeat: 2,\n    alpha: 0.86,\n    smoothness: 1\n  )\n  .wormhole(\n    stride: 2,\n    rotation: 31,\n    alpha: 0.979\n  )\n  .translate(x: osc1, y: osc3)\n  .rotate(rotation: osc2)\n  .blur(radiusX: 3, radiusY: 3)\n  .adjust(\n    rotation: -116.77,\n    hueRange: 200,\n    brightness: 0.79,\n    contrast: 0.95\n  )\n  .subchain(name: \"lens effects\", id: \"1epb\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "xhwiSQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778690479033,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "hatchlings",
+    "tagline": "bass drives the speed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, synth3d, render, points, mixer, classicNoisedeck\nlet bassReact = audio(band: 0, min: 0.6, max: 4.4)\n\ncell(\n  scale: 82.16,\n  cellScale: 65.95,\n  variation: 35.15,\n  speed: bassReact\n)\n  .refract(\n    blendMode: negation,\n    mix: 47.33,\n    mode: reflect,\n    amount: 100\n  )\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(attrition: 4.21)\n    .flow(\n      behavior: chaotic,\n      stride: 38,\n      strideDeviation: 0.5,\n      kink: 1.4\n    )\n    .hydraulic(stride: 21)\n    .pointsBillboardRender(\n      depositOpacity: 5.29,\n      pointSize: 39.26,\n      sizeVariation: 100,\n      seed: 474,\n      density: 1.07,\n      intensity: 86.64,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 6, radiusY: 6)\n  .invert()\n  .lighting(\n    normalStrength: 3.65,\n    specularIntensity: 0.87,\n    shininess: 166,\n    lightDirection: vec3(0.522, 0.467, 0.714),\n    reflection: 21.6,\n    refraction: 13.5,\n    aberration: 21.6\n  )\n  .grain(alpha: 0.13)\n  .subchain(name: \"lens effects\", id: \"ddno\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.23)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "7iHiBA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778687046183,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "glorp",
+    "tagline": "bass drives the speed",
+    "tint": "#4ea8ff",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sine, speed: bassReact)\nlet osc2 = osc(type: oscKind.noise, seed: 9368)\nlet osc3 = osc(type: oscKind.noise, seed: 1311)\nlet osc4 = osc(type: oscKind.noise, seed: 3626)\nlet osc5 = osc(type: oscKind.sawInv)\nlet bassReact = audio(band: 0, min: 0.9, max: 6.6)\n\ncellularAutomata(\n  tex: read(o4),\n  zoom: x64,\n  ruleIndex: pondLife,\n  smoothing: catmullRom4x4,\n  speed: 100,\n  weight: 100\n)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 58.5,\n    saturation: 1.5\n  )\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: catmullRom4x4,\n  sourceF: sliderInput,\n  feed: 85.23,\n  kill: 59.38,\n  rate1: 79.53,\n  rate2: 24.48,\n  weight: 88.51,\n  inputIntensity: osc4\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  zoom: x16,\n  smoothing: catmullRom4x4,\n  sourceF: brightness,\n  feed: 88.69,\n  kill: 56.45,\n  rate1: 98.83,\n  rate2: 23.39,\n  weight: 79.37,\n  inputIntensity: osc3\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x4,\n  smoothing: catmullRom4x4,\n  sourceF: sliderInput,\n  feed: 31.52,\n  kill: 55.71,\n  rate1: 94.75,\n  rate2: 43.79,\n  weight: 45.9,\n  inputIntensity: osc2\n)\n  .write(o3)\n\nread(o3)\n  .subchain(name: \"feedback loop\", id: \"zzk1\") {\n    .loopBegin(alpha: 85.95)\n    .warp(strength: 6.99, scale: 0.2)\n    .feedback(mix: 40.61, refractBAmt: 8.39)\n    .loopEnd()\n  }\n  .tetraCosine(\n    colorMode: oklch,\n    offsetR: 0.121,\n    offsetG: 0.432,\n    offsetB: 0.67,\n    ampR: 0.369,\n    ampG: 0.332,\n    ampB: 0.676,\n    freqR: 4,\n    freqG: 4,\n    phaseR: 0.895,\n    phaseG: 0.417,\n    phaseB: 0.782,\n    repeat: 0.72,\n    offset: 0.96,\n    alpha: 0.65\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 6.6,\n    reflection: 22.3,\n    refraction: 27.4,\n    aberration: 26.5\n  )\n  .adjust(\n    rotation: osc5,\n    saturation: 0.79,\n    brightness: 1.61,\n    contrast: 0.72\n  )\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "pafAcQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778511385421,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "juicy",
+    "tagline": "mids drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.sine, speed: midsReact)\nlet osc2 = osc(type: oscKind.noise, seed: 9368)\nlet osc3 = osc(type: oscKind.noise, seed: 1311)\nlet osc4 = osc(type: oscKind.noise, seed: 3626)\nlet midsReact = audio(band: 1, min: 1.5, max: 5.1)\n\ncellularAutomata(\n  tex: read(o4),\n  ruleIndex: waffles,\n  smoothing: catmullRom3x3,\n  speed: 100,\n  weight: 69.94\n)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 58.5\n  )\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 85.23,\n  kill: 59.38,\n  rate1: 79.53,\n  rate2: 24.48,\n  weight: 80.98,\n  inputIntensity: osc4\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  zoom: x16,\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 88.69,\n  kill: 56.45,\n  rate1: 98.83,\n  rate2: 23.39,\n  weight: 79.37,\n  inputIntensity: osc3\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 31.52,\n  kill: 55.71,\n  rate1: 94.75,\n  rate2: 43.79,\n  weight: 78.85,\n  inputIntensity: osc2\n)\n  .write(o3)\n\nread(o3)\n  .tetraColorArray(rotation: fwd, repeat: 2.9)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 1.3,\n    specularIntensity: 1.24,\n    shininess: 86,\n    lightDirection: vec3(0.322, 0.694, 0.643),\n    reflection: 15.9,\n    refraction: 23.2,\n    aberration: 28\n  )\n  .adjust(saturation: 0.55, contrast: 0.62)\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "TA0KCQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778480139279,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "multi-scale goo",
+    "tagline": "bass drives the speed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.sine, speed: bassReact)\nlet osc2 = osc(type: oscKind.noise, seed: 9368)\nlet osc3 = osc(type: oscKind.noise, seed: 1311)\nlet osc4 = osc(type: oscKind.noise, seed: 3626)\nlet bassReact = audio(band: 0, min: 0.9, max: 6.6)\n\nnoise(\n  scaleX: 100,\n  scaleY: 100,\n  seed: 43,\n  ridges: true,\n  loopScale: 83.52,\n  speed: 100\n)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 28.98,\n    saturation: 1.17,\n    contrast: 0.53\n  )\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 85.23,\n  kill: 59.38,\n  rate1: 79.53,\n  rate2: 24.48,\n  weight: 68.92,\n  inputIntensity: osc4\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  zoom: x16,\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 88.69,\n  kill: 56.45,\n  rate1: 98.83,\n  rate2: 23.39,\n  weight: 72.1,\n  inputIntensity: osc3\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 31.52,\n  kill: 55.71,\n  rate1: 94.75,\n  rate2: 43.79,\n  weight: 100,\n  inputIntensity: osc2\n)\n  .write(o3)\n\nread(o3)\n  .tetraCosine(\n    colorMode: oklch,\n    offsetR: 0.583,\n    offsetG: 0.657,\n    offsetB: 0.58,\n    ampR: 0.84,\n    ampG: 0.921,\n    ampB: 0.126,\n    freqR: 0,\n    phaseR: 0.559,\n    phaseG: 0.94,\n    phaseB: 0.758,\n    rotation: fwd,\n    repeat: 3.26,\n    offset: 0.992,\n    alpha: 0.628\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 1.3,\n    specularIntensity: 1.24,\n    shininess: 86,\n    lightDirection: vec3(0.322, 0.694, 0.643),\n    reflection: 15.9,\n    refraction: 23.2,\n    aberration: 28\n  )\n  .adjust(\n    saturation: 0.55,\n    brightness: 1.58,\n    contrast: 0.62\n  )\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "IID9pA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778475559251,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "organic soup 2",
+    "tagline": "highs drives the speed",
+    "tint": "#ff6b6b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.sine)\nlet osc2 = osc(type: oscKind.noise, seed: 3527)\nlet osc3 = osc(type: oscKind.noise, seed: 6472)\nlet osc4 = osc(type: oscKind.noise, seed: 6235)\nlet highsReact = audio(band: 2, min: 70, max: 140)\n\nnoise(\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 80,\n  ridges: true,\n  loopScale: 100,\n  speed: highsReact\n)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 28.98,\n    saturation: 1.17,\n    contrast: 0.53\n  )\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 85.23,\n  kill: 59.38,\n  rate1: 79.53,\n  rate2: 24.48,\n  weight: 68.92,\n  inputIntensity: osc4\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 88.69,\n  kill: 56.45,\n  rate1: 98.83,\n  rate2: 23.39,\n  weight: 72.1,\n  inputIntensity: osc3\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 24.43,\n  kill: 55.71,\n  rate1: 94.75,\n  rate2: 43.79,\n  weight: 78.9,\n  inputIntensity: osc2\n)\n  .write(o3)\n\nread(o3)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 1.3,\n    specularIntensity: 1.24,\n    shininess: 86,\n    lightDirection: vec3(0.322, 0.694, 0.643),\n    reflection: 15.9,\n    refraction: 23.2,\n    aberration: 28\n  )\n  .adjust(\n    saturation: 0.55,\n    brightness: 1.58,\n    contrast: 0.62\n  )\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "CUtnoA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778444958209,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "organic soup",
+    "tagline": "bass drives the scale",
+    "tint": "#4ea8ff",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter\n\nlet osc1 = osc(type: oscKind.sine)\nlet bassReact = audio(band: 0, min: 5.553, max: 40.722)\n\nperlin(\n  scale: bassReact,\n  dimensions: 3,\n  ridges: true,\n  seed: 41\n)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    saturation: 4\n  )\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 85.89,\n  kill: 64.82,\n  rate1: 60.24,\n  rate2: 24.09,\n  weight: 100,\n  inputIntensity: 17.53\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 110,\n  kill: 60.23,\n  rate1: 79.44,\n  rate2: 32.06,\n  weight: 100,\n  inputIntensity: 33.62\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 56.43,\n  kill: 57.61,\n  rate1: 81.44,\n  rate2: 23.67,\n  weight: 100,\n  inputIntensity: 91.64\n)\n  .write(o3)\n\nread(o3)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 1.2,\n    specularIntensity: 1.62,\n    shininess: 71,\n    lightDirection: vec3(0.322, 0.694, 0.643),\n    reflection: 21.1,\n    refraction: 19.5,\n    aberration: 28\n  )\n  .adjust(\n    saturation: 0.55,\n    brightness: 1.58,\n    contrast: 0.62\n  )\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "WiQTJA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778428840983,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "multires reaction",
+    "tagline": "highs drives the scale",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter\n\nlet osc1 = osc(type: oscKind.sine)\nlet highsReact = audio(band: 2, min: 12.957, max: 25.914)\n\nperlin(\n  scale: highsReact,\n  dimensions: 3,\n  ridges: true,\n  seed: 41\n)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    saturation: 4\n  )\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x32,\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 85.89,\n  kill: 64.82,\n  rate1: 60.24,\n  rate2: 24.09,\n  weight: 100,\n  inputIntensity: 30.28\n)\n  .write(o1)\n\nreactionDiffusion(\n  tex: read(o1),\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 110,\n  kill: 60.23,\n  rate1: 79.44,\n  rate2: 32.06,\n  weight: 100,\n  inputIntensity: 56.51\n)\n  .write(o2)\n\nreactionDiffusion(\n  tex: read(o2),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  sourceF: brightness,\n  feed: 56.43,\n  kill: 57.61,\n  rate1: 81.44,\n  rate2: 23.67,\n  weight: 100,\n  inputIntensity: 91\n)\n  .write(o3)\n\nread(o3)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 1.2,\n    specularIntensity: 1.62,\n    shininess: 71,\n    lightDirection: vec3(0.322, 0.694, 0.643),\n    reflection: 21.1,\n    refraction: 19.5,\n    aberration: 28\n  )\n  .adjust(\n    saturation: 0.55,\n    brightness: 1.58,\n    contrast: 0.62\n  )\n  .write(o4)\n\nrender(o4)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Rdc8ig",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778428593681,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "crawling kaleido",
+    "tagline": "highs drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.sine)\nlet highsReact = audio(band: 2, min: 3.5, max: 7)\n\nperlin(scale: 18.02, octaves: 2)\n  .kaleido(sides: 6)\n  .tile(\n    symmetry: rotate6,\n    offsetY: -0.48,\n    angle: 45,\n    repeat: 3\n  )\n  .adjust(\n    mode: oklch,\n    rotation: 138.52,\n    hueRange: 200,\n    brightness: 2.61,\n    contrast: 0.56\n  )\n  .warp(\n    strength: 21.19,\n    scale: 1.39,\n    seed: 14,\n    speed: highsReact\n  )\n  .blur()\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  smoothing: bSpline4x4,\n  sourceF: sliderInput,\n  feed: 66.28,\n  kill: 59.33,\n  rate1: 97.99,\n  rate2: 21.64,\n  iterations: 14,\n  weight: 45.54,\n  inputIntensity: 16.62\n)\n  .lighting(\n    normalStrength: 2.34,\n    smoothing: 2,\n    specularIntensity: 0.71,\n    shininess: 72,\n    reflection: 22.1,\n    refraction: 15.2,\n    aberration: 13\n  )\n  .grain(alpha: 0.1)\n  .adjust(\n    rotation: 35.64,\n    saturation: 1.25,\n    brightness: 1.04,\n    contrast: 0.71\n  )\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "VhNVtQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778379187586,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "organic kaleido",
+    "tagline": "bass drives the speed",
+    "tint": "#f43f5e",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.sine)\nlet bassReact = audio(band: 0, min: 1.5, max: 11)\n\nperlin(scale: 18.02, octaves: 2)\n  .kaleido(sides: 6)\n  .tile(\n    symmetry: rotate6,\n    offsetY: -0.48,\n    angle: 45,\n    repeat: 3\n  )\n  .adjust(\n    mode: oklch,\n    rotation: 138.52,\n    hueRange: 97.99,\n    brightness: 2.61,\n    contrast: 0.56\n  )\n  .warp(\n    strength: 2.16,\n    scale: 5,\n    speed: bassReact\n  )\n  .blur()\n  .write(o0)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x16,\n  sourceF: sliderInput,\n  feed: 78.17,\n  kill: 56.47,\n  rate1: 86.94,\n  rate2: 24.02,\n  iterations: 13,\n  weight: 45.54,\n  inputIntensity: 19.86\n)\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.2,\n    reflection: 9.9,\n    refraction: 21.3,\n    aberration: 17.5\n  )\n  .grain(alpha: 0.1)\n  .adjust(\n    rotation: -87.3,\n    brightness: 1.15,\n    contrast: 0.69\n  )\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "i7RwCw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1778378537371,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "beckoning",
+    "tagline": "mids drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "polymorphic",
+      "reactive"
+    ],
+    "dsl": "search classicNoisedeck, synth, filter\nlet midsReact = audio(band: 1, min: 9.5, max: 32.3)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  xScale: 98,\n  yScale: 98,\n  ridges: true,\n  wrap: false,\n  refractAmt: 100,\n  speed: midsReact,\n  kaleido: 11,\n  hueRotation: 70,\n  hueRange: 23\n)\n  .write(o0)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  xScale: 98,\n  yScale: 98,\n  ridges: true,\n  wrap: false,\n  refractAmt: 100,\n  speed: 21,\n  kaleido: 3,\n  hueRotation: 65,\n  hueRange: 46\n)\n  .coalesce(\n    tex: read(o0),\n    blendMode: multiply,\n    mix: 55,\n    refractAAmt: 100,\n    refractBAmt: 8.98\n  )\n  .lensDistortion(\n    distortion: -49,\n    loopScale: 60,\n    aberration: 16,\n    tint: #4986bcff,\n    alpha: 11,\n    vignetteAmt: -100\n  )\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "bbPVig",
+      "username": "aayars",
+      "app": "polymorphic",
+      "createdAt": 1778172020838,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "dual renderers",
+    "tagline": "highs drives the rotation",
+    "tint": "#4ed99b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\nlet highsReact = audio(band: 2, min: 84, max: 168)\n\nperlin(\n  scale: 19.94,\n  octaves: 2,\n  seed: 64\n)\n  .adjust(\n    mode: hsv,\n    rotation: highsReact,\n    hueRange: 63.6,\n    saturation: 1.54,\n    brightness: 1.1,\n    contrast: 0.53\n  )\n  .subchain(name: \"particle life\", id: \"860b\") {\n    .pointsEmit(attrition: 2.12)\n    .life(\n      typeCount: 8,\n      attractionScale: 3,\n      repulsionScale: 2.3,\n      minRadius: 0.009,\n      maxRadius: 0.1,\n      maxSpeed: 0.007,\n      friction: 0.96,\n      matrixSeed: 629\n    )\n    .flow(stride: 60, strideDeviation: 0.5)\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 3.49,\n      pointSize: 64,\n      sizeVariation: 100,\n      density: 9.26,\n      intensity: 70.94,\n      inputIntensity: 100\n    )\n    .pointsRender(intensity: 92.42, inputIntensity: 48.91)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "ZZw1JQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777999324847,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "xor ynot",
+    "tagline": "mids drives the speed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, render, synth\nlet midsReact = audio(band: 1, min: 0.096, max: 0.326)\n\nbitwise(scale: 88.39)\n  .tetraCosine(\n    colorMode: oklab,\n    offsetR: 0.418,\n    offsetG: 0.513,\n    offsetB: 0.458,\n    ampR: 0.781,\n    ampG: 0.823,\n    ampB: 0.306,\n    freqR: 3,\n    phaseR: 0.107,\n    phaseG: 0.571,\n    phaseB: 0.329,\n    rotation: fwd,\n    repeat: 2,\n    offset: 1,\n    alpha: 0.86\n  )\n  .subchain(name: \"degauss texture\", id: \"zble\") {\n    .loopBegin(alpha: 96.723, intensity: 62.924)\n    .degauss(\n      displacement: 0.041,\n      direction: 47.181,\n      seed: 14,\n      speed: midsReact\n    )\n    .texture(\n      mode: stucco,\n      alpha: 0.81,\n      scale: 0.1\n    )\n    .loopEnd()\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "tif_YQ",
+      "username": "Jess Hewitt",
+      "app": "noisedeck",
+      "createdAt": 1777950574097,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "arterial",
+    "tagline": "bass drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, synth3d, render, points, mixer, classicNoisedeck\nlet bassReact = audio(band: 0, min: 0.6, max: 4.4)\n\ncurl(scale: 19.03, speed: bassReact)\n  .adjust(\n    mode: hsv,\n    rotation: -66.53,\n    hueRange: 56.2,\n    contrast: 0.52\n  )\n  .refract(\n    blendMode: multiply,\n    mode: reflect,\n    amount: 77.22\n  )\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit()\n    .flow(\n      behavior: chaotic,\n      stride: 39,\n      strideDeviation: 0.5\n    )\n    .hydraulic(stride: 21)\n    .pointsBillboardRender(\n      depositOpacity: 5.25,\n      pointSize: 39.26,\n      sizeVariation: 100,\n      seed: 474,\n      density: 0.58,\n      intensity: 86.64,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 6, radiusY: 6)\n  .invert()\n  .lighting(\n    normalStrength: 3.65,\n    specularIntensity: 0.87,\n    shininess: 166,\n    lightDirection: vec3(0.522, 0.467, 0.714),\n    reflection: 21.6,\n    refraction: 13.5,\n    aberration: 21.6\n  )\n  .grain(alpha: 0.12)\n  .subchain(name: \"lens effects\", id: \"ddno\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.23)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "cpjqpw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777950350519,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "corrosion",
+    "tagline": "mids drives the speed",
+    "tint": "#ff6b6b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, synth3d, render, points, mixer, classicNoisedeck\nlet midsReact = audio(band: 1, min: 2.5, max: 8.5)\n\ngabor(\n  scale: 94.71,\n  orientation: -98.42,\n  bandwidth: 24.97,\n  isotropy: 100,\n  density: 4,\n  octaves: 4,\n  speed: midsReact,\n  seed: 34\n)\n  .refract(\n    blendMode: negation,\n    mode: reflect,\n    amount: 77.22\n  )\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(attrition: 10)\n    .flow(\n      behavior: chaotic,\n      stride: 39,\n      strideDeviation: 0.5\n    )\n    .hydraulic(stride: 21)\n    .pointsBillboardRender(\n      depositOpacity: 5.25,\n      pointSize: 39.26,\n      sizeVariation: 100,\n      seed: 474,\n      density: 0.78,\n      intensity: 86.64,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 6, radiusY: 6)\n  .invert()\n  .lighting(\n    normalStrength: 3.65,\n    specularIntensity: 0.87,\n    shininess: 166,\n    lightDirection: vec3(0.522, 0.467, 0.714),\n    reflection: 21.6,\n    refraction: 13.5,\n    aberration: 21.6\n  )\n  .grain(alpha: 0.13)\n  .subchain(name: \"lens effects\", id: \"ddno\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.23)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Uf49UQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777950080541,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "rfk's gut biome",
+    "tagline": "bass drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, synth3d, render, points, mixer, classicNoisedeck\nlet bassReact = audio(band: 0, min: 1.5, max: 11)\n\ngabor(\n  scale: 100,\n  orientation: -98.42,\n  bandwidth: 24.97,\n  isotropy: 100,\n  density: 4,\n  octaves: 2,\n  speed: bassReact\n)\n  .refract(blendMode: difference, amount: 24.8)\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(stateSize: x64, attrition: 3.63)\n    .flock(\n      separation: 1.7,\n      alignment: 1.9,\n      perceptionRadius: 69,\n      separationRadius: 37,\n      maxSpeed: 9.2,\n      maxForce: 0.72\n    )\n    .pointsBillboardRender(\n      depositOpacity: 2.97,\n      pointSize: 24.19,\n      sizeVariation: 100,\n      seed: 0,\n      density: 100,\n      intensity: 91.36,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 10, radiusY: 10)\n  .lighting(\n    normalStrength: 5,\n    diffuseColor: #b8b8b8,\n    specularIntensity: 0.44,\n    shininess: 199,\n    ambientColor: #1d2233,\n    lightDirection: vec3(-0.411, 0.333, 0.848),\n    reflection: 32.6,\n    refraction: 17.3,\n    aberration: 9.2\n  )\n  .adjust(\n    rotation: 147.04,\n    hueRange: 200,\n    brightness: 0.63,\n    contrast: 0.47\n  )\n  .subchain(name: \"lens effects\", id: \"hk9g\") {\n    .chromaticAberration(aberration: 34.84, passthru: 67.14)\n    .bloom(\n      threshold: 0.35,\n      intensity: 1.25,\n      taps: 15\n    )\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "U9m8sw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777525567570,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "water sample",
+    "tagline": "bass drives the speed",
+    "tint": "#ffd24e",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, synth3d, render, points, mixer\nlet bassReact = audio(band: 0, min: 1.5, max: 11)\n\ngabor(\n  scale: 88.44,\n  orientation: -98.42,\n  bandwidth: 24.97,\n  isotropy: 100,\n  density: 4,\n  octaves: 2,\n  speed: bassReact\n)\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(attrition: 2.2)\n    .flow(\n      behavior: chaotic,\n      stride: 34,\n      kink: 10\n    )\n    .hydraulic(stride: 42)\n    .pointsBillboardRender(\n      depositOpacity: 10.99,\n      pointSize: 5.48,\n      sizeVariation: 100,\n      seed: 474,\n      density: 8.21,\n      intensity: 64.03,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 9, radiusY: 9)\n  .lighting(\n    normalStrength: 2.45,\n    smoothing: 1.2,\n    reflection: 26.8,\n    refraction: 18.7,\n    aberration: 21.6\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "PLYtXA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777523170016,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "twisty knots",
+    "tagline": "bass drives the rotation",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\nlet bassReact = audio(band: 0, min: -12.726, max: -93.324)\n\nperlin(scale: 31.37, seed: 23)\n  .seamless(blend: 0.13, repeat: 1)\n  .adjust(\n    rotation: osc1,\n    hueRange: 200,\n    saturation: 4,\n    contrast: 1\n  )\n  .subchain(name: \"flow field particles\", id: \"p0wu\") {\n    .pointsEmit(stateSize: x512, attrition: 10)\n    .flow(\n      behavior: unruly,\n      stride: 25,\n      strideDeviation: 0\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 85.04,\n      inputIntensity: 0\n    )\n  }\n  .adjust(\n    rotation: bassReact,\n    hueRange: 23.22,\n    saturation: 0.75,\n    brightness: 0.54,\n    contrast: 0.79\n  )\n  .subchain(name: \"lens effects\", id: \"5nr0\") {\n    .chromaticAberration(aberration: 17.12, passthru: 57.78)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.13, alpha: 0.85)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "7zjzXA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777483100337,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "psytrance party",
+    "tagline": "mids drives the speed",
+    "tint": "#fb923c",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv, speed: midsReact, offset: -0.72)\nlet osc2 = osc(type: oscKind.sine)\nlet osc3 = osc(type: oscKind.noise)\nlet osc4 = osc(type: oscKind.noise, seed: 6469)\nlet osc5 = osc(type: oscKind.noise, min: 0.24, max: 0.81, speed: 6, seed: 4673)\nlet osc6 = osc(type: oscKind.noise, min: 0.54, speed: 3, seed: 8436)\nlet osc7 = osc(type: oscKind.sine, max: 0.1, speed: 20)\nlet midsReact = audio(band: 1, min: 1, max: 3.4)\n\nperlin(\n  scale: 39.2,\n  ridges: true,\n  seed: 37\n)\n  .kaleido(\n    sides: 7,\n    loopScale: 52.32,\n    speed: 50.17,\n    kernel: shadow,\n    effectWidth: 10\n  )\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 200,\n    saturation: 0.75,\n    contrast: 0.59\n  )\n  .tetraColorArray(\n    colorMode: oklch,\n    colorCount: 3,\n    color0: #6bb7baff,\n    color1: #130926ff,\n    color2: #5f97a9ff,\n    color3: #b37ac4ff,\n    color4: #c19d59ff,\n    color5: #898e48ff,\n    color6: #e230fdff,\n    color7: #6185f9ff,\n    rotation: fwd,\n    repeat: 0,\n    offset: 0.49,\n    alpha: 0.42,\n    smoothness: 0.839\n  )\n  .coalesce(\n    tex: read(o1),\n    blendMode: reflect,\n    mix: -32.55,\n    refractAAmt: 24,\n    refractBAmt: osc7,\n    refractADir: osc2\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.5,\n    specularIntensity: 0.55,\n    shininess: 116,\n    lightDirection: vec3(0.689, 0.378, 0.619),\n    reflection: 49.7,\n    refraction: 22,\n    aberration: 35.1\n  )\n  .subchain(name: \"lens effects\", id: \"e76d\") {\n    .chromaticAberration(aberration: 16.67, passthru: 55.49)\n    .bloom(\n      threshold: 0.35,\n      softKnee: 0.26,\n      intensity: 1.25,\n      radius: 49,\n      taps: 30\n    )\n    .lens(displacement: -0.47)\n    .vignette()\n  }\n  .write(o0)\n\nshapes3d(\n  shapeA: octahedron,\n  shapeAScale: osc6,\n  shapeBScale: osc5,\n  smoothness: 43.98,\n  spin: osc3,\n  spinSpeed: 0,\n  flip: osc4,\n  flipSpeed: 0,\n  bgColor: #000000ff\n)\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "VLy1Dw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777392510918,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "gem is outrageous",
+    "tagline": "bass drives the speed",
+    "tint": "#ff6b6b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv, speed: bassReact, offset: -0.72)\nlet osc2 = osc(type: oscKind.sine)\nlet bassReact = audio(band: 0, min: 0.6, max: 4.4)\n\nperlin(\n  scale: 23.03,\n  ridges: true,\n  seed: 37\n)\n  .kaleido(\n    sides: 7,\n    loopScale: 52.32,\n    speed: 50.17,\n    kernel: shadow,\n    effectWidth: 10\n  )\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 200,\n    saturation: 0.75,\n    contrast: 0.59\n  )\n  .tetraColorArray(\n    colorMode: oklch,\n    colorCount: 3,\n    color0: #6bb7ba,\n    color1: #130926,\n    color2: #5f97a9,\n    color3: #b37ac4,\n    color4: #c19d59,\n    color5: #898e48,\n    color6: #e230fd,\n    color7: #6185f9,\n    rotation: fwd,\n    repeat: 0,\n    offset: 0.49,\n    alpha: 0.42,\n    smoothness: 0.839\n  )\n  .coalesce(\n    tex: read(o1),\n    blendMode: multiply,\n    refractAAmt: 4.29,\n    refractADir: osc2\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.2,\n    specularIntensity: 0.55,\n    shininess: 116,\n    lightDirection: vec3(0.689, 0.378, 0.619),\n    reflection: 49.7,\n    refraction: 18.3,\n    aberration: 15.9\n  )\n  .subchain(name: \"lens effects\", id: \"e76d\") {\n    .chromaticAberration(aberration: 16.67, passthru: 55.49)\n    .bloom(\n      threshold: 0.35,\n      softKnee: 0.26,\n      intensity: 1.25,\n      radius: 49,\n      taps: 30\n    )\n    .lens(displacement: -0.47)\n    .vignette()\n  }\n  .write(o0)\n\npolygon(\n  sides: 7,\n  radius: 0.79,\n  smooth: 0.18,\n  rotation: -88.99\n)\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Ri2a1w",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777319138081,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "gem",
+    "tagline": "mids drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\nlet midsReact = audio(band: 1, min: 25.085, max: 85.289)\n\nperlin(\n  scale: 43.62,\n  ridges: true,\n  seed: 37\n)\n  .kaleido(\n    sides: 6,\n    metric: hexagon,\n    loopOffset: hexagon,\n    loopScale: 58.2,\n    speed: midsReact,\n    kernel: shadow,\n    effectWidth: 10\n  )\n  .blendMode(tex: read(o1), mode: multiply)\n  .adjust(\n    mode: hsv,\n    rotation: osc1,\n    hueRange: 51.43,\n    saturation: 0.75,\n    contrast: 0.59\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.5,\n    lightDirection: vec3(0.689, 0.378, 0.619),\n    reflection: 13.3,\n    refraction: 38.2,\n    aberration: 15.9\n  )\n  .subchain(name: \"lens effects\", id: \"e76d\") {\n    .chromaticAberration(aberration: 16.67, passthru: 55.49)\n    .bloom(\n      threshold: 0.5,\n      softKnee: 0.35,\n      intensity: 1.7,\n      radius: 49,\n      taps: 30\n    )\n    .lens(displacement: -0.79)\n    .vignette()\n  }\n  .write(o0)\n\npolygon(\n  sides: 6,\n  radius: 0.8,\n  smooth: 0.39\n)\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "B1qtXg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777316727494,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "solaris",
+    "tagline": "highs drives the speed",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\nlet highsReact = audio(band: 2, min: 1.4, max: 2.8)\n\ncell(\n  scale: 74.26,\n  cellScale: 82.04,\n  cellSmooth: 100,\n  variation: 100,\n  speed: highsReact\n)\n  .blendMode(\n    tex: read(o1),\n    mode: multiply,\n    mix: 7.6\n  )\n  .palette(\n    index: solaris,\n    offset: 25,\n    alpha: 0.53\n  )\n  .subchain(name: \"flow field particles\", id: \"x3b2\") {\n    .pointsEmit(attrition: 10)\n    .flow(behavior: chaotic, kink: 0.7)\n    .hydraulic(stride: 25)\n    .pointsRender(\n      density: 100,\n      intensity: 97.5,\n      inputIntensity: 68.05\n    )\n    .blur()\n  }\n  .subchain(name: \"feedback loop with warp\", id: \"e5l6\") {\n    .loopBegin(alpha: 97.5, intensity: 97.5)\n    .warp(\n      strength: 1,\n      scale: 2.77,\n      seed: 28,\n      speed: 3\n    )\n    .loopEnd()\n  }\n  .warp(\n    strength: 0.52,\n    scale: 5,\n    speed: 5\n  )\n  .adjust(\n    saturation: 1.54,\n    brightness: 0.86,\n    contrast: 0.53\n  )\n  .subchain(name: \"lens effects\", id: \"ow0o\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.75, alpha: 0.51)\n  }\n  .adjust(\n    rotation: -15.59,\n    saturation: 0.68,\n    contrast: 0.45\n  )\n  .write(o0)\n\nperlin()\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "phOkdg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777307014976,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "it's the pits",
+    "tagline": "bass drives the speed",
+    "tint": "#4ea8ff",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\nlet bassReact = audio(band: 0, min: 0.6, max: 4.4)\n\ngabor(\n  scale: 89.31,\n  orientation: 62.63,\n  bandwidth: 27.48,\n  isotropy: 70.82,\n  density: 8,\n  octaves: 4,\n  speed: bassReact,\n  seed: 38\n)\n  .ridge(level: 0.52)\n  .lowPoly(\n    scale: 87,\n    seed: 55,\n    mode: distance2,\n    edgeStrength: 0.57,\n    alpha: 0.3,\n    speed: 1\n  )\n  .write(o0)\n\ncell(\n  scale: 62.68,\n  cellScale: 57.22,\n  cellSmooth: 78.06,\n  variation: 100\n)\n  .blur(_skip: true)\n  .coalesce(\n    tex: read(o0),\n    blendMode: lighten,\n    mix: 24.92,\n    refractBDir: -180\n  )\n  .invert()\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.5,\n    specularIntensity: 0.27,\n    shininess: 94,\n    reflection: 15.6,\n    refraction: 13.3,\n    aberration: 50.5\n  )\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "gqGiEA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777302413825,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "matrix mirror",
+    "tagline": "highs drives the scale",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\nlet highsReact = audio(band: 2, min: 39.032, max: 78.064)\n\nperlin(\n  scale: highsReact,\n  octaves: 3,\n  colorMode: mono,\n  dimensions: 3,\n  warpIterations: 4,\n  warpScale: 60.04,\n  warpIntensity: 40.84,\n  seed: 61\n)\n  .tetraCosine(\n    colorMode: hsv,\n    offsetR: 0.358,\n    offsetG: 0.156,\n    offsetB: 0.28,\n    ampR: 0.725,\n    ampG: 0.727,\n    ampB: 0.731,\n    freqR: 2,\n    freqG: 3,\n    freqB: 4,\n    phaseR: 0.06,\n    phaseG: 0.298,\n    phaseB: 0.406,\n    repeat: 0.69\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 3,\n    reflection: 61.6,\n    refraction: 53.8,\n    aberration: 25.4\n  )\n  .subchain(name: \"lens effects\", id: \"hx21\") {\n    .chromaticAberration(aberration: 25.15)\n    .bloom(\n      threshold: 0.95,\n      softKnee: 0.32,\n      intensity: 1.6,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "GPHYAQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777154976127,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "glitchoscope",
+    "tagline": "highs drives the cSpeed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\nlet osc3 = osc(type: oscKind.noise, min: 0.44, max: 0.68)\nlet highsReact = audio(band: 2, min: 0.7, max: 1.4)\n\njulia(\n  poi: manual,\n  outputMode: distance,\n  iterations: 720,\n  cReal: osc3,\n  cPath: circle,\n  cSpeed: highsReact,\n  cRadius: 0.84\n)\n  .seamless(blend: 0.17, repeat: 1)\n  .translate(y: osc1)\n  .posterize(levels: 32)\n  .wormhole(\n    kink: 0.1,\n    stride: 1.58,\n    rotation: osc3\n  )\n  .edge(\n    size: kernel7x7,\n    channel: luminance,\n    amount: 500,\n    threshold: 54.55\n  )\n  .pixelSort(angled: osc3)\n  .tetraColorArray(\n    colorMode: oklab,\n    colorCount: 4,\n    color0: #50ce5a,\n    color1: #bb5ee9,\n    color2: #e6d4fc,\n    color3: #a9873f,\n    color4: #1f13d8,\n    color5: #22841e,\n    color6: #3bcb4c,\n    color7: #6d3c7b,\n    repeat: 4,\n    offset: 0.169,\n    alpha: 0.562,\n    smoothness: 0.362\n  )\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.27,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.81)\n    .motionBlur(amount: 52.96)\n    .smooth()\n  }\n  .adjust(\n    saturation: 0.83,\n    brightness: 0.89,\n    contrast: 0.82\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "EC-8xw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777112540910,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "lit noise",
+    "tagline": "mids drives the scale",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter\nlet midsReact = audio(band: 1, min: 24.225, max: 82.365)\n\nperlin(scale: midsReact, octaves: 2)\n  .tetraCosine(\n    colorMode: hsv,\n    offsetR: 0.645,\n    offsetG: 0.694,\n    offsetB: 0.2,\n    ampR: 0.479,\n    ampG: 0.707,\n    ampB: 0.399,\n    freqR: 4,\n    phaseR: 0.186,\n    phaseG: 0.132,\n    phaseB: 0.62,\n    repeat: 5,\n    offset: 0.799,\n    alpha: 0.662\n  )\n  .lighting(\n    normalStrength: 4.25,\n    smoothing: 4.1,\n    specularIntensity: 1.17,\n    shininess: 182,\n    lightDirection: vec3(-0.111, 0.167, 0.98),\n    reflection: 37.6,\n    refraction: 42.1,\n    aberration: 40.1\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "t2TLEg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777053229606,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "flowing particles",
+    "tagline": "highs drives the rotation",
+    "tint": "#ff6b6b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\nlet highsReact = audio(band: 2, min: 84, max: 168)\n\nperlin(scale: 38.37, octaves: 2)\n  .seamless(blend: 0.2, repeat: 1)\n  .adjust(\n    mode: hsv,\n    rotation: highsReact,\n    hueRange: 40\n  )\n  .subchain(name: \"flow field particles\", id: \"8hbt\") {\n    .pointsEmit(stateSize: x128)\n    .flock(separation: 1.8)\n    .flow(behavior: unruly, stride: 57)\n    .pointsRender(intensity: 90, inputIntensity: 25)\n  }\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "d0pT9Q",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777052624163,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "fluid flow",
+    "tagline": "bass drives the speed",
+    "tint": "#fb923c",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\nlet bassReact = audio(band: 0, min: 1.2, max: 8.8)\n\nperlin(\n  scale: 15.01,\n  octaves: 5,\n  speed: bassReact\n)\n  .seamless(repeat: 1)\n  .adjust(\n    mode: hsv,\n    rotation: 120,\n    hueRange: 40\n  )\n  .subchain(name: \"feedback loop with warp\", id: \"4cd1\") {\n    .loopBegin(alpha: 84.19)\n    .warp(strength: 11.88, speed: 3)\n    .feedback(mix: 69.04, refractBAmt: 8.43)\n    .loopEnd()\n  }\n  .lighting(\n    normalStrength: 3.83,\n    smoothing: 4.6,\n    reflection: 46.6,\n    refraction: 51.5,\n    aberration: 29.6\n  )\n  .subchain(name: \"lens effects\", id: \"xdss\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.17, alpha: 0.73)\n  }\n  .adjust(\n    saturation: 0.71,\n    brightness: 1.13,\n    contrast: 0.77\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "TLFgkw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1777052506117,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "jigglin' automata",
+    "tagline": "mids drives the speed",
+    "tint": "#4ed99b",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\nlet midsReact = audio(band: 1, min: 39.855, max: 135.507)\n\ncellularAutomata(\n  tex: read(o0),\n  zoom: x64,\n  ruleIndex: maze,\n  smoothing: hermite,\n  speed: midsReact,\n  weight: 84.47\n)\n  .seamless(blend: 0.17, repeat: 1)\n  .translate(y: osc1)\n  .posterize(levels: 32)\n  .wormhole(\n    kink: 0.1,\n    stride: 1.58,\n    rotation: -22\n  )\n  .edge(\n    size: kernel7x7,\n    channel: luminance,\n    amount: 500,\n    threshold: 54.55\n  )\n  .tetraColorArray(\n    colorCount: 3,\n    color0: #f9f8fd,\n    color1: #3ac28a,\n    color2: #f89b71,\n    color3: #69cdfd,\n    color4: #1cc78c,\n    color5: #9d533d,\n    color6: #8a6b33,\n    color7: #aca83c,\n    rotation: back,\n    repeat: 5,\n    offset: 0.776,\n    alpha: 0.55,\n    smoothness: 0.754\n  )\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.27,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.81)\n    .motionBlur()\n    .smooth()\n  }\n  .adjust(saturation: 0.83, contrast: 0.82)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "wS37Vw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776971166558,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "diffraction",
+    "tagline": "highs drives the speed",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search user, synth, filter, render, points, mixer, classicNoisedeck\nlet highsReact = audio(band: 2, min: 70, max: 140)\n\nnoise(\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  ridges: true,\n  loopScale: 88.32,\n  speed: highsReact\n)\n  .adjust(\n    mode: hsv,\n    rotation: -106.84,\n    hueRange: 200,\n    saturation: 0.55\n  )\n  .lowPoly(\n    scale: 89,\n    seed: 28,\n    mode: distance2,\n    edgeStrength: 1,\n    alpha: 0.52\n  )\n  .subchain(name: \"feedback loop with warp\", id: \"29dv\") {\n    .loopBegin(alpha: 93.8, intensity: 95.03)\n    .cellRefract(\n      amount: 1.47,\n      speed: 5,\n      shape: circle,\n      scale: 74.49,\n      cellScale: 78.88,\n      smooth: 57.32,\n      variation: 100,\n      seed: 59\n    )\n    .adjust(rotation: 28.43, hueRange: 85.1)\n    .loopEnd()\n  }\n  .lighting()\n  .subchain(name: \"lens effects\", id: \"vkst\") {\n    .prismaticAberration(\n      aberration: 100,\n      modulate: true,\n      hueRotation: 180,\n      hueRange: 100,\n      saturation: -100,\n      passthru: 50.41\n    )\n    .bloom(\n      threshold: 0.95,\n      intensity: 0.5,\n      taps: 38\n    )\n    .lens(displacement: -0.54)\n    .vignette(brightness: 0.19)\n  }\n  .adjust(\n    hueRange: 200,\n    saturation: 1.83,\n    contrast: 0.57\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "xceTLA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776960967497,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "the quickest silver",
+    "tagline": "bass drives the speed",
+    "tint": "#f43f5e",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\nlet bassReact = audio(band: 0, min: -15.9, max: -116.6)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 8,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 64,\n  ridges: true,\n  loopOffset: verticalScan,\n  loopScale: 100,\n  speed: bassReact\n)\n  .adjust(\n    mode: hsv,\n    rotation: 58.32,\n    hueRange: 200\n  )\n  .tetraColorArray(\n    colorCount: 4,\n    color0: #9d90f2,\n    color1: #efe293,\n    color2: #3b30d1,\n    color3: #b40853,\n    color4: #9ce487,\n    color5: #7558a4,\n    color6: #a68b46,\n    color7: #2ec613,\n    repeat: 10,\n    offset: 0.796,\n    alpha: 0.3\n  )\n  .subchain(name: \"feedback loop with warp\", id: \"mzaf\") {\n    .loopBegin(alpha: 100, intensity: 98)\n    .warp(\n      strength: 4.09,\n      scale: 3.19,\n      seed: 28,\n      speed: 1\n    )\n    .feedback(\n      mix: 90.74,\n      refractAAmt: 4.23,\n      refractBAmt: 2.74,\n      refractADir: 144.32,\n      refractBDir: 32.17\n    )\n    .loopEnd()\n  }\n  .lighting(\n    normalStrength: 5,\n    smoothing: 4,\n    reflection: 39.2,\n    refraction: 45.7,\n    aberration: 25.1\n  )\n  .prismaticAberration(\n    aberration: 100,\n    modulate: true,\n    hueRange: 100,\n    saturation: -77.93,\n    passthru: 47.64\n  )\n  .adjust(\n    rotation: osc1,\n    hueRange: 200,\n    saturation: 1.29,\n    brightness: 0.89,\n    contrast: 0.85\n  )\n  .smooth(threshold: 0)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "E2wekg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776785918426,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "oozer",
+    "tagline": "highs drives the speed",
+    "tint": "#4ea8ff",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth, render, points, mixer\nlet highsReact = audio(band: 2, min: 64.939, max: 129.878)\n\nmnca(\n  tex: read(o1),\n  smoothing: bSpline4x4,\n  speed: highsReact,\n  weight: 46.76,\n  n1v1: 37.397,\n  n1r1: 36.19,\n  n1v2: 85.071,\n  n1r2: 59.39,\n  n1v3: 78.473,\n  n1r3: 59.21,\n  n1v4: 40.291,\n  n1r4: 9.6,\n  n2v1: 57.169,\n  n2r1: 74.141,\n  n2v2: 75.756,\n  n2r2: 18.421\n)\n  .tetraCosine(\n    offsetR: 0.459,\n    offsetG: 0.168,\n    offsetB: 0.284,\n    ampR: 0.166,\n    ampG: 0.079,\n    ampB: 0.398,\n    freqR: 2,\n    freqG: 3,\n    freqB: 3,\n    phaseR: 0.719,\n    phaseG: 0.681,\n    phaseB: 0.814,\n    rotation: fwd,\n    repeat: 3,\n    offset: 0.729,\n    alpha: 0.651\n  )\n  .lighting(\n    normalStrength: 0.99,\n    smoothing: 3.7,\n    reflection: 17.4,\n    refraction: 11.1,\n    aberration: 17\n  )\n  .subchain(name: \"lens effects\", id: \"9amq\") {\n    .prismaticAberration(\n      aberration: 100,\n      modulate: true,\n      hueRange: 100,\n      saturation: -100\n    )\n    .bloom(\n      threshold: 0.45,\n      intensity: 0.7,\n      taps: 33\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.18, alpha: 0.77)\n  }\n  .write(o0)\n\nnoise(\n  type: catmullRom4x4,\n  octaves: 1,\n  scaleX: 36.96,\n  scaleY: 100,\n  seed: 28,\n  loopOffset: verticalScan,\n  loopScale: 100,\n  speed: -100\n)\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "kwI7eQ",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776323746427,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "slime time",
+    "tagline": "mids drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth, render, points, mixer\nlet midsReact = audio(band: 1, min: 46.385, max: 157.709)\n\nmnca(\n  tex: read(o1),\n  zoom: x4,\n  smoothing: bSpline4x4,\n  speed: midsReact,\n  weight: 41.45,\n  n1v1: 37.397,\n  n1r1: 36.19,\n  n1v2: 85.071,\n  n1r2: 59.39,\n  n1v3: 78.473,\n  n1r3: 59.21,\n  n1v4: 40.291,\n  n1r4: 9.6,\n  n2v1: 57.169,\n  n2r1: 74.141,\n  n2v2: 75.756,\n  n2r2: 18.421\n)\n  .tetraCosine(\n    colorMode: oklch,\n    offsetR: 0.224,\n    offsetG: 0.804,\n    offsetB: 0.027,\n    ampR: 0.324,\n    ampG: 0.602,\n    ampB: 0.567,\n    freqR: 3,\n    freqB: 4,\n    phaseR: 0.915,\n    phaseG: 0.428,\n    phaseB: 0.337,\n    rotation: fwd,\n    repeat: 0.46,\n    offset: 0.83,\n    alpha: 0.988\n  )\n  .lighting(\n    normalStrength: 0.99,\n    smoothing: 4.2,\n    reflection: 17.4,\n    refraction: 14.2,\n    aberration: 17\n  )\n  .subchain(name: \"lens effects\", id: \"9amq\") {\n    .prismaticAberration(\n      aberration: 100,\n      modulate: true,\n      hueRange: 100,\n      saturation: -100\n    )\n    .bloom(\n      threshold: 0.45,\n      intensity: 0.7,\n      taps: 33\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.18, alpha: 0.77)\n  }\n  .write(o0)\n\ngabor(\n  scale: 66.82,\n  orientation: -79.79,\n  bandwidth: 68.83,\n  isotropy: 8.76,\n  density: 5,\n  octaves: 2,\n  speed: 5,\n  seed: 47\n)\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "bcNzTw",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776226454443,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "warp flow",
+    "tagline": "highs drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.saw)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\nlet highsReact = audio(band: 2, min: -70, max: -140)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 1,\n  loopOffset: verticalScan,\n  loopScale: 100,\n  speed: highsReact\n)\n  .seamless(repeat: 1)\n  .translate(y: osc1)\n  .posterize(\n    levels: 16,\n    gamma: 0.7,\n    _skip: true\n  )\n  .wormhole(\n    kink: 0.1,\n    stride: 2,\n    rotation: -22\n  )\n  .edge(\n    size: kernel7x7,\n    amount: 500,\n    mix: 0\n  )\n  .subchain(name: \"feedback loop with warp\", id: \"dqq0\") {\n    .loopBegin(alpha: 89.83, intensity: 81.01)\n    .warp(\n      strength: 100,\n      scale: 0.25,\n      speed: 1,\n      wrap: repeat\n    )\n    .loopEnd()\n  }\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 13.6, passthru: 74.69)\n    .crt(alpha: 0.57)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.11,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.72)\n    .motionBlur()\n    .smooth()\n  }\n  .adjust(\n    rotation: 104.08,\n    hueRange: 57.93,\n    saturation: 0.87,\n    brightness: 0.9,\n    contrast: 0.77\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "UQMtLA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776225065519,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "city of the future",
+    "tagline": "bass drives the speed",
+    "tint": "#a78bfa",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\nlet bassReact = audio(band: 0, min: 1.5, max: 11)\n\ncell(\n  shape: diamond,\n  scale: osc2,\n  cellScale: 89.85,\n  cellSmooth: 100,\n  variation: 100,\n  speed: bassReact,\n  seed: 41\n)\n  .seamless(blend: 0.17, repeat: 1)\n  .translate(y: osc1)\n  .posterize(levels: 32)\n  .wormhole(\n    kink: 0.1,\n    rotation: -22,\n    alpha: 0.33\n  )\n  .edge(\n    size: kernel7x7,\n    channel: luminance,\n    amount: 500,\n    threshold: 54.55\n  )\n  .tetraColorArray(\n    colorCount: 3,\n    color0: #f9f8fd,\n    color1: #3ac28a,\n    color2: #f89b71,\n    color3: #69cdfd,\n    color4: #1cc78c,\n    color5: #9d533d,\n    color6: #8a6b33,\n    color7: #aca83c,\n    rotation: back,\n    repeat: 5,\n    offset: 0.776,\n    alpha: 0.55,\n    smoothness: 0.754\n  )\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.27,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.72)\n    .motionBlur()\n    .smooth()\n  }\n  .adjust(saturation: 0.83, contrast: 0.82)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Rz2C9g",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776221927978,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "retro",
+    "tagline": "still composition · no audio binding",
+    "tint": "#fb923c",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "static"
+    ],
+    "dsl": "search filter, synth\n\nshape(\n  loopAOffset: noiseBSpline4x4,\n  loopBOffset: noiseBSpline4x4,\n  loopBScale: 100,\n  speedA: -100,\n  speedB: 100,\n  seed: 50\n)\n  .historicPalette(\n    index: popArt,\n    rotation: fwd,\n    repeat: 2\n  )\n  .edge(\n    size: kernel7x7,\n    channel: luminance,\n    amount: 495.33,\n    invert: on,\n    blend: multiply\n  )\n  .adjust(\n    saturation: 0.74,\n    brightness: 0.74,\n    contrast: 0.68\n  )\n  .grain(alpha: 0.19)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "pMu1Gg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776122442158,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "squirmy automatons",
+    "tagline": "highs drives the speed",
+    "tint": "#22d3ee",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth\nlet highsReact = audio(band: 2, min: 13.111, max: 26.222)\n\ncellularAutomata(\n  zoom: x64,\n  ruleIndex: size34Life,\n  smoothing: bSpline4x4,\n  speed: highsReact\n)\n  .ridge()\n  .tetraCosine(\n    offsetR: 0.489,\n    offsetG: 0.397,\n    offsetB: 0.377,\n    ampR: 0.353,\n    ampG: 0.258,\n    ampB: 0.208,\n    phaseR: 0.448,\n    phaseG: 0.15,\n    phaseB: 0.971,\n    rotation: fwd\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 3.8,\n    specularIntensity: 1.25,\n    shininess: 256\n  )\n  .texture(\n    mode: crosshatch,\n    alpha: 1,\n    scale: 1.3\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "0TxrwQ",
+      "username": "Jess Hewitt",
+      "app": "noisedeck",
+      "createdAt": 1776117431146,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "electroquilt",
+    "tagline": "mids drives the rotation",
+    "tint": "#f43f5e",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth\nlet midsReact = audio(band: 1, min: 33.75, max: 114.75)\n\nbitwise(\n  scale: 67.462,\n  seed: 57,\n  colorMode: hsv,\n  colorOffset: 42\n)\n  .tetraCosine(\n    colorMode: hsv,\n    offsetR: 0.432,\n    offsetG: 0.713,\n    offsetB: 0.386,\n    ampR: 0.708,\n    ampG: 0.847,\n    ampB: 0.491,\n    freqR: 4,\n    freqG: 0,\n    freqB: 2,\n    phaseR: 0.248,\n    phaseG: 0.213,\n    phaseB: 0.438,\n    rotation: fwd,\n    repeat: 4,\n    offset: 0.489,\n    alpha: 0.628\n  )\n  .edge(\n    kernel: fine,\n    amount: 235.25,\n    blend: darken\n  )\n  .scroll(speedY: -1)\n  .rotate(rotation: midsReact)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "Rm65Zw",
+      "username": "Jess Hewitt",
+      "app": "noisedeck",
+      "createdAt": 1776116187806,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "living glop",
+    "tagline": "mids drives the speed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search filter, synth\nlet midsReact = audio(band: 1, min: 44.679, max: 151.91)\n\nmnca(\n  tex: read(o1),\n  zoom: x16,\n  smoothing: bSpline4x4,\n  speed: midsReact,\n  weight: 30.71,\n  n1v1: 38.46,\n  n1r1: 29.363,\n  n1v2: 65.617,\n  n1r2: 56.029,\n  n1v3: 45.66,\n  n1r3: 78.463,\n  n1v4: 24.863,\n  n1r4: 64.73,\n  n2v1: 93.195,\n  n2r1: 66.04,\n  n2v2: 37.783,\n  n2r2: 50.28\n)\n  .tetraCosine(\n    colorMode: oklab,\n    offsetR: 0.156,\n    offsetG: 0.462,\n    offsetB: 0.484,\n    ampR: 0.342,\n    ampG: 0.95,\n    ampB: 0.322,\n    freqR: 2,\n    freqG: 4,\n    freqB: 0,\n    phaseR: 0.465,\n    phaseG: 0.972,\n    phaseB: 0.592,\n    repeat: 4.8,\n    alpha: 0.43\n  )\n  .lighting(normalStrength: 1.21, smoothing: 4.7)\n  .write(o0)\n\ngabor(\n  orientation: -47.7,\n  isotropy: 31.02,\n  density: 5,\n  speed: 5\n)\n  .write(o1)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "VzWBfA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776097220113,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "teh matrex haz u",
+    "tagline": "bass drives the speed",
+    "tint": "#84cc16",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sine)\nlet bassReact = audio(band: 0, min: 30, max: 220)\n\nfrom(classicNoisedeck, noise(\n  xScale: 1,\n  yScale: 100,\n  loopScale: 99.97,\n  speed: bassReact\n))\n  .adjust(\n    mode: hsv,\n    rotation: 120,\n    hueRange: 15.64,\n    saturation: 1.34,\n    brightness: 0.78,\n    contrast: 0.83\n  )\n  .glyphMap(cellSize: 22)\n  .subchain(name: \"lens effects\", id: \"dsgd\") {\n    .snow(alpha: 1, density: 14.89)\n    .corrupt(\n      intensity: 0.24,\n      bandHeight: 44.31,\n      sort: 42.78,\n      shift: 14.16,\n      channelShift: 19.438,\n      melt: 29.88,\n      scatter: 13.36,\n      bits: 34.95,\n      seed: 64\n    )\n    .motionBlur()\n    .degauss(displacement: 0.013)\n    .chromaticAberration(aberration: 21.52)\n    .crt(\n      alpha: 0.51,\n      speed: 5,\n      seed: 23\n    )\n    .bloom(taps: 15)\n    .lens(displacement: osc1)\n    .vignette(brightness: 0.2, alpha: 0.88)\n  }\n  .adjust(brightness: 0.95, contrast: 0.61)\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "QtmhUg",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776092604467,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "wacky noodles",
+    "tagline": "bass drives the speed",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search mixer, synth, filter\nlet bassReact = audio(band: 0, min: 4.5, max: 33)\n\ncell(\n  scale: 87.83,\n  cellScale: 100,\n  cellSmooth: 100,\n  variation: 100,\n  seed: 41\n)\n  .palette(\n    index: grayscale,\n    rotation: fwd,\n    alpha: 0.29\n  )\n  .write(o0)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 36,\n  ridges: true,\n  loopOffset: horizontalScan,\n  loopScale: 76.35,\n  speed: bassReact,\n  colorMode: mono\n)\n  .tetraCosine(\n    colorMode: oklch,\n    offsetR: 0.814,\n    offsetG: 0.572,\n    offsetB: 0.229,\n    ampR: 0.731,\n    ampG: 0.638,\n    ampB: 0.727,\n    freqG: 3,\n    freqB: 4,\n    phaseR: 0.855,\n    phaseG: 0.469,\n    phaseB: 0.065,\n    rotation: fwd,\n    repeat: 5,\n    offset: 0.83,\n    alpha: 0.955\n  )\n  .distortion(\n    tex: read(o0),\n    mode: reflect,\n    intensity: 36.31,\n    wrap: clamp,\n    smoothing: 33.63,\n    aberration: 2.51,\n    antialias: true\n  )\n  .lighting(normalStrength: 0.73, smoothing: 3.6)\n  .write(o1)\n\nrender(o1)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "8MrfWA",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1776023670521,
+      "importedAt": 1779766246551
+    }
+  },
+  {
+    "title": "brane folds",
+    "tagline": "bass drives the speed",
+    "tint": "#ff5fc0",
+    "tags": [
+      "imported",
+      "noisedeck",
+      "reactive"
+    ],
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\nlet bassReact = audio(band: 0, min: 3.822, max: 28.028)\n\nperlin(scale: 30.81, ridges: true)\n  .kaleido(\n    sides: 13,\n    metric: square,\n    loopOffset: square,\n    loopScale: 20.11,\n    speed: bassReact,\n    direction: clockwise,\n    _skip: true\n  )\n  .subchain(name: \"particle lenia\", id: \"1eyj\") {\n    .pointsEmit(attrition: 3.38)\n    .lenia(\n      muK: 16.5,\n      sigmaK: 7.6,\n      searchRadius: 20,\n      depositAmount: 3.4\n    )\n    .flow(\n      behavior: chaotic,\n      stride: 50,\n      strideDeviation: 0,\n      kink: 5.8\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 47.95,\n      inputIntensity: 31.32\n    )\n  }\n  .blur(radiusX: 12, radiusY: 12)\n  .adjust(mode: hsv, rotation: 22.94)\n  .lighting(\n    normalStrength: 3.36,\n    smoothing: 9.8,\n    reflection: 16.9,\n    refraction: 13.9,\n    aberration: 17.7\n  )\n  .adjust(\n    hueRange: 200,\n    saturation: 1.78,\n    brightness: 1.53,\n    contrast: 0.62\n  )\n  .write(o0)\n\nrender(o0)",
+    "source": {
+      "feed": "noiseblaster",
+      "code": "KLlH1A",
+      "username": "aayars",
+      "app": "noisedeck",
+      "createdAt": 1775924882644,
+      "importedAt": 1779766246551
+    }
   }
 ]
