@@ -162,12 +162,11 @@ export class MixerRenderer {
     }
 
     _driverValue(mixer, xfade) {
-        // Map xfade∈[0,1] into the driver param's natural range. The
-        // recompile path uses these via dslArgs(); the fast-path
-        // setMix() must produce the SAME number or the slider jumps
-        // when a real recompile next fires.
-        const [lo, hi] = mixer.driverRange || [0, 1]
-        return lo + (hi - lo) * xfade
+        // Defer to the mixer's driverFormula — the same function the
+        // recompile path uses via buildDslArgs(). Keeping the two
+        // paths on the same code is what stops the slider from
+        // jumping when a real recompile next fires.
+        return mixer.driverFormula(xfade)
     }
 
     _scheduleRecompile() {
@@ -196,11 +195,21 @@ export class MixerRenderer {
             return
         }
         this._refreshStepIndices()
-        // The new pipeline has fresh media steps with no imageSize set
-        // — must push it again on the next frame, even if the deck
-        // buffer dimensions haven't changed. Clear the cache so the
-        // dirty check in _setImageSize doesn't silently no-op.
+        // Push imageSize into the new pipeline's media steps NOW —
+        // before the first frame renders. The per-frame
+        // _uploadDeckFrames tick will eventually re-push, but if the
+        // pipeline gets a chance to render even one frame with the
+        // default imageSize (0,0 or 1,1), the texture sampler treats
+        // the canvas as the wrong aspect and the user sees a jitter
+        // every time they tweak a mixer control. Clearing the cache
+        // here forces the synchronous write below to land.
         this._lastImageSize = {}
+        if (this._mediaStepA != null) {
+            this._setImageSize(this._mediaStepA, this.width, this.height)
+        }
+        if (this._mediaStepB != null) {
+            this._setImageSize(this._mediaStepB, this.width, this.height)
+        }
         if (!this.renderer.isRunning) this.renderer.start()
     }
 

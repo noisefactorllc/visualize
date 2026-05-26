@@ -1744,6 +1744,9 @@ kbd {
 
 .mixer-controls[hidden] { display: none; }
 
+/* 2-column row: label | control. Control is either a slider-value
+   (which we flex inline so the value-display sits next to the
+   slider, not below it on a new row) or a select-dropdown. */
 .mixer-control-row {
     display: grid;
     grid-template-columns: 5.5em 1fr;
@@ -1764,10 +1767,37 @@ kbd {
     text-overflow: ellipsis;
 }
 
-.mixer-control-row slider-value,
+/* Flatten slider-value's stacked children (slider track + value-
+   display) into a single horizontal row. Without this they stack
+   vertically and the value appears on a new line below the slider. */
+.mixer-control-row slider-value {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
+    min-width: 0;
+    width: 100%;
+}
+.mixer-control-row slider-value .slider,
+.mixer-control-row slider-value input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.mixer-control-row slider-value .value-display {
+    flex: 0 0 auto;
+    min-width: 3em;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-dim);
+    text-align: right;
+}
+
+/* Select-dropdown gets a visibly distinct fill from the panel bg
+   so it reads as an interactive control rather than blending in. */
 .mixer-control-row select-dropdown {
     min-width: 0;
     width: 100%;
+    background: var(--hf-bg-base);
+    border-radius: var(--hf-radius-sm);
 }
 
 .mixer-control-disabled {
