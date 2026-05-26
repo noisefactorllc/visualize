@@ -1,0 +1,53 @@
+name: Deploy
+
+# Scaffold is the sole authority for visualize deploys. This workflow
+# just fires the workflow_dispatch at scaffold's static-site-release,
+# which clones this repo at the pushed SHA, stages a clean tree
+# (index.html + css/ + js/ + data/), writes deployment-meta.json, and
+# rsyncs to ~/sites/visualize.noisedeck.app/content on nf-toronto.
+#
+# Keeping the SSH key + server IP on the scaffold side means this
+# public repo carries no deploy secrets — only the EHSRE app private
+# key, which is scoped to dispatching scaffold workflows.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/**'
+      - 'data/**'
+      - '.github/workflows/deploy.yml'
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  trigger-scaffold-release:
+    name: Dispatch scaffold static-site-release
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Mint scaffold GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: 2959521
+          private-key: ${{ secrets.EHSRE_APP_PRIVATE_KEY }}
+          owner: noisefactorllc
+          repositories: scaffold
+
+      - name: Dispatch scaffold static-site-release for visualize
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh workflow run static-site-release.yml \
+            --repo noisefactorllc/scaffold \
+            --ref main \
+            -f site=visualize \
+            -f sha=${{ github.sha }}
+          echo "Dispatched scaffold static-site-release for visualize @ ${{ github.sha }}"
