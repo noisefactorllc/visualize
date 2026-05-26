@@ -487,17 +487,15 @@ async function boot() {
     wireDensityButtons()
 
     /**
-     * Populate + wire the mixer-effect dropdown (+ per-effect "mode"
-     * sub-dropdown for blendMode-style effects). Called from the
-     * mixer.init() chain above, after the mixer has compiled its
-     * default pipeline.
+     * Populate + wire the mixer-effect dropdown. Per-effect mode
+     * (e.g. blend's blendMode param) is now exposed by the
+     * MixerControls panel like any other parameter, so the old
+     * sibling #mixer-mode dropdown was retired.
      */
     function wireMixerPicker(mixer) {
         const sel = $('mixer-effect')
-        const modeSel = $('mixer-mode')
-        if (!sel || !modeSel) return
+        if (!sel) return
 
-        // Populate effect dropdown from the registry
         sel.innerHTML = ''
         for (const m of MIXERS) {
             const opt = document.createElement('option')
@@ -507,25 +505,6 @@ async function boot() {
         }
         sel.value = mixer.currentMixer.id
 
-        function refreshModeDropdown() {
-            const m = mixer.currentMixer
-            if (!m.modes) {
-                modeSel.hidden = true
-                modeSel.innerHTML = ''
-                return
-            }
-            modeSel.hidden = false
-            modeSel.innerHTML = ''
-            for (const mode of m.modes) {
-                const opt = document.createElement('option')
-                opt.value = mode
-                opt.textContent = mode
-                modeSel.appendChild(opt)
-            }
-            modeSel.value = mixer._currentOverrides.mode || m.defaults.mode || m.modes[0]
-        }
-        refreshModeDropdown()
-
         function persist() {
             const m = mixer.currentMixer
             const payload = { id: m.id, overrides: { ...mixer._currentOverrides } }
@@ -534,13 +513,6 @@ async function boot() {
 
         sel.addEventListener('change', async () => {
             await mixer.setMixerEffect(sel.value)
-            refreshModeDropdown()
-            mixerControlsPanel?.show(mixer.currentMixer.id)
-            persist()
-        })
-
-        modeSel.addEventListener('change', async () => {
-            await mixer.setMixerEffect(mixer.currentMixer.id, { ...mixer._currentOverrides, mode: modeSel.value })
             mixerControlsPanel?.show(mixer.currentMixer.id)
             persist()
         })

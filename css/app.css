@@ -1191,7 +1191,6 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
 }
 .mixer-select:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
 .mixer-select:focus { outline: none; border-color: var(--hf-accent); }
-.mixer-mode { color: var(--hf-text-dim); }
 
 .xfader-wrap {
     display: grid;
