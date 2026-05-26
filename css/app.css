@@ -339,6 +339,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 
 #library-search {
     flex: 1 1 auto;
+    min-width: 0;             /* don't grow past the narrow column */
+    width: 100%;
     background: var(--hf-bg-base);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     color: var(--hf-text-normal);
