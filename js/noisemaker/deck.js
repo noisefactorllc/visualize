@@ -19,6 +19,37 @@ import {
     extractEffectNamesFromDsl
 } from './bundle.js'
 
+/**
+ * Effect-namespace + tag heuristics for "compute-heavy" programs that
+ * should auto-step-down their pixel density. Exposed as a module-level
+ * pure function so the app's loadProgram path can ask "is this heavy?"
+ * before the deck even compiles it.
+ *
+ *  - Anything in the points/* namespace runs a per-particle simulation
+ *    every frame.
+ *  - Effects tagged "sim" in the noisemaker manifest do per-pixel state
+ *    evolution (cellular automata, reaction-diffusion, MNCA, etc.) and
+ *    grow quadratically in cost with buffer size.
+ *
+ * Pass the renderer's manifest in for sim-tag lookup; effectIds alone
+ * are enough to catch the points namespace.
+ */
+export function isHeavyDsl(dsl, manifest = {}) {
+    let effects
+    try {
+        effects = extractEffectNamesFromDsl(dsl, manifest)
+    } catch {
+        return false
+    }
+    for (const e of effects) {
+        const id = e.effectId || ''
+        if (id.startsWith('points/')) return true
+        const tags = manifest[id]?.tags || []
+        if (tags.includes('sim')) return true
+    }
+    return false
+}
+
 function hexToRgb(hex) {
     const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
     return m ? [
@@ -56,6 +87,31 @@ export class Deck {
         this._currentDsl = ''
         this._currentName = ''
         this._speed = 1
+        this._pixelDensity = 1.0    // 1.0 = full mainRes; 0.5 = half-res buffer upscaled
+    }
+
+    get pixelDensity() { return this._pixelDensity }
+
+    /**
+     * Set the render-buffer scale. 1.0 keeps the buffer at the deck's
+     * logical width/height; 0.5 halves it (¼ the pixel work) and lets
+     * the canvas display CSS upscale to fit the deck container. Use to
+     * keep heavy programs (points/* simulations, MNCA, reaction-
+     * diffusion) playable on modest GPUs.
+     *
+     * Logical (mainRes-aligned) width/height stay unchanged so the
+     * compositor + recording paths keep working at full resolution; only
+     * the underlying renderer's buffer shrinks.
+     */
+    setPixelDensity(density) {
+        const clamped = Math.max(0.1, Math.min(1.0, density))
+        if (clamped === this._pixelDensity) return
+        this._pixelDensity = clamped
+        const bufW = Math.max(1, Math.round(this.width * clamped))
+        const bufH = Math.max(1, Math.round(this.height * clamped))
+        this.canvas.width = bufW
+        this.canvas.height = bufH
+        this._renderer.resize(bufW, bufH)
     }
 
     get inner() { return this._renderer }
@@ -148,9 +204,11 @@ export class Deck {
     resize(width, height) {
         this.width = width
         this.height = height
-        this.canvas.width = width
-        this.canvas.height = height
-        this._renderer.resize(width, height)
+        const bufW = Math.max(1, Math.round(width * this._pixelDensity))
+        const bufH = Math.max(1, Math.round(height * this._pixelDensity))
+        this.canvas.width = bufW
+        this.canvas.height = bufH
+        this._renderer.resize(bufW, bufH)
     }
 
     dispose() {

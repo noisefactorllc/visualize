@@ -589,6 +589,31 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     border-color: var(--hf-accent);
 }
 
+/* Pixel-density button: cycles AUTO → 100% → 75% → 50% → 25%. Label
+   shows "auto 100%" / "auto 50%" / etc when auto-deciding; plain
+   "75%" / "25%" / etc when the user has pinned a manual override.
+   Border tint shifts amber when auto-stepped-down so the user can see
+   at a glance that the deck dropped to a lower buffer. */
+.deck-density {
+    appearance: none;
+    background: transparent;
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    color: var(--hf-text-dim);
+    border-radius: var(--hf-radius-sm);
+    height: 32px;
+    padding: 0 8px;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: var(--hf-transition-color), var(--hf-transition-border);
+}
+.deck-density:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-density[data-mode="manual"] {
+    color: var(--hf-text-bright);
+    border-color: color-mix(in srgb, var(--hf-accent) 60%, transparent);
+}
+
 .deck-canvas-wrap {
     position: relative;
     background: var(--hf-bg-base);

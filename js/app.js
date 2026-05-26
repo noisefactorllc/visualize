@@ -12,7 +12,7 @@
  *   4. Start compositor + scheduler. Audio/MIDI stay opt-in (settings).
  */
 
-import { Deck } from './noisemaker/deck.js'
+import { Deck, isHeavyDsl } from './noisemaker/deck.js'
 import { SharedAudio } from './audio.js'
 import { SharedMidi } from './midi.js'
 import { BeatScheduler } from './bpm.js'
@@ -39,7 +39,24 @@ const state = {
     mainRes: { width: 1280, height: 720 },
     loopDuration: 10,
     preferWebGPU: false,
-    crossfade: 0
+    crossfade: 0,
+    // Per-deck pixel density. `mode='auto'` lets loadProgram choose
+    // (drops to 0.5 for compute-heavy DSLs); `mode='manual'` pins to
+    // the user's chosen value across loads. `value` is whichever is
+    // currently applied to the underlying renderer.
+    deckDensity: {
+        A: { mode: 'auto', value: 1.0 },
+        B: { mode: 'auto', value: 1.0 }
+    }
+}
+
+// Cycle order for the deck-density button. AUTO → 100 → 75 → 50 → 25 → AUTO.
+const DENSITY_CYCLE = ['auto', 1.0, 0.75, 0.5, 0.25]
+function nextDensity(curMode, curValue) {
+    if (curMode === 'auto') return { mode: 'manual', value: 1.0 }
+    const idx = DENSITY_CYCLE.indexOf(curValue)
+    const next = idx === -1 || idx >= DENSITY_CYCLE.length - 1 ? 'auto' : DENSITY_CYCLE[idx + 1]
+    return next === 'auto' ? { mode: 'auto', value: 1.0 } : { mode: 'manual', value: next }
 }
 
 function toast(msg, timeoutMs = 2200) {
@@ -355,6 +372,20 @@ async function boot() {
     async function loadProgram(deckId, program) {
         if (!program) return
         const deck = state.decks[deckId]
+
+        // Pixel density auto-step-down: any DSL that invokes points/* or
+        // sim-tagged effects (cellular automata, reaction-diffusion,
+        // MNCA, etc.) gets a half-res render buffer so it stays playable
+        // alongside the other deck. Honored only in 'auto' mode; manual
+        // density choices stick across loads.
+        const density = state.deckDensity[deckId]
+        if (density.mode === 'auto') {
+            const heavy = isHeavyDsl(program.dsl, deck._renderer.manifest)
+            density.value = heavy ? 0.5 : 1.0
+        }
+        deck.setPixelDensity(density.value)
+        updateDensityButton(deckId)
+
         const res = await deck.load(program.dsl, program.title)
         if (!res.success) {
             toast(`${deckId}: ${res.error.slice(0, 60)}`)
@@ -373,6 +404,46 @@ async function boot() {
         // the previous program's DSL.
         syncDeckEditor(deckId)
     }
+
+    function updateDensityButton(deckId) {
+        const btn = $(`deck-${deckId.toLowerCase()}-density`)
+        if (!btn) return
+        const d = state.deckDensity[deckId]
+        const label = btn.querySelector('.density-value')
+        const pct = `${Math.round(d.value * 100)}%`
+        if (d.mode === 'auto') {
+            label.textContent = `auto ${pct}`
+            btn.dataset.mode = 'auto'
+        } else {
+            label.textContent = pct
+            btn.dataset.mode = 'manual'
+        }
+    }
+
+    function wireDensityButtons() {
+        for (const deckId of ['A', 'B']) {
+            const btn = $(`deck-${deckId.toLowerCase()}-density`)
+            if (!btn) continue
+            btn.addEventListener('click', () => {
+                const cur = state.deckDensity[deckId]
+                const next = nextDensity(cur.mode, cur.value)
+                state.deckDensity[deckId] = next
+
+                // For auto mode, re-classify against the currently
+                // loaded DSL; for manual, just apply the chosen value.
+                if (next.mode === 'auto') {
+                    const dsl = state.deckDsl[deckId]
+                    const heavy = dsl && isHeavyDsl(dsl, state.decks[deckId]._renderer.manifest)
+                    next.value = heavy ? 0.5 : 1.0
+                }
+                state.decks[deckId].setPixelDensity(next.value)
+                updateDensityButton(deckId)
+                toast(`Deck ${deckId} pixel density: ${next.mode === 'auto' ? 'auto ' : ''}${Math.round(next.value * 100)}%`, 1400)
+            })
+            updateDensityButton(deckId)
+        }
+    }
+    wireDensityButtons()
 
     /** Wire the per-deck DSL editor toggle, hot reload, and Cmd+Enter. */
     function wireDeckEditors() {
