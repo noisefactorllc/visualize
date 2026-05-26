@@ -555,56 +555,73 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     min-height: 0;
     transition: var(--hf-transition-border);
 }
-/* Head / content / meta render *over* the absolutely-centered
-   canvas so the bg-elevated head + meta strips paint cleanly at
-   the top / bottom of the panel even when the canvas is large. */
-.deck-head, .deck-content, .deck-meta { position: relative; z-index: 1; }
+/* Head / content / footer render *over* the absolutely-centered
+   canvas so the bg-elevated strips paint cleanly at the top /
+   bottom of the panel even when the canvas is large. */
+.deck-head, .deck-content, .deck-footer { position: relative; z-index: 1; }
 
 /* Decks display their identity in the small label badge; no whole-panel
    color theming. Live indicator just tints the panel border. */
 .deck.live { border-color: var(--hf-accent); }
 
-/* Two-row deck head: row 1 = identity (label + program name with
-   room to breathe), row 2 = action buttons (density, edit, shuffle).
-   Single-row was truncating the program name and clipping the
-   shuffle button at the narrower deck-column widths the 1fr 2fr 1fr
-   stage grid gives us. */
+/* Deck head: just action buttons. Identity + tagline moved to
+   .deck-footer at the bottom of the column (styled like the
+   library's panel-head label rail). Zoom on the left, the other
+   two action buttons on the right. */
 .deck-head {
-    display: grid;
-    grid-template-rows: auto auto;
-    gap: var(--hf-space-1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding: var(--hf-space-2) var(--hf-space-3);
-    border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
     font-family: var(--hf-font-family-mono);
 }
 
-.deck-head-identity {
+.deck-head-left,
+.deck-head-right {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
+}
+
+/* DECK A / DECK B identity badges + program name, in the *footer*
+   strip at the bottom of each deck panel. Matches the library
+   panel-head feel — uppercase, small, mono, dim — so the same
+   visual language runs left-to-right across the workspace. */
+.deck-footer {
+    background: var(--hf-bg-elevated);
+    padding: var(--hf-space-2) var(--hf-space-3);
+    font-family: var(--hf-font-family-mono);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.deck-footer-row {
     display: flex;
     align-items: center;
     gap: var(--hf-space-2);
     min-width: 0;
 }
 
-.deck-head-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-1);
-    justify-content: flex-end;
-}
-
 .deck-label {
+    flex: 0 0 auto;
     font-size: var(--hf-size-xs);
     font-weight: var(--hf-weight-bold);
     letter-spacing: var(--hf-tracking-wide);
-    color: var(--hf-text-bright);
+    text-transform: uppercase;
+    color: var(--hf-text-dim);
 }
 /* Subtle deck identity — left/right also distinguishes them by position */
 .deck-a .deck-label { color: var(--hf-blue); }
 .deck-b .deck-label { color: var(--hf-red); }
 
 .deck-program {
-    flex: 1;
-    font-size: var(--hf-size-sm);
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: var(--hf-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: var(--hf-text-normal);
     overflow: hidden;
     white-space: nowrap;
@@ -612,7 +629,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 .deck-load-random,
-.deck-edit-toggle {
+.deck-edit-toggle,
+.deck-zoom {
     appearance: none;
     background: transparent;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
@@ -625,7 +643,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     transition: var(--hf-transition-color), var(--hf-transition-border);
 }
 .deck-load-random:hover,
-.deck-edit-toggle:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-edit-toggle:hover,
+.deck-zoom:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
 .deck-edit-toggle.active {
     color: var(--hf-bg-base);
     background: var(--hf-accent);
@@ -643,11 +662,12 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     color: var(--hf-text-dim);
     border-radius: var(--hf-radius-sm);
-    height: 32px;
-    padding: 0 8px;
+    flex: 0 0 auto;
+    padding: 1px 6px;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     letter-spacing: 0.04em;
+    text-transform: uppercase;
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
 }
@@ -746,15 +766,14 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     padding: 0 0.15em;
 }
 
-.deck-meta {
-    padding: var(--hf-space-1) var(--hf-space-3);
-    border-top: var(--hf-border-width) solid var(--hf-border-subtle);
-    min-height: 28px;
-}
-
 .deck-tagline {
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);
+    text-transform: lowercase;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* ─────────────── main ─────────────── */
@@ -1863,7 +1882,7 @@ kbd {
 .library-footer,
 .main-head,
 .main-fx,
-.deck-meta {
+.deck-footer {
     background: var(--hf-bg-elevated);
 }
 
@@ -1887,6 +1906,7 @@ button.status-pill:hover,
 .deck-edit-toggle:hover,
 .deck-density:hover,
 .deck-load-random:hover,
+.deck-zoom:hover,
 .fx-button:hover,
 .big-toggle:hover,
 .quick-cut:hover,

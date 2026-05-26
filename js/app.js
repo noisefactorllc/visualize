@@ -745,6 +745,21 @@ async function boot() {
     $('record-toggle').addEventListener('click', () => recorder.toggle())
     $('output-window').addEventListener('click', () => outputWin.toggle())
 
+    // Per-deck zoom — request fullscreen on the deck panel so the
+    // user can see one deck's output at full size (independent of
+    // the main fullscreen which puts the mixer output on screen).
+    document.querySelectorAll('.deck-zoom').forEach(btn => {
+        const deck = btn.closest('.deck')
+        btn.addEventListener('click', () => {
+            const target = deck.querySelector('.deck-canvas-wrap')
+            if (!document.fullscreenElement) {
+                target?.requestFullscreen?.().catch(() => {})
+            } else {
+                document.exitFullscreen?.()
+            }
+        })
+    })
+
     // Fullscreen
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
     document.addEventListener('fullscreenchange', () => {
