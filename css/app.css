@@ -1038,26 +1038,33 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     text-align: right;
 }
 
-input[type="range"] {
+/* Range-input styling for OUR direct sliders (speed A/B, crossfader,
+   audio sensitivity). Scoped with :not(.slider) so the rules don't
+   leak into the handfish <slider-value> custom element's internal
+   input.slider — that one is owned by the handfish bundle's
+   injected CSS and we don't override its track / thumb metrics.
+   (Mixing our 22px / -8px-margin thumb with handfish's 14px track
+   was why the mixer-controls knobs floated above the slider line.) */
+input[type="range"]:not(.slider) {
     appearance: none;
     background: transparent;
     cursor: pointer;
 }
 
-input[type="range"]::-webkit-slider-runnable-track {
+input[type="range"]:not(.slider)::-webkit-slider-runnable-track {
     height: 6px;
     background: var(--hf-bg-base);
     border-radius: 3px;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
 }
-input[type="range"]::-moz-range-track {
+input[type="range"]:not(.slider)::-moz-range-track {
     height: 6px;
     background: var(--hf-bg-base);
     border-radius: 3px;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
 }
 
-input[type="range"]::-webkit-slider-thumb {
+input[type="range"]:not(.slider)::-webkit-slider-thumb {
     -webkit-appearance: none;
     width: 22px;
     height: 22px;
@@ -1068,7 +1075,7 @@ input[type="range"]::-webkit-slider-thumb {
     cursor: grab;
     transition: background 0.1s ease;
 }
-input[type="range"]::-moz-range-thumb {
+input[type="range"]:not(.slider)::-moz-range-thumb {
     width: 22px;
     height: 22px;
     border-radius: var(--hf-radius-full);
@@ -1077,8 +1084,8 @@ input[type="range"]::-moz-range-thumb {
     cursor: grab;
 }
 
-input[type="range"]:hover::-webkit-slider-thumb { background: var(--hf-accent); }
-input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
+input[type="range"]:not(.slider):hover::-webkit-slider-thumb { background: var(--hf-accent); }
+input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing; }
 
 .big-toggle {
     appearance: none;
@@ -1811,13 +1818,10 @@ kbd {
     min-width: 0;
 }
 
-/* Reset the global -8px thumb offset that's tuned for our taller
-   speed/crossfader sliders. The handfish slider-value's internal
-   track is only ~7px tall, so margin-top:-8px would lift the thumb
-   well above the track. Setting it to 0 lets the thumb sit centered
-   on the track. */
-.mixer-control-row slider-value input[type="range"]::-webkit-slider-thumb { margin-top: 0; }
-.mixer-control-row slider-value input[type="range"]::-moz-range-thumb     { margin-top: 0; }
+/* slider-value's input.slider uses handfish's own thumb + track
+   metrics straight from the injected handfish CSS — no override
+   needed here; the global `input[type="range"]:not(.slider)`
+   selector keeps our custom thumb styling out of slider-value. */
 .mixer-control-row slider-value .value-display {
     flex: 0 0 auto;
     min-width: 3em;
@@ -1898,14 +1902,17 @@ kbd {
 .deck.deck-b.live { --deck-glow-color: var(--hf-red); }
 
 .deck.live.beat-pulse {
-    animation: deck-beat-pulse 600ms ease-out;
+    animation: deck-beat-pulse 450ms ease-out;
 }
 
+/* Subtle pulse — small step up from the steady glow, decays back
+   over 450ms. Gives a gentle quarter-note throb without dominating
+   the screen. */
 @keyframes deck-beat-pulse {
     0% {
         box-shadow:
-            0 0 0 3px color-mix(in srgb, var(--deck-glow-color) 95%, transparent),
-            0 0 64px color-mix(in srgb, var(--deck-glow-color) 90%, transparent);
+            0 0 0 1px color-mix(in srgb, var(--deck-glow-color) 82%, transparent),
+            0 0 42px color-mix(in srgb, var(--deck-glow-color) 72%, transparent);
     }
     100% {
         box-shadow:
