@@ -278,67 +278,77 @@
         </main>
 
         <section class="controls">
-            <div class="controls-left">
+            <!-- Row 1: transport — the things you wiggle live during
+                 a set (speed knobs + the mixer + crossfader). -->
+            <div class="controls-transport">
                 <div class="control-group">
                     <label for="speed-a" class="control-label">speed A</label>
                     <input id="speed-a" type="range" min="0.1" max="4" step="0.1" value="1">
                     <span class="control-value" id="speed-a-val">1.0×</span>
                 </div>
-                <div class="control-group">
-                    <button id="automix-toggle" class="big-toggle" data-state="off">AUTO-VJ</button>
-                    <div class="automix-config">
-                        <label>cycle every
-                            <select id="automix-bars">
-                                <option value="4">4 bars</option>
-                                <option value="8" selected>8 bars</option>
-                                <option value="16">16 bars</option>
-                                <option value="32">32 bars</option>
-                            </select>
-                        </label>
-                        <label>fade
-                            <select id="automix-curve">
-                                <option value="linear">linear</option>
-                                <option value="dipped" selected>dipped</option>
-                                <option value="sharp">sharp</option>
-                                <option value="cut">cut</option>
-                            </select>
-                        </label>
+
+                <div class="controls-center">
+                    <div class="mixer-picker">
+                        <label for="mixer-effect" class="mixer-label">mixer</label>
+                        <select id="mixer-effect" class="mixer-select" title="Center mixer effect (noisemaker mixer/*)"></select>
+                        <select id="mixer-mode" class="mixer-select mixer-mode" title="Mode" hidden></select>
+                    </div>
+                    <div class="xfader-wrap">
+                        <span class="xfader-label-a">A</span>
+                        <input id="crossfader" type="range" min="0" max="1" step="0.001" value="0" class="xfader">
+                        <span class="xfader-label-b">B</span>
+                    </div>
+                    <div class="xfader-quick">
+                        <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
+                        <button class="quick-cut" id="auto-fade" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
+                        <button class="quick-cut" id="cut-b" title="Cut to B (C)"><span class="icon">last_page</span></button>
                     </div>
                 </div>
-            </div>
 
-            <div class="controls-center">
-                <div class="mixer-picker">
-                    <label for="mixer-effect" class="mixer-label">mixer</label>
-                    <select id="mixer-effect" class="mixer-select" title="Center mixer effect (noisemaker mixer/*)"></select>
-                    <select id="mixer-mode" class="mixer-select mixer-mode" title="Mode" hidden></select>
-                </div>
-                <div class="xfader-wrap">
-                    <span class="xfader-label-a">A</span>
-                    <input id="crossfader" type="range" min="0" max="1" step="0.001" value="0" class="xfader">
-                    <span class="xfader-label-b">B</span>
-                </div>
-                <div class="xfader-quick">
-                    <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
-                    <button class="quick-cut" id="auto-fade" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
-                    <button class="quick-cut" id="cut-b" title="Cut to B (C)"><span class="icon">last_page</span></button>
-                </div>
-            </div>
-
-            <div class="controls-right">
                 <div class="control-group">
                     <label for="speed-b" class="control-label">speed B</label>
                     <input id="speed-b" type="range" min="0.1" max="4" step="0.1" value="1">
                     <span class="control-value" id="speed-b-val">1.0×</span>
                 </div>
-                <div class="control-group rec-group">
-                    <button id="scenes-open" class="ghost-button" title="Scenes (save/recall full state)"><span class="icon">bookmark</span> scenes</button>
-                    <button id="record-toggle" class="record-button" data-state="off">
-                        <span class="record-dot"></span>
-                        <span class="record-text">REC</span>
-                        <span class="record-time" id="record-time">0:00</span>
-                    </button>
-                    <button id="output-window" class="ghost-button" title="Open output window"><span class="icon">open_in_new</span> output</button>
+            </div>
+
+            <!-- Row 2: utility — the things you set up once and leave
+                 alone (auto-VJ config, scenes, record, output). -->
+            <div class="controls-utility">
+                <div class="controls-left">
+                    <div class="control-group">
+                        <button id="automix-toggle" class="big-toggle" data-state="off">AUTO-VJ</button>
+                        <div class="automix-config">
+                            <label>cycle every
+                                <select id="automix-bars">
+                                    <option value="4">4 bars</option>
+                                    <option value="8" selected>8 bars</option>
+                                    <option value="16">16 bars</option>
+                                    <option value="32">32 bars</option>
+                                </select>
+                            </label>
+                            <label>fade
+                                <select id="automix-curve">
+                                    <option value="linear">linear</option>
+                                    <option value="dipped" selected>dipped</option>
+                                    <option value="sharp">sharp</option>
+                                    <option value="cut">cut</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="controls-right">
+                    <div class="control-group rec-group">
+                        <button id="scenes-open" class="ghost-button" title="Scenes (save/recall full state)"><span class="icon">bookmark</span> scenes</button>
+                        <button id="record-toggle" class="record-button" data-state="off">
+                            <span class="record-dot"></span>
+                            <span class="record-text">REC</span>
+                            <span class="record-time" id="record-time">0:00</span>
+                        </button>
+                        <button id="output-window" class="ghost-button" title="Open output window"><span class="icon">open_in_new</span> output</button>
+                    </div>
                 </div>
             </div>
         </section>

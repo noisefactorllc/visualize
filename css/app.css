@@ -25,7 +25,7 @@
 :root {
     /* Layout */
     --topbar-h: 72px;
-    --controls-h: 148px;
+    --controls-h: 168px;       /* two rows now */
     --library-w: 380px;
 
     /* Handfish's default size scale is tuned for dense designer dashboards;
@@ -54,10 +54,13 @@ html, body {
     display: grid;
     grid-template-columns: var(--library-w) 1fr;
     grid-template-rows: var(--topbar-h) 1fr var(--controls-h);
+    /* Library extends full-height down the left edge; topbar + stage +
+       controls all live in the right column. Right column self-aligns
+       so the controls strip sits directly under the decks. */
     grid-template-areas:
-        "top top"
+        "lib top"
         "lib stage"
-        "ctl ctl";
+        "lib ctl";
     height: 100vh;
     width: 100vw;
     gap: 0;
@@ -822,21 +825,48 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 /* ─────────────── controls bar ─────────────── */
+/* Two-row layout now that the bar is narrower (library took the left
+   column). Row 1 = transport (speed A, mixer + crossfader, speed B —
+   the things you wiggle live during a set). Row 2 = utility
+   (auto-VJ + scenes + record + output — the things you set up once
+   and leave alone for the rest of the set). */
 .controls {
     grid-area: ctl;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: var(--hf-space-3);
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 1fr;
+    grid-template-areas:
+        "transport"
+        "utility";
+    gap: var(--hf-space-2);
     padding: var(--hf-space-2) var(--hf-space-3);
-    align-items: center;
     background: var(--hf-bg-surface);
     border-top: var(--hf-border-width) solid var(--hf-border-subtle);
     z-index: 5;
 }
 
+.controls-transport {
+    grid-area: transport;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: var(--hf-space-3);
+    align-items: center;
+    min-width: 0;
+}
+
+.controls-utility {
+    grid-area: utility;
+    display: flex;
+    gap: var(--hf-space-3);
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
 .control-group { display: flex; align-items: center; gap: var(--hf-space-2); min-width: 0; }
-.controls-left { display: flex; gap: var(--hf-space-3); min-width: 0; flex-wrap: wrap; }
-.controls-right { display: flex; gap: var(--hf-space-3); justify-content: flex-end; min-width: 0; flex-wrap: wrap; }
+.controls-left { display: flex; gap: var(--hf-space-3); min-width: 0; align-items: center; flex-wrap: wrap; }
+.controls-right { display: flex; gap: var(--hf-space-3); justify-content: flex-end; min-width: 0; align-items: center; flex-wrap: wrap; }
 
 /* Constrain the speed sliders so the bottom toolbar fits a 1280px viewport
    instead of stretching to whatever flex-grow gives them. */
