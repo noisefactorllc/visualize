@@ -965,6 +965,46 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     min-width: 340px;
 }
 
+/* Mixer-effect picker: dropdown above the crossfader. Optional
+   per-effect "mode" sub-dropdown appears next to it (e.g. blendMode's
+   add/multiply/screen/…). Both styled to match the existing ghost
+   buttons so the bottom strip feels uniform. */
+.mixer-picker {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+}
+
+.mixer-label {
+    font-size: var(--hf-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--hf-text-dim);
+    font-family: var(--hf-font-family-mono);
+}
+
+.mixer-select {
+    appearance: none;
+    background: var(--hf-bg-elevated);
+    color: var(--hf-text-normal);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border-radius: var(--hf-radius-sm);
+    padding: 3px 22px 3px 8px;
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    background-image:
+        linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 9px top 50%, right 5px top 50%;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+}
+.mixer-select:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
+.mixer-select:focus { outline: none; border-color: var(--hf-accent); }
+.mixer-mode { color: var(--hf-text-dim); }
+
 .xfader-wrap {
     display: grid;
     grid-template-columns: 20px 1fr 20px;

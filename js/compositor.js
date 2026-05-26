@@ -31,6 +31,13 @@ export class MainCompositor {
         this.ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
         this.deckA = deckA
         this.deckB = deckB
+        // Optional: a MixerRenderer whose canvas already holds a blended
+        // A+B frame. When present, we drawImage from that single canvas
+        // instead of compositing the deck canvases ourselves. Falls back
+        // to the equal-power 2D xfade if absent (used during boot before
+        // the mixer is online, and as a safety net if the mixer pipeline
+        // fails to compile).
+        this.mixer = options.mixer || null
         this.width = options.width || 1280
         this.height = options.height || 720
         this.canvas.width = this.width
@@ -61,6 +68,28 @@ export class MainCompositor {
 
     setCrossfade(value01) {
         this._xfade = Math.max(0, Math.min(1, value01))
+        // Mirror the (curved) value into the mixer so its driver param
+        // tracks the slider live. Use the same curve so a 'dipped' curve
+        // still feels equal-power even through a shader mixer.
+        if (this.mixer) {
+            this.mixer.setMix(this._effectiveXfade())
+        }
+    }
+
+    /** Bind a MixerRenderer late (post-boot, once it's initialized). */
+    setMixer(mixer) {
+        this.mixer = mixer || null
+        if (this.mixer) this.mixer.setMix(this._effectiveXfade())
+    }
+
+    /** Apply the active curve to the raw xfade and return a scalar. */
+    _effectiveXfade() {
+        const curved = XFADE_CURVES[this._curve](this._xfade)
+        // dipped returns {a,b,equalPower}; convert to mix-equivalent so
+        // the mixer's mix param has a sensible 0..1 reading. Use the
+        // B-share directly as the scalar (matches what alphaB would be).
+        if (typeof curved === 'object' && curved.equalPower) return curved.b
+        return curved
     }
 
     get crossfade() { return this._xfade }
@@ -120,37 +149,37 @@ export class MainCompositor {
         ctx.fillStyle = '#000'
         ctx.fillRect(0, 0, w, h)
 
-        const result = XFADE_CURVES[this._curve](this._xfade)
-        let alphaA, alphaB
-        if (typeof result === 'object' && result.equalPower) {
-            alphaA = result.a
-            alphaB = result.b
+        // Mixer path: a MixerRenderer (third noisemaker pipeline) has
+        // already blended deck A and deck B via the user-selected mixer
+        // effect, so the compositor just blits the result. Falls back
+        // to the 2D equal-power crossfade when no mixer is wired up
+        // (during boot, or if the mixer pipeline fails to compile).
+        if (this.mixer?.canvas?.width > 0 && this.mixer.canvas.height > 0) {
+            ctx.drawImage(this.mixer.canvas, 0, 0, w, h)
         } else {
-            const t = result
-            alphaA = 1 - t
-            alphaB = t
-        }
+            const result = XFADE_CURVES[this._curve](this._xfade)
+            let alphaA, alphaB
+            if (typeof result === 'object' && result.equalPower) {
+                alphaA = result.a
+                alphaB = result.b
+            } else {
+                const t = result
+                alphaA = 1 - t
+                alphaB = t
+            }
 
-        // Draw deck A. Skip if the deck's underlying GL canvas isn't
-        // ready yet (width/height of 0 makes drawImage throw
-        // IndexSizeError in some engines, which we'd rather avoid than
-        // catch silently).
-        if (alphaA > 0.001 && this.deckA?.canvas?.width > 0 && this.deckA.canvas.height > 0) {
-            ctx.globalAlpha = alphaA
-            ctx.drawImage(this.deckA.canvas, 0, 0, w, h)
+            if (alphaA > 0.001 && this.deckA?.canvas?.width > 0 && this.deckA.canvas.height > 0) {
+                ctx.globalAlpha = alphaA
+                ctx.drawImage(this.deckA.canvas, 0, 0, w, h)
+            }
+            if (alphaB > 0.001 && this.deckB?.canvas?.width > 0 && this.deckB.canvas.height > 0) {
+                ctx.globalAlpha = alphaB
+                ctx.globalCompositeOperation = 'lighter'
+                ctx.drawImage(this.deckB.canvas, 0, 0, w, h)
+                ctx.globalCompositeOperation = 'source-over'
+            }
+            ctx.globalAlpha = 1
         }
-
-        // Draw deck B with `lighter` composite so the equal-power curve
-        // actually sums energy at xfade=0.5 (rather than averaging,
-        // which would dip in the middle).
-        if (alphaB > 0.001 && this.deckB?.canvas?.width > 0 && this.deckB.canvas.height > 0) {
-            ctx.globalAlpha = alphaB
-            ctx.globalCompositeOperation = 'lighter'
-            ctx.drawImage(this.deckB.canvas, 0, 0, w, h)
-            ctx.globalCompositeOperation = 'source-over'
-        }
-
-        ctx.globalAlpha = 1
 
         // Strobe: fires on each beat tick (see strobeBlink()) and stays
         // visible for _strobeDurMs. Frame-rate independent, so a 120-BPM

@@ -17,6 +17,7 @@ import { SharedAudio } from './audio.js'
 import { SharedMidi } from './midi.js'
 import { BeatScheduler } from './bpm.js'
 import { MainCompositor } from './compositor.js'
+import { MixerRenderer, MIXERS, DEFAULT_MIXER_ID } from './mixer.js'
 import { Library } from './library.js'
 import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
@@ -115,6 +116,17 @@ async function boot() {
         return
     }
 
+    // Mixer (third pipeline) — blends deck A + deck B through any of
+    // the noisemaker mixer/* effects. Created here, initialized
+    // asynchronously (loads manifest + media effect + default mixer);
+    // the compositor falls back to the 2D equal-power crossfade while
+    // we wait for compile.
+    const mixer = new MixerRenderer({
+        width: state.mainRes.width,
+        height: state.mainRes.height,
+    })
+    mixer.bindDecks(state.decks.A.canvas, state.decks.B.canvas)
+
     // Compositor (main)
     const compositor = new MainCompositor(
         $('main-canvas'),
@@ -123,6 +135,27 @@ async function boot() {
         { width: state.mainRes.width, height: state.mainRes.height }
     )
     compositor.start()
+
+    // Bring the mixer online in the background — manifest fetch +
+    // shader compile takes a beat, and we don't want to block the
+    // boot path on it. Once it's up, swap the compositor onto the
+    // mixer's output canvas.
+    mixer.init()
+        .then(() => {
+            // Restore last-picked mixer (and overrides) from localStorage
+            let stored = null
+            try { stored = JSON.parse(localStorage.getItem('visualize.mixer.v1') || 'null') } catch {}
+            const id = stored?.id && MIXERS.some(m => m.id === stored.id) ? stored.id : DEFAULT_MIXER_ID
+            return mixer.setMixerEffect(id, stored?.overrides || {})
+        })
+        .then(() => {
+            mixer.start()
+            compositor.setMixer(mixer)
+            wireMixerPicker(mixer)
+        })
+        .catch(err => {
+            console.warn('[mixer] init failed; staying on 2D crossfade:', err?.message || err)
+        })
 
     // Audio
     const audio = new SharedAudio()
@@ -444,6 +477,64 @@ async function boot() {
         }
     }
     wireDensityButtons()
+
+    /**
+     * Populate + wire the mixer-effect dropdown (+ per-effect "mode"
+     * sub-dropdown for blendMode-style effects). Called from the
+     * mixer.init() chain above, after the mixer has compiled its
+     * default pipeline.
+     */
+    function wireMixerPicker(mixer) {
+        const sel = $('mixer-effect')
+        const modeSel = $('mixer-mode')
+        if (!sel || !modeSel) return
+
+        // Populate effect dropdown from the registry
+        sel.innerHTML = ''
+        for (const m of MIXERS) {
+            const opt = document.createElement('option')
+            opt.value = m.id
+            opt.textContent = m.label
+            sel.appendChild(opt)
+        }
+        sel.value = mixer.currentMixer.id
+
+        function refreshModeDropdown() {
+            const m = mixer.currentMixer
+            if (!m.modes) {
+                modeSel.hidden = true
+                modeSel.innerHTML = ''
+                return
+            }
+            modeSel.hidden = false
+            modeSel.innerHTML = ''
+            for (const mode of m.modes) {
+                const opt = document.createElement('option')
+                opt.value = mode
+                opt.textContent = mode
+                modeSel.appendChild(opt)
+            }
+            modeSel.value = mixer._currentOverrides.mode || m.defaults.mode || m.modes[0]
+        }
+        refreshModeDropdown()
+
+        function persist() {
+            const m = mixer.currentMixer
+            const payload = { id: m.id, overrides: { ...mixer._currentOverrides } }
+            try { localStorage.setItem('visualize.mixer.v1', JSON.stringify(payload)) } catch {}
+        }
+
+        sel.addEventListener('change', async () => {
+            await mixer.setMixerEffect(sel.value)
+            refreshModeDropdown()
+            persist()
+        })
+
+        modeSel.addEventListener('change', async () => {
+            await mixer.setMixerEffect(mixer.currentMixer.id, { ...mixer._currentOverrides, mode: modeSel.value })
+            persist()
+        })
+    }
 
     /** Wire the per-deck DSL editor toggle, hot reload, and Cmd+Enter. */
     function wireDeckEditors() {
