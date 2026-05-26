@@ -125,18 +125,6 @@
     "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 5, max: 40)\nlet bassMix = audio(band: 0, min: -50, max: 50)\ncellNoise(colorMode: palette, speed: 1, palette: justGreen, scale: bass, cellScale: 75, smooth: 50, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(hueRange: 89, hueRotation: 27, speed: 100, loopOffset: sine, loopScale: 100, refractAmt: 49, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 65, yScale: 65, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: bassMix).write(o1)\nrender(o1)"
   },
   {
-    "title": "Bass Dot Field",
-    "tagline": "Bass refracts the noise and blends it through a dot pattern",
-    "tint": "#ffffff",
-    "tags": [
-      "reactive",
-      "bass",
-      "pattern",
-      "bright"
-    ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 0, max: 100)\nlet bassMix = audio(band: 0, min: -100, max: 100)\npattern(fgColor: #ffffff, bgColor: #000000, rotation: 0, scale: 8, type: dots, speed: 1, animation: panX).write(o0)\nnoise(hueRange: 0, hueRotation: 0, speed: 50, refractAmt: bass, ridges: true, wrap: true, xScale: 80, yScale: 80, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: hardLight, mix: bassMix).write(o1)\nrender(o1)"
-  },
-  {
     "title": "RGB Static",
     "tagline": "Bass swings the hue across the chromatic static",
     "tint": "#ff5fc0",
@@ -181,29 +169,6 @@
       "kaleido"
     ],
     "dsl": "search classicNoisedeck, synth, filter\nlet mid = audio(band: 1, min: 3, max: 12)\nnoise(hueRotation: 0, kaleido: mid, metric: circle, palette: eventHorizon, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 85, yScale: 85, octaves: 1).write(o0)\nrender(o0)"
-  },
-  {
-    "title": "Pink Static",
-    "tagline": "Bass tightens and loosens the pink-and-cyan static grain",
-    "tint": "#cc1c2d",
-    "tags": [
-      "reactive",
-      "bass",
-      "pattern",
-      "static"
-    ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 2, max: 12)\npattern(fgColor: #8145ab, bgColor: #cc1c2d, rotation: 0, scale: bass, type: dots, speed: 1, animation: panX).write(o0)\nnoise(palette: seventiesShirt, refractAmt: 83, ridges: false, type: simplex, colorMode: palette, kaleido: 1, xScale: 4, yScale: 4, octaves: 1).coalesce(tex: read(o0), blendMode: negation, mix: -10).effects(effectAmt: 3, effect: cga).write(o1)\nrender(o1)"
-  },
-  {
-    "title": "Red Bubbles",
-    "tagline": "Mids refract the bubbles into and out of focus",
-    "tint": "#ff4d5e",
-    "tags": [
-      "reactive",
-      "mid",
-      "composite"
-    ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet mid = audio(band: 1, min: 0, max: 100)\npattern(fgColor: #4a88fb, bgColor: #000000, rotation: 111, scale: 12, type: dots, speed: 1, animation: panY).write(o0)\nnoise(hueRange: 20, hueRotation: 58, speed: 78, loopOffset: noise, loopScale: 100, refractAmt: mid, wrap: true, type: catmullRom3x3, colorMode: hsv, kaleido: 1, xScale: 81, yScale: 81, octaves: 1).composite(tex: read(o0), blendMode: greenscreenBA, inputColor: #000000, mix: 4, range: 71).colorLab(colorMode: srgbDefault, dither: none, hueRange: 154, hueRotation: 0, levels: 0, palette: eventHorizon).write(o1)\nrender(o1)"
   },
   {
     "title": "Glitch Field",
