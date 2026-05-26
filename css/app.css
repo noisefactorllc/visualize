@@ -555,82 +555,44 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     min-height: 0;
     transition: var(--hf-transition-border);
 }
-/* Head / content / footer render *over* the absolutely-centered
-   canvas so the bg-elevated strips paint cleanly at the top /
-   bottom of the panel even when the canvas is large. */
-.deck-head, .deck-content, .deck-footer { position: relative; z-index: 1; }
+/* Head / content / meta render *over* the absolutely-centered
+   canvas so the bg-elevated head + meta strips paint cleanly at
+   the top / bottom of the panel even when the canvas is large. */
+.deck-head, .deck-content, .deck-meta { position: relative; z-index: 1; }
 
-/* Decks display their identity in the small label badge; no whole-panel
-   color theming. Live indicator just tints the panel border. */
-.deck.live { border-color: var(--hf-accent); }
-
-/* Deck head: just action buttons. Identity + tagline moved to
-   .deck-footer at the bottom of the column (styled like the
-   library's panel-head label rail). Zoom on the left, the other
-   two action buttons on the right. */
+/* Deck head: single row, zoom (density) button left, edit + shuffle
+   right. The DECK A / program-name / tagline identity block moved
+   to .deck-meta at the bottom so the head is just the action rail. */
 .deck-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--hf-space-2);
     padding: var(--hf-space-2) var(--hf-space-3);
     font-family: var(--hf-font-family-mono);
 }
 
-.deck-head-left,
-.deck-head-right {
+.deck-head-actions {
     display: flex;
     align-items: center;
     gap: var(--hf-space-1);
+    justify-content: flex-end;
 }
 
-/* DECK A / DECK B identity badges + program name, in the *footer*
-   strip at the bottom of each deck panel. Matches the library
-   panel-head feel — uppercase, small, mono, dim — so the same
-   visual language runs left-to-right across the workspace. */
-.deck-footer {
-    background: var(--hf-bg-elevated);
-    padding: var(--hf-space-2) var(--hf-space-3);
-    font-family: var(--hf-font-family-mono);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-.deck-footer-row {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-2);
-    min-width: 0;
-}
-
+/* The "DECK A" / "DECK B" badge that lives in the bottom meta strip.
+   Mono + uppercase + per-deck color so A reads blue, B reads red. */
 .deck-label {
-    flex: 0 0 auto;
+    font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     font-weight: var(--hf-weight-bold);
     letter-spacing: var(--hf-tracking-wide);
     text-transform: uppercase;
-    color: var(--hf-text-dim);
 }
-/* Subtle deck identity — left/right also distinguishes them by position */
 .deck-a .deck-label { color: var(--hf-blue); }
 .deck-b .deck-label { color: var(--hf-red); }
 
-.deck-program {
-    flex: 1 1 auto;
-    min-width: 0;
-    font-size: var(--hf-size-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--hf-text-normal);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-
 .deck-load-random,
-.deck-edit-toggle,
-.deck-zoom {
+.deck-edit-toggle {
     appearance: none;
     background: transparent;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
@@ -643,8 +605,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     transition: var(--hf-transition-color), var(--hf-transition-border);
 }
 .deck-load-random:hover,
-.deck-edit-toggle:hover,
-.deck-zoom:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-edit-toggle:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
 .deck-edit-toggle.active {
     color: var(--hf-bg-base);
     background: var(--hf-accent);
@@ -662,12 +623,11 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     color: var(--hf-text-dim);
     border-radius: var(--hf-radius-sm);
-    flex: 0 0 auto;
-    padding: 1px 6px;
+    height: 32px;
+    padding: 0 8px;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     letter-spacing: 0.04em;
-    text-transform: uppercase;
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
 }
@@ -766,14 +726,39 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     padding: 0 0.15em;
 }
 
-.deck-tagline {
-    font-size: var(--hf-size-xs);
-    color: var(--hf-text-dim);
-    text-transform: lowercase;
-    letter-spacing: 0.02em;
+/* Bottom-of-panel label block: DECK A / program title / tagline.
+   Title + tagline match .program-card's .pc-title / .pc-tagline
+   pixel-for-pixel (same font sizes, weights, line-heights,
+   text-shadows, line clamps) so the deck panels read as a natural
+   extension of the library list above. */
+.deck-meta {
+    padding: var(--hf-space-2) var(--hf-space-3);
+}
+
+.deck-meta .deck-program {
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: var(--hf-weight-semibold);
+    line-height: 1.15;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
     overflow: hidden;
-    white-space: nowrap;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    white-space: normal;
+}
+
+.deck-meta .deck-tagline {
+    margin-top: 1px;
+    font-size: 9px;
+    line-height: 1.1;
+    color: rgba(255, 255, 255, 0.78);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ─────────────── main ─────────────── */
@@ -1882,7 +1867,7 @@ kbd {
 .library-footer,
 .main-head,
 .main-fx,
-.deck-footer {
+.deck-meta {
     background: var(--hf-bg-elevated);
 }
 
@@ -1890,10 +1875,18 @@ kbd {
    slightly elevated (above) for in-panel separation. Same idea for
    the main pane and its head/fx strips. */
 
-/* Live deck indicator — was a 1px accent border, now a 2px outline
-   via box-shadow so it shows up over the borderless panel. */
-.deck.live {
-    box-shadow: 0 0 0 2px var(--hf-accent);
+/* Live deck indicator — colored glow border, blue for deck A and
+   red for deck B (matches the .deck-label coloring). The glow is
+   a soft outer halo, not a hard outline. */
+.deck.deck-a.live {
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--hf-blue) 70%, transparent),
+        0 0 24px color-mix(in srgb, var(--hf-blue) 55%, transparent);
+}
+.deck.deck-b.live {
+    box-shadow:
+        0 0 0 1px color-mix(in srgb, var(--hf-red) 70%, transparent),
+        0 0 24px color-mix(in srgb, var(--hf-red) 55%, transparent);
 }
 
 /* Hover bg-fills for interactive surfaces. Each rule lifts the
@@ -1906,7 +1899,6 @@ button.status-pill:hover,
 .deck-edit-toggle:hover,
 .deck-density:hover,
 .deck-load-random:hover,
-.deck-zoom:hover,
 .fx-button:hover,
 .big-toggle:hover,
 .quick-cut:hover,
