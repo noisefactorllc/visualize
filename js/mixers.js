@@ -33,15 +33,28 @@
 
 const MIX = (lo, hi) => (x) => lo + (hi - lo) * x
 
+/**
+ * The `mix` parameter on mixer/blendMode / alphaMask / centerMask /
+ * applyMode is actually mapped to GLSL uniform `mixAmt` with range
+ * [-100, 100]: -100 = pure A, 0 = pure middle blend, +100 = pure B.
+ * (See noisemaker/shaders/effects/mixer/blendMode/glsl/blendMode.glsl
+ * — `map(mixAmt, -100, 100, 0, 1)` drives a two-stage mix(A, middle,
+ * factor) → mix(middle, B, factor) crossfade.)
+ *
+ * Map the crossfader xfade∈[0,1] into [-100, 100].
+ */
+const mix100 = (x) => (x * 200 - 100).toFixed(2)
+
 export const MIXERS = [
     {
         id: 'mixer/blendMode',
         label: 'blend',
-        driver: 'mix',
+        driver: 'mix',                // uniform alias for `mixAmt`
+        driverRange: [-100, 100],
         defaults: { mode: 'mix' },
         dslArgs: (xfade, overrides = {}) => {
             const mode = overrides.mode || 'mix'
-            return `tex: read(o1), mode: ${mode}, mix: ${xfade.toFixed(3)}`
+            return `tex: read(o1), mode: ${mode}, mix: ${mix100(xfade)}`
         },
         modes: ['mix', 'add', 'multiply', 'screen', 'overlay', 'softLight', 'hardLight', 'darken', 'lighten', 'subtract', 'diff', 'exclusion', 'phoenix', 'dodge', 'burn', 'negation'],
     },
@@ -49,17 +62,19 @@ export const MIXERS = [
         id: 'mixer/alphaMask',
         label: 'alpha',
         driver: 'mix',
+        driverRange: [-100, 100],
         defaults: { maskMode: 0 },
-        dslArgs: (xfade) => `tex: read(o1), mix: ${xfade.toFixed(3)}`,
+        dslArgs: (xfade) => `tex: read(o1), mix: ${mix100(xfade)}`,
     },
     {
         id: 'mixer/applyMode',
         label: 'apply',
         driver: 'mix',
+        driverRange: [-100, 100],
         defaults: { mode: 'brightness' },
         dslArgs: (xfade, overrides = {}) => {
             const mode = overrides.mode || 'brightness'
-            return `tex: read(o1), mode: ${mode}, mix: ${xfade.toFixed(3)}`
+            return `tex: read(o1), mode: ${mode}, mix: ${mix100(xfade)}`
         },
         modes: ['brightness', 'hue', 'saturation'],
     },
@@ -67,66 +82,61 @@ export const MIXERS = [
         id: 'mixer/centerMask',
         label: 'center',
         driver: 'mix',
+        driverRange: [-100, 100],
         defaults: { shape: 'circle', hardness: 0.5 },
         dslArgs: (xfade, overrides = {}) => {
             const shape = overrides.shape || 'circle'
             const hard = overrides.hardness ?? 0.5
-            return `tex: read(o1), shape: ${shape}, hardness: ${hard.toFixed(3)}, mix: ${xfade.toFixed(3)}`
+            return `tex: read(o1), shape: ${shape}, hardness: ${hard.toFixed(3)}, mix: ${mix100(xfade)}`
         },
     },
     {
         id: 'mixer/split',
+        // Shader: position=+1 → all colorA, position=-1 → all colorB,
+        // so we invert: xfade=0 (A) → position=+1, xfade=1 (B) → -1.
         label: 'split',
         driver: 'position',
+        driverRange: [1, -1],
         defaults: { rotation: 0, softness: 0.05 },
         dslArgs: (xfade, overrides = {}) => {
             const rot = overrides.rotation ?? 0
             const soft = overrides.softness ?? 0.05
-            return `tex: read(o1), position: ${xfade.toFixed(3)}, rotation: ${rot}, softness: ${soft}`
-        },
-    },
-    {
-        id: 'mixer/cellSplit',
-        label: 'cells',
-        driver: 'edgeWidth',
-        defaults: { scale: 8, seed: 1 },
-        dslArgs: (xfade, overrides = {}) => {
-            const scale = overrides.scale ?? 8
-            const seed = overrides.seed ?? 1
-            // xfade drives edgeWidth so 0 = sharp cell boundary
-            // showing roughly half A / half B, 1 = wide soft blend.
-            const edge = MIX(0.001, 0.5)(xfade).toFixed(3)
-            return `tex: read(o1), scale: ${scale}, edgeWidth: ${edge}, seed: ${seed}`
+            const pos = (1 - xfade * 2).toFixed(3)
+            return `tex: read(o1), position: ${pos}, rotation: ${rot}, softness: ${soft}`
         },
     },
     {
         id: 'mixer/patternMix',
+        // thickness 0..1: 0 = none of B → all A; 1 = all B over A
         label: 'pattern',
         driver: 'thickness',
+        driverRange: [0, 1],
         defaults: { type: 'stripes', scale: 8, smoothness: 0.5, rotation: 0 },
         dslArgs: (xfade, overrides = {}) => {
             const type = overrides.type || 'stripes'
             const scale = overrides.scale ?? 8
             const smooth = overrides.smoothness ?? 0.5
             const rot = overrides.rotation ?? 0
-            // xfade drives stripe thickness 0→1 so 0 = all A, 1 = all B
-            const thick = xfade.toFixed(3)
-            return `tex: read(o1), type: ${type}, scale: ${scale}, thickness: ${thick}, smoothness: ${smooth}, rotation: ${rot}`
+            return `tex: read(o1), type: ${type}, scale: ${scale}, thickness: ${xfade.toFixed(3)}, smoothness: ${smooth}, rotation: ${rot}`
         },
     },
     {
         id: 'mixer/shapeMask',
+        // Shader: inside shape → colorA, outside → colorB. So a small
+        // shape (radius 0) means mostly-outside = mostly-B, and a big
+        // shape (radius 1) means mostly-inside = mostly-A. To pan A→B,
+        // start large and shrink: xfade=0 → radius=1 (all A), xfade=1
+        // → radius=0 (all B).
         label: 'shape',
         driver: 'radius',
-        defaults: { shape: 'circle', edgeSmooth: 0.05, posX: 0.5, posY: 0.5 },
+        driverRange: [1, 0],
+        defaults: { shape: 'circle', edgeSmooth: 0.05, posX: 0, posY: 0 },
         dslArgs: (xfade, overrides = {}) => {
             const shape = overrides.shape || 'circle'
             const edge = overrides.edgeSmooth ?? 0.05
-            const px = overrides.posX ?? 0.5
-            const py = overrides.posY ?? 0.5
-            // xfade drives shape radius 0→0.9 so the shape grows from
-            // a point (all A) to cover most of the frame (mostly B).
-            const radius = MIX(0, 0.9)(xfade).toFixed(3)
+            const px = overrides.posX ?? 0
+            const py = overrides.posY ?? 0
+            const radius = (1 - xfade).toFixed(3)
             return `tex: read(o1), shape: ${shape}, radius: ${radius}, edgeSmooth: ${edge}, posX: ${px}, posY: ${py}`
         },
     },

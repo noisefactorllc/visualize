@@ -59,6 +59,14 @@ export class MixerRenderer {
         this._deckBCanvas = null
         this._rafId = null
         this._loadedMixerIds = new Set()
+
+        // Step indices of the two synth/media effects in the compiled
+        // pipeline + the mixer effect itself. `write()` calls bump step
+        // indices too, so the layout isn't 0/1/2 — it's whatever the
+        // compiler assigns. Re-derived after every _recompile().
+        this._mediaStepA = null
+        this._mediaStepB = null
+        this._mixerStep = null
     }
 
     /** All available mixer descriptors — exposed for the UI picker. */
@@ -66,6 +74,15 @@ export class MixerRenderer {
 
     /** Currently selected mixer descriptor. */
     get currentMixer() { return getMixer(this._currentMixerId) }
+
+    /**
+     * True once the pipeline has compiled at least once AND the rAF
+     * tick has uploaded a real frame from the deck canvases. Before
+     * this is true the mixer's output canvas is still blank (just
+     * cleared by the WebGL context) so the compositor must keep using
+     * the 2D fallback rather than blit nothingness.
+     */
+    get ready() { return this._initialized && this._uploadedAtLeastOnce }
 
     /** Load the manifest + media effect + the default mixer effect. */
     async init() {
@@ -75,6 +92,7 @@ export class MixerRenderer {
         this._loadedMixerIds.add(DEFAULT_MIXER_ID)
         await this._recompile()
         this._initialized = true
+        this._uploadedAtLeastOnce = false
     }
 
     /** Hand off the two deck canvases that should feed the mixer. */
@@ -99,60 +117,40 @@ export class MixerRenderer {
         await this._recompile()
     }
 
-    /** Set the crossfader value [0,1]; cheap, no recompile. */
+    /** Set the crossfader value [0,1]; uses fast-path uniform write when
+     *  available, falls back to debounced recompile. */
     setMix(xfade) {
         this._currentXfade = Math.max(0, Math.min(1, xfade))
-        // Hot-path: the cheapest mixers expose a single scalar uniform
-        // for the driver param. Recompile is overkill for that — instead
-        // we patch the uniform directly via the renderer's ProgramState.
-        // (Falls through to recompile if the mixer doesn't fit the cheap
-        // pattern; that's still fine, just slower.)
         if (!this._tryFastPathSetMix(this._currentXfade)) {
-            // Recompile is genuinely needed (params that fold into the
-            // DSL, like `mode: multiply`). Debounce so we don't recompile
-            // 60×/second when a MIDI knob is wiggling.
             this._scheduleRecompile()
         }
     }
 
     _tryFastPathSetMix(xfade) {
         const mixer = this.currentMixer
-        const pipeline = this.renderer._pipeline
-        if (!pipeline || !mixer) return false
+        const renderer = this.renderer
+        if (!renderer || !mixer) return false
+        if (this._mixerStep == null) return false
+        if (typeof renderer.applyStepParameterValues !== 'function') return false
         try {
-            // The mixer is the third step (after the two media inputs).
-            // ProgramState keys effect values by `step_<index>`.
-            const stepKey = 'step_2'
+            const stepKey = `step_${this._mixerStep}`
             const driver = mixer.driver
             const value = this._driverValue(mixer, xfade)
-            if (typeof pipeline._programState?.setValue !== 'function') return false
-            pipeline._programState.setValue(stepKey, driver, value)
+            renderer.applyStepParameterValues({ [stepKey]: { [driver]: value } })
             return true
-        } catch {
+        } catch (err) {
+            console.warn('[mixer] fast-path setMix failed:', err?.message || err)
             return false
         }
     }
 
     _driverValue(mixer, xfade) {
-        // Mirror the dsl-driver mappings in mixers.js so the fast-path
-        // patches the *same* value the recompile path would.
-        switch (mixer.id) {
-            case 'mixer/blendMode':
-            case 'mixer/alphaMask':
-            case 'mixer/applyMode':
-            case 'mixer/centerMask':
-                return xfade
-            case 'mixer/split':
-                return xfade
-            case 'mixer/patternMix':
-                return xfade
-            case 'mixer/shapeMask':
-                return xfade * 0.9
-            case 'mixer/cellSplit':
-                return 0.001 + (0.5 - 0.001) * xfade
-            default:
-                return xfade
-        }
+        // Map xfade∈[0,1] into the driver param's natural range. The
+        // recompile path uses these via dslArgs(); the fast-path
+        // setMix() must produce the SAME number or the slider jumps
+        // when a real recompile next fires.
+        const [lo, hi] = mixer.driverRange || [0, 1]
+        return lo + (hi - lo) * xfade
     }
 
     _scheduleRecompile() {
@@ -180,7 +178,39 @@ export class MixerRenderer {
             console.warn('[mixer] compile failed:', err?.message || err?.error || err)
             return
         }
+        this._refreshStepIndices()
         if (!this.renderer.isRunning) this.renderer.start()
+    }
+
+    /**
+     * Walk the freshly-compiled pipeline and pull the stepIndex of each
+     * synth/media effect (writes-to-o0 = deckA, writes-to-o1 = deckB)
+     * plus the stepIndex of the mixer itself. `write()` calls count as
+     * steps too so the layout isn't 0/1/2 — it's 0/1/2/3/4/5 in our
+     * 5-line DSL, but the compiler may renumber. Trust the pipeline.
+     */
+    _refreshStepIndices() {
+        this._mediaStepA = null
+        this._mediaStepB = null
+        this._mixerStep = null
+        const pipeline = this.renderer._pipeline
+        const passes = pipeline?.graph?.passes || []
+        const mediaSteps = []
+        let mixerStep = null
+        for (const p of passes) {
+            // synth/media writes a fragColor with `imageTex` as input
+            if (p.inputs && Object.prototype.hasOwnProperty.call(p.inputs, 'imageTex')) {
+                mediaSteps.push(p.stepIndex)
+            }
+            // Mixer step is the one with both inputTex AND tex
+            if (p.inputs && 'inputTex' in p.inputs && 'tex' in p.inputs) {
+                mixerStep = p.stepIndex
+            }
+        }
+        // In order: first media writes to o0 (deck A); second to o1 (deck B).
+        this._mediaStepA = mediaSteps[0] ?? null
+        this._mediaStepB = mediaSteps[1] ?? null
+        this._mixerStep = mixerStep
     }
 
     /**
@@ -204,17 +234,31 @@ export class MixerRenderer {
     }
 
     _uploadDeckFrames() {
-        if (!this._initialized || !this._deckACanvas || !this._deckBCanvas) return
+        if (!this._initialized) return
+        if (this._mediaStepA == null || this._mediaStepB == null) return
+        let uploadedA = false
+        let uploadedB = false
         try {
-            if (this._deckACanvas.width > 0 && this._deckACanvas.height > 0) {
-                this.renderer.updateTextureFromSource('imageTex_step_0', this._deckACanvas, { flipY: false })
+            if (this._deckACanvas?.width > 0 && this._deckACanvas.height > 0) {
+                this.renderer.updateTextureFromSource(
+                    `imageTex_step_${this._mediaStepA}`,
+                    this._deckACanvas,
+                    { flipY: false }
+                )
+                uploadedA = true
             }
-            if (this._deckBCanvas.width > 0 && this._deckBCanvas.height > 0) {
-                this.renderer.updateTextureFromSource('imageTex_step_1', this._deckBCanvas, { flipY: false })
+            if (this._deckBCanvas?.width > 0 && this._deckBCanvas.height > 0) {
+                this.renderer.updateTextureFromSource(
+                    `imageTex_step_${this._mediaStepB}`,
+                    this._deckBCanvas,
+                    { flipY: false }
+                )
+                uploadedB = true
             }
         } catch (err) {
             // Pipeline mid-recompile — skip this frame, try again next.
         }
+        if (uploadedA && uploadedB) this._uploadedAtLeastOnce = true
     }
 
     resize(width, height) {

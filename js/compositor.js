@@ -151,10 +151,13 @@ export class MainCompositor {
 
         // Mixer path: a MixerRenderer (third noisemaker pipeline) has
         // already blended deck A and deck B via the user-selected mixer
-        // effect, so the compositor just blits the result. Falls back
-        // to the 2D equal-power crossfade when no mixer is wired up
-        // (during boot, or if the mixer pipeline fails to compile).
-        if (this.mixer?.canvas?.width > 0 && this.mixer.canvas.height > 0) {
+        // effect, so the compositor just blits the result. The `ready`
+        // flag gates the swap-over — the mixer's output canvas has
+        // non-zero dimensions the moment we create it, but is *blank*
+        // until init + compile + first-frame-upload all land. Until
+        // then we keep the 2D equal-power crossfade alive so the main
+        // canvas never goes black during the boot handoff.
+        if (this.mixer?.ready) {
             ctx.drawImage(this.mixer.canvas, 0, 0, w, h)
         } else {
             const result = XFADE_CURVES[this._curve](this._xfade)
