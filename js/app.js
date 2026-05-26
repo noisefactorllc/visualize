@@ -59,10 +59,13 @@ function setStatusPill(id, text, state) {
 }
 
 async function boot() {
-    // Boot overlay — the click listener is wired by an inline script in
-    // index.html that runs before any module imports, so a fast click
-    // (test rig, eager user) doesn't race the deferred module graph.
-    await window.__visualizeBootGesture
+    // Boot overlay stays up while everything below initializes and starts
+    // rendering — the user sees the app's first two decks playing
+    // (blurred + dimmed by the overlay's backdrop-filter) before they
+    // click START SET. The click handler is wired by an inline script in
+    // index.html that runs before any module imports; we await its
+    // promise at the very end of boot() so a fast click doesn't race the
+    // deferred module graph.
 
     // Construct decks
     state.decks.A = new Deck($('deck-a-canvas'), {
@@ -1000,6 +1003,10 @@ async function boot() {
     updateLiveIndicator()
     setStatusPill('audio-status', 'audio off', 'off')
     setStatusPill('midi-status', 'midi off', 'off')
+
+    // App is now fully running behind the boot overlay (decks rendering,
+    // compositor compositing). Wait for the user to click START SET.
+    await window.__visualizeBootGesture
     toast('ready — open settings to enable audio/MIDI')
 }
 

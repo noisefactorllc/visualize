@@ -118,7 +118,17 @@ select:focus-visible,
     font-size: var(--hf-size-md);
     font-weight: var(--hf-weight-bold);
     letter-spacing: var(--hf-tracking-wide);
-    color: var(--hf-text-bright);
+    background: linear-gradient(90deg, var(--hf-blue), var(--hf-yellow), var(--hf-red));
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-shift 6s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
 }
 
 .brand-tag {
@@ -1250,10 +1260,16 @@ kbd {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ─────────────── boot overlay ─────────────── */
+/* Backdrop blur + brightness reduction so the running app (decks + main
+   canvas already rendering by the time this overlay shows) dims to a
+   moody live-monitor behind the start card. The boot card itself keeps a
+   solid surface so text stays legible. */
 .boot-overlay {
     position: fixed;
     inset: 0;
-    background: var(--hf-bg-base);
+    background: color-mix(in srgb, var(--hf-bg-base) 55%, transparent);
+    backdrop-filter: blur(18px) brightness(0.45) saturate(0.85);
+    -webkit-backdrop-filter: blur(18px) brightness(0.45) saturate(0.85);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1270,6 +1286,7 @@ kbd {
     background: var(--hf-bg-surface);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-lg);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
 }
 
 .boot-title {
@@ -1278,7 +1295,12 @@ kbd {
     font-weight: var(--hf-weight-bold);
     letter-spacing: var(--hf-tracking-wide);
     margin-bottom: var(--hf-space-2);
-    color: var(--hf-text-bright);
+    background: linear-gradient(90deg, var(--hf-blue), var(--hf-yellow), var(--hf-red));
+    background-size: 200% 200%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-shift 6s ease-in-out infinite;
 }
 
 .boot-tagline {
