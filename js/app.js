@@ -18,6 +18,7 @@ import { SharedMidi } from './midi.js'
 import { BeatScheduler } from './bpm.js'
 import { MainCompositor } from './compositor.js'
 import { MixerRenderer, MIXERS, DEFAULT_MIXER_ID } from './mixer.js'
+import { MixerControls } from './ui/mixerControls.js'
 import { Library } from './library.js'
 import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
@@ -152,6 +153,7 @@ async function boot() {
             mixer.start()
             compositor.setMixer(mixer)
             wireMixerPicker(mixer)
+            wireMixerControls(mixer)
         })
         .catch(err => {
             console.warn('[mixer] init failed; staying on 2D crossfade:', err?.message || err)
@@ -527,13 +529,30 @@ async function boot() {
         sel.addEventListener('change', async () => {
             await mixer.setMixerEffect(sel.value)
             refreshModeDropdown()
+            mixerControlsPanel?.show(mixer.currentMixer.id)
             persist()
         })
 
         modeSel.addEventListener('change', async () => {
             await mixer.setMixerEffect(mixer.currentMixer.id, { ...mixer._currentOverrides, mode: modeSel.value })
+            mixerControlsPanel?.show(mixer.currentMixer.id)
             persist()
         })
+    }
+
+    let mixerControlsPanel = null
+
+    /**
+     * Mount the per-mixer-effect control panel below the main canvas.
+     * Reads the noisemaker effect definition + builds a noisedeck-
+     * style row per non-driver parameter. Refreshes whenever the
+     * mixer-effect dropdown changes via wireMixerPicker().
+     */
+    function wireMixerControls(mixer) {
+        const root = $('mixer-controls')
+        if (!root) return
+        mixerControlsPanel = new MixerControls(root, mixer)
+        mixerControlsPanel.show(mixer.currentMixer.id)
     }
 
     /** Wire the per-deck DSL editor toggle, hot reload, and Cmd+Enter. */

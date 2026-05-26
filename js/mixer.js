@@ -23,9 +23,9 @@
  */
 
 import { CanvasRenderer, CDN_BASE } from './noisemaker/bundle.js'
-import { MIXERS, getMixer, DEFAULT_MIXER_ID } from './mixers.js'
+import { MIXERS, getMixer, DEFAULT_MIXER_ID, buildDslArgs } from './mixers.js'
 
-export { MIXERS, DEFAULT_MIXER_ID } from './mixers.js'
+export { MIXERS, DEFAULT_MIXER_ID, getMixer } from './mixers.js'
 
 const MIX_W = 1280
 const MIX_H = 720
@@ -117,6 +117,23 @@ export class MixerRenderer {
         await this._recompile()
     }
 
+    /**
+     * Update a single override (e.g. from the mixer-controls panel)
+     * and schedule a recompile so the new value flows into the
+     * compiled DSL. Cheap relative to setMixerEffect() since the
+     * effect bundle is already loaded.
+     */
+    setOverride(paramName, value) {
+        this._currentOverrides = { ...this._currentOverrides, [paramName]: value }
+        this._scheduleRecompile()
+    }
+
+    /** Read the active value of a non-driver parameter (override or default). */
+    getOverride(paramName) {
+        if (paramName in this._currentOverrides) return this._currentOverrides[paramName]
+        return this.currentMixer.defaults?.[paramName]
+    }
+
     /** Set the crossfader value [0,1]; uses fast-path uniform write when
      *  available, falls back to debounced recompile. */
     setMix(xfade) {
@@ -164,7 +181,7 @@ export class MixerRenderer {
 
     async _recompile() {
         const mixer = this.currentMixer
-        const args = mixer.dslArgs(this._currentXfade, this._currentOverrides)
+        const args = buildDslArgs(mixer, this._currentXfade, this._currentOverrides)
         const dsl = [
             `search synth, mixer, render`,
             `media().write(o0)`,

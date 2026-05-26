@@ -1729,6 +1729,53 @@ kbd {
 }
 
 /* ──────────────────────────────────────────────────────────────
+   Mixer controls panel — noisedeck-style per-effect control rows
+   rendered below the main canvas, one row per non-driver parameter
+   of the active mixer effect. Two-column grid like noisedeck:
+   label (fixed width) | control (handfish web component) flexing.
+   ────────────────────────────────────────────────────────────── */
+.mixer-controls {
+    padding: var(--hf-space-3);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--hf-space-2) var(--hf-space-4);
+    background: var(--hf-bg-elevated);
+}
+
+.mixer-controls[hidden] { display: none; }
+
+.mixer-control-row {
+    display: grid;
+    grid-template-columns: 5.5em 1fr;
+    align-items: center;
+    gap: var(--hf-space-2);
+    min-width: 0;
+}
+
+.mixer-control-label {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--hf-text-dim);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mixer-control-row slider-value,
+.mixer-control-row select-dropdown {
+    min-width: 0;
+    width: 100%;
+}
+
+.mixer-control-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+/* ──────────────────────────────────────────────────────────────
    Noisedeck visual-language overrides
    ──────────────────────────────────────────────────────────────
    With --hf-border-width:0 globally, all the .foo:hover {
