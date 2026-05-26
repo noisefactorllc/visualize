@@ -692,12 +692,27 @@ async function boot() {
     // Beat dots
     const beatDots = [...document.querySelectorAll('.beat-dot')]
     beatDots.forEach((d, i) => d.classList.toggle('downbeat', i === 0))
+    // Cache deck elements for the per-beat pulse glow.
+    const deckPanelA = document.querySelector('.deck.deck-a')
+    const deckPanelB = document.querySelector('.deck.deck-b')
     scheduler.onBeat((b) => {
         beatDots.forEach((d, i) => {
             d.classList.toggle('active', i === b.beatInBar)
         })
         // Beat-driven strobe
         if (compositor.strobe) compositor.strobeBlink()
+        // Pulse the live deck's glow on each quarter note. The pulse
+        // class re-adds via rAF so a brief class-removal + re-add
+        // restarts the CSS transition every beat (otherwise the
+        // browser elides the no-op toggle).
+        for (const deckEl of [deckPanelA, deckPanelB]) {
+            if (!deckEl || !deckEl.classList.contains('live')) continue
+            deckEl.classList.remove('beat-pulse')
+            // Force a reflow so the class re-add triggers the keyframe
+            // animation cleanly from t=0 each beat.
+            void deckEl.offsetWidth
+            deckEl.classList.add('beat-pulse')
+        }
     })
 
     // Main FX buttons
@@ -744,21 +759,6 @@ async function boot() {
     // Record
     $('record-toggle').addEventListener('click', () => recorder.toggle())
     $('output-window').addEventListener('click', () => outputWin.toggle())
-
-    // Per-deck zoom — request fullscreen on the deck panel so the
-    // user can see one deck's output at full size (independent of
-    // the main fullscreen which puts the mixer output on screen).
-    document.querySelectorAll('.deck-zoom').forEach(btn => {
-        const deck = btn.closest('.deck')
-        btn.addEventListener('click', () => {
-            const target = deck.querySelector('.deck-canvas-wrap')
-            if (!document.fullscreenElement) {
-                target?.requestFullscreen?.().catch(() => {})
-            } else {
-                document.exitFullscreen?.()
-            }
-        })
-    })
 
     // Fullscreen
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())

@@ -1878,17 +1878,40 @@ kbd {
    the main pane and its head/fx strips. */
 
 /* Live deck indicator — colored glow border, blue for deck A and
-   red for deck B (matches the .deck-label coloring). The glow is
-   a soft outer halo, not a hard outline. */
-.deck.deck-a.live {
+   red for deck B (matches the .deck-label coloring). The pulse
+   variant fires on each quarter-note beat (app.js toggles the
+   .beat-pulse class on the live deck inside scheduler.onBeat());
+   keyframes ramp the box-shadow from a saturated punch back to
+   the steady-state glow over ~600ms.
+
+   Two CSS custom props (--deck-glow-rgb, --deck-glow-rgb-hot) let
+   the keyframe animate the same channel for both decks without
+   duplicating the @keyframes. */
+.deck.live {
+    --deck-glow-base: color-mix(in srgb, var(--deck-glow-color) 70%, transparent);
+    --deck-glow-soft: color-mix(in srgb, var(--deck-glow-color) 60%, transparent);
     box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--hf-blue) 70%, transparent),
-        0 0 24px color-mix(in srgb, var(--hf-blue) 55%, transparent);
+        0 0 0 1px var(--deck-glow-base),
+        0 0 32px var(--deck-glow-soft);
 }
-.deck.deck-b.live {
-    box-shadow:
-        0 0 0 1px color-mix(in srgb, var(--hf-red) 70%, transparent),
-        0 0 24px color-mix(in srgb, var(--hf-red) 55%, transparent);
+.deck.deck-a.live { --deck-glow-color: var(--hf-blue); }
+.deck.deck-b.live { --deck-glow-color: var(--hf-red); }
+
+.deck.live.beat-pulse {
+    animation: deck-beat-pulse 600ms ease-out;
+}
+
+@keyframes deck-beat-pulse {
+    0% {
+        box-shadow:
+            0 0 0 3px color-mix(in srgb, var(--deck-glow-color) 95%, transparent),
+            0 0 64px color-mix(in srgb, var(--deck-glow-color) 90%, transparent);
+    }
+    100% {
+        box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--deck-glow-color) 70%, transparent),
+            0 0 32px color-mix(in srgb, var(--deck-glow-color) 60%, transparent);
+    }
 }
 
 /* Hover bg-fills for interactive surfaces. Each rule lifts the
