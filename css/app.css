@@ -519,10 +519,14 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .ghost-button:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
 
 /* ─────────────── stage (decks + main) ─────────────── */
+/* Equal-width columns — deck A, main (mixer output), deck B all render
+   at the same display size. Aligns with the 1fr 1fr 1fr controls grid
+   below so each canvas has its own dedicated column of controls under
+   it. */
 .stage {
     grid-area: stage;
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: var(--hf-space-3);
     padding: var(--hf-space-3);
     min-height: 0;
@@ -845,28 +849,45 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     z-index: 5;
 }
 
+/* Three-column grid matching the stage's 1fr 1fr 1fr — each child
+   centers in its column so speed-A lands under deck-A, the mixer
+   centers under the main canvas, and speed-B lands under deck-B
+   regardless of how wide the mixer's content actually is. */
 .controls-transport {
     grid-area: transport;
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: var(--hf-space-3);
     align-items: center;
     min-width: 0;
 }
 
+.controls-transport > .control-group:first-child,
+.controls-transport > .control-group:last-child {
+    justify-content: center;
+}
+.controls-transport > .control-group { min-width: 0; }
+
+/* Utility row tracks the same 1fr 1fr 1fr columns so AUTO-VJ sits
+   under deck A and the record/scenes/output group sits under deck B,
+   keeping the bottom strip readable as two stacked rails. */
 .controls-utility {
     grid-area: utility;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: var(--hf-space-3);
     align-items: center;
-    justify-content: space-between;
     min-width: 0;
-    flex-wrap: wrap;
 }
 
 .control-group { display: flex; align-items: center; gap: var(--hf-space-2); min-width: 0; }
-.controls-left { display: flex; gap: var(--hf-space-3); min-width: 0; align-items: center; flex-wrap: wrap; }
-.controls-right { display: flex; gap: var(--hf-space-3); justify-content: flex-end; min-width: 0; align-items: center; flex-wrap: wrap; }
+.controls-left  { display: flex; gap: var(--hf-space-3); min-width: 0; align-items: center; flex-wrap: wrap; }
+.controls-right { display: flex; gap: var(--hf-space-3); min-width: 0; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+/* In the utility row, controls-left aligns under deck A (centered) and
+   controls-right aligns under deck B (centered). The middle column is
+   reserved for follow-up controls; for now it just stays empty. */
+.controls-utility > .controls-left  { grid-column: 1; justify-content: center; }
+.controls-utility > .controls-right { grid-column: 3; justify-content: center; }
 
 /* Constrain the speed sliders so the bottom toolbar fits a 1280px viewport
    instead of stretching to whatever flex-grow gives them. */
@@ -986,13 +1007,17 @@ input[type="range"]:active::-webkit-slider-thumb { cursor: grabbing; }
     cursor: pointer;
 }
 
-/* Crossfader (centerpiece) */
+/* Crossfader (centerpiece). Lives in the middle column of the
+   transport grid (1fr 2fr 1fr) and is constrained to that column's
+   width so the speed sliders to either side stay centered under
+   their decks rather than getting pushed to the column edges. */
 .controls-center {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     gap: var(--hf-space-2);
-    min-width: 340px;
+    min-width: 0;
+    width: 100%;
 }
 
 /* Mixer-effect picker: dropdown above the crossfader. Optional
