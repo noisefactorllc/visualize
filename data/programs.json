@@ -22,17 +22,6 @@
     "dsl": "search classicNoisedeck, synth, filter\nlet mid = audio(band: 1, min: 1, max: 8)\nlet vol = audio(band: 1, min: 0, max: 80)\nnoise(hueRotation: vol, kaleido: mid, metric: circle, palette: vaporwave, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 85, yScale: 85, octaves: 1).write(o0)\nrender(o0)"
   },
   {
-    "title": "Treble Sparkle",
-    "tagline": "Hihats shimmer the cells",
-    "tint": "#ffd24e",
-    "tags": [
-      "reactive",
-      "high",
-      "specks"
-    ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet hi = audio(band: 2, min: 1, max: 20)\nlet hiBright = audio(band: 2, min: 0, max: 100)\ncellNoise(colorMode: monoInverse, speed: 1, palette: solaris, scale: hi, cellScale: 75, smooth: hiBright, variation: 0, cyclePalette: off, rotatePalette: 0).write(o0)\nnoise(palette: santaCruz, type: simplex, colorMode: palette, kaleido: 1, xScale: 9, yScale: 9, octaves: 1).composite(tex: read(o0), blendMode: greenscreenAB, inputColor: #666666, mix: 60, range: 84).write(o1)\nrender(o1)"
-  },
-  {
     "title": "Full Spectrum",
     "tagline": "Bass scales, mids refract, highs sweep the hue",
     "tint": "#4ed99b",
@@ -181,17 +170,6 @@
       "feedback"
     ],
     "dsl": "search classicNoisedeck, synth, filter\nlet hi = audio(band: 2, min: 0, max: 360)\nnoise(hueRange: 83, hueRotation: hi, speed: 100, refractAmt: 90, ridges: true, wrap: true, xScale: 100, yScale: 97, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nnoise(hueRange: 81, hueRotation: 66, speed: 100, refractAmt: 100, ridges: true, wrap: true, xScale: 99, yScale: 96, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).coalesce(tex: read(o0), blendMode: reflect, mix: -86, refractAAmt: 48, refractBAmt: 60).lensDistortion(aberration: 100, hueRange: 100, hueRotation: 0, blendMode: add, modulate: true, passthru: 33, alpha: 0, speed: 0, distortion: 0).write(o1)\nrender(o1)"
-  },
-  {
-    "title": "Mandelbrot",
-    "tagline": "Bass zooms in and out of the Julia fractal",
-    "tint": "#cccccc",
-    "tags": [
-      "reactive",
-      "bass",
-      "fractal"
-    ],
-    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 0, max: 80)\nfractal(centerX: 0, centerY: 0, type: julia, offsetX: 44, offsetY: 57, palette: skykissed, rotation: 0, speed: 32, zoomAmt: bass, cyclePalette: forward, rotatePalette: 0).write(o0)\nrender(o0)"
   },
   {
     "title": "Pink Magma",

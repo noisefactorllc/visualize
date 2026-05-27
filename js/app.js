@@ -48,10 +48,13 @@ const state = {
     // Per-deck pixel density. `mode='auto'` lets loadProgram choose
     // (drops to 0.5 for compute-heavy DSLs); `mode='manual'` pins to
     // the user's chosen value across loads. `value` is whichever is
-    // currently applied to the underlying renderer.
+    // currently applied to the underlying renderer. Default is a
+    // manual 50% pin — playable on modest GPUs out of the box; the
+    // operator cycles up via the deck zoom button when they want
+    // more pixels.
     deckDensity: {
-        A: { mode: 'auto', value: 1.0 },
-        B: { mode: 'auto', value: 1.0 }
+        A: { mode: 'manual', value: 0.5 },
+        B: { mode: 'manual', value: 0.5 }
     },
     // Seconds for the manual auto-fade (X key) AND auto-VJ scene
     // transitions. Read by the auto-fade button and pushed into

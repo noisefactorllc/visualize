@@ -115,7 +115,7 @@ test('scenes round-trip: vanilla load, no rebind', async ({ browser }) => {
         const snap = await page.evaluate(() => window.__visualize.takeSnapshot())
 
         // Disturb state: load different programs + change xfade
-        await loadProgramByTitle(page, 'A', 'Treble Sparkle')
+        await loadProgramByTitle(page, 'A', 'Full Spectrum')
         await loadProgramByTitle(page, 'B', 'Full Spectrum')
         await page.evaluate(() => {
             window.__visualize.decks.A.setSpeed(0.5)
@@ -154,7 +154,7 @@ test('scenes round-trip: with rebind active on deck A', async ({ browser }) => {
         const snap = await page.evaluate(() => window.__visualize.takeSnapshot())
 
         // Disturb
-        await loadProgramByTitle(page, 'A', 'Treble Sparkle')
+        await loadProgramByTitle(page, 'A', 'Full Spectrum')
         await loadProgramByTitle(page, 'B', 'Full Spectrum')
 
         // Recall

@@ -16,6 +16,8 @@
 import { getCachedThumb, putCachedThumb, hashDsl } from './thumbnailCache.js'
 import { getThumbnailRenderer } from './thumbnailRenderer.js'
 
+const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
+
 export class Library {
     constructor() {
         this.programs = []
@@ -25,6 +27,13 @@ export class Library {
         this._countEl = null
         this._searchEl = null
         this._onLoadToDeck = null
+
+        // Per-title include flag for the Auto-VJ random pool.
+        // Default for any non-util title: included. Operator toggles
+        // via per-card checkbox. Util titles are never in the pool
+        // regardless. Storage holds only the EXCLUDED set so the
+        // default-on semantics stay correct as new titles ship.
+        this._excluded = this._loadExcluded()
 
         // Lazy-render machinery
         this._observer = null
@@ -47,20 +56,44 @@ export class Library {
         return !!program?.tags?.includes('util')
     }
 
-    /** Pick a random NON-util program. */
+    /** True if this title is currently eligible for the Auto-VJ random
+     *  pool: non-util AND not in the operator's exclude set. */
+    isIncluded(title) {
+        const p = this.byTitle(title)
+        if (!p || Library.isUtil(p)) return false
+        return !this._excluded.has(title)
+    }
+
+    /** Toggle the include flag for `title`. No-op for util titles. */
+    setIncluded(title, included) {
+        const p = this.byTitle(title)
+        if (!p || Library.isUtil(p)) return
+        if (included) this._excluded.delete(title)
+        else this._excluded.add(title)
+        this._saveExcluded()
+    }
+
+    /** The pool the Auto-VJ random picker draws from: non-util AND
+     *  not excluded by the operator. */
+    _randomPool() {
+        return this.programs.filter(p =>
+            !Library.isUtil(p) && !this._excluded.has(p.title))
+    }
+
+    /** Pick a random included program. */
     random() {
-        const pool = this.programs.filter(p => !Library.isUtil(p))
+        const pool = this._randomPool()
         if (!pool.length) return null
         return pool[Math.floor(Math.random() * pool.length)]
     }
 
     /**
-     * Pick a random non-util program whose title is not in `exclude`.
+     * Pick a random included program whose title is not in `exclude`.
      * Accepts a single title or an array of titles. Falls back to a
      * plain random pick if the exclusion list covers all eligible.
      */
     randomExcept(exclude) {
-        const pool = this.programs.filter(p => !Library.isUtil(p))
+        const pool = this._randomPool()
         if (!pool.length) return null
         const excludeSet = new Set(
             (Array.isArray(exclude) ? exclude : [exclude]).filter(Boolean)
@@ -255,6 +288,28 @@ export class Library {
         const actions = document.createElement('div')
         actions.className = 'pc-actions'
 
+        // Per-card include checkbox: drives Library.random() /
+        // randomExcept() (= Auto-VJ's pool). Util programs are never
+        // in the pool, so they don't get a checkbox.
+        if (!Library.isUtil(p)) {
+            const incLabel = document.createElement('label')
+            incLabel.className = 'pc-include'
+            incLabel.title = 'Include in Auto-VJ pool'
+            // Stop click from also triggering the card's load-on-click
+            // behaviours (drag, dblclick).
+            incLabel.addEventListener('click', (e) => e.stopPropagation())
+            const incBox = document.createElement('input')
+            incBox.type = 'checkbox'
+            incBox.checked = !this._excluded.has(p.title)
+            incBox.addEventListener('change', () => {
+                this.setIncluded(p.title, incBox.checked)
+                card.dataset.excluded = incBox.checked ? '0' : '1'
+            })
+            incLabel.appendChild(incBox)
+            actions.appendChild(incLabel)
+            card.dataset.excluded = this._excluded.has(p.title) ? '1' : '0'
+        }
+
         const loadA = document.createElement('button')
         loadA.className = 'pc-load'
         loadA.dataset.deck = 'A'
@@ -292,6 +347,22 @@ export class Library {
         })
 
         return card
+    }
+
+    _loadExcluded() {
+        try {
+            const raw = localStorage.getItem(INCLUDE_STORAGE_KEY)
+            const arr = raw ? JSON.parse(raw) : []
+            return new Set(Array.isArray(arr) ? arr : [])
+        } catch {
+            return new Set()
+        }
+    }
+    _saveExcluded() {
+        try {
+            localStorage.setItem(INCLUDE_STORAGE_KEY,
+                JSON.stringify([...this._excluded]))
+        } catch { /* private mode quota — best-effort */ }
     }
 
 }
