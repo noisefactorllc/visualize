@@ -253,32 +253,43 @@ export function buildMidiOverrides({ rebindable, count, oscillatorCount = 0, ran
  * once the regenerated DSL has been pushed through the renderer's
  * compile path. Fire-and-forget callers (UI buttons) can ignore the
  * promise; tests and scene recall await it to observe the new state.
+ *
+ * `oscillatorCount` overrides the deck's own setting for this single
+ * roll. Used by AutoMix to force osc bindings when no audio input is
+ * live, so the deck isn't left with silent audio() bindings.
  */
-export async function rebindEq(deck, program, { rand = Math.random } = {}) {
+export async function rebindEq(deck, program, { rand = Math.random, oscillatorCount = null } = {}) {
     const rebind = deck.rebind
     if (!rebind?.originalDsl) return false
     const rebindable = collectRebindableParams(rebind.originalDsl)
     if (rebindable.length === 0) return false
     const homeBands = homeBandsForProgram(program)
     const count = 2 + Math.floor(rand() * 3)   // 2,3,4
+    const oscN = oscillatorCount != null
+        ? oscillatorCount
+        : (rebind.oscillatorCount || 0)
     const overrides = buildAudioOverrides({
         rebindable, homeBands, bandpass: rebind.bandpass, count,
-        oscillatorCount: rebind.oscillatorCount || 0, rand
+        oscillatorCount: oscN, rand
     })
     rebind.overrides = overrides
     return _applyAndLoad(deck)
 }
 
-/** Roll a new Midi rebind on the given deck. Async; see rebindEq. */
-export async function rebindMidi(deck, { rand = Math.random } = {}) {
+/** Roll a new Midi rebind on the given deck. Async; see rebindEq.
+ *  `oscillatorCount` override has the same semantics as rebindEq. */
+export async function rebindMidi(deck, { rand = Math.random, oscillatorCount = null } = {}) {
     const rebind = deck.rebind
     if (!rebind?.originalDsl) return false
     const rebindable = collectRebindableParams(rebind.originalDsl)
     if (rebindable.length === 0) return false
     const count = 2 + Math.floor(rand() * 3)
+    const oscN = oscillatorCount != null
+        ? oscillatorCount
+        : (rebind.oscillatorCount || 0)
     const overrides = buildMidiOverrides({
         rebindable, count,
-        oscillatorCount: rebind.oscillatorCount || 0, rand
+        oscillatorCount: oscN, rand
     })
     rebind.overrides = overrides
     return _applyAndLoad(deck)

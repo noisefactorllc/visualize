@@ -156,12 +156,12 @@
         <header class="topbar">
             <div class="brand">
                 <span class="brand-logo icon">equalizer</span>
-                <span class="brand-name">VISUALIZE</span>
+                <span class="brand-name">Visualize</span>
                 <span class="brand-tag">vj &middot; visualizer</span>
             </div>
             <div class="topbar-center">
                 <div class="bpm-block">
-                    <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">TAP</button>
+                    <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">tap</button>
                     <div class="bpm-display" aria-live="polite" aria-atomic="true">
                         <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
                         <select-dropdown id="bpm-divider" class="bpm-divider" value="4" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
@@ -172,7 +172,7 @@
                             <option value="16">/16</option>
                             <option value="32">/32</option>
                         </select-dropdown>
-                        <span class="bpm-label" id="bpm-label">BPM</span>
+                        <span class="bpm-label" id="bpm-label">bpm</span>
                     </div>
                     <div class="beat-indicator" id="beat-indicator">
                         <span class="beat-dot" data-beat="0"></span>
@@ -238,7 +238,7 @@
                     </div>
                 </div>
                 <div class="deck-meta">
-                    <div class="deck-label">DECK A</div>
+                    <div class="deck-label">deck a</div>
                     <div class="deck-program" id="deck-a-name">—</div>
                     <div class="deck-tagline" id="deck-a-tagline"></div>
                 </div>
@@ -246,7 +246,7 @@
 
             <div class="main">
                 <div class="main-head">
-                    <span class="main-label">MAIN</span>
+                    <span class="main-label">main</span>
                     <span class="main-meter">
                         <span class="audio-band low" id="meter-low"><b></b></span>
                         <span class="audio-band mid" id="meter-mid"><b></b></span>
@@ -263,12 +263,12 @@
                     <div class="main-fx-overlay" id="main-fx-overlay"></div>
                 </div>
                 <div class="main-fx">
-                    <button class="fx-button" data-fx="strobe" title="Strobe on beat (1) — may trigger photosensitive epilepsy">STROBE</button>
-                    <button class="fx-button" data-fx="invert" title="Invert colors (2)">INVERT</button>
-                    <button class="fx-button" data-fx="bw" title="Black &amp; white (3)">B&amp;W</button>
-                    <button class="fx-button" data-fx="zoom" title="Beat-synced zoom (4)">ZOOM</button>
-                    <button class="fx-button" data-fx="freeze" title="Freeze frame (5)">FREEZE</button>
-                    <button class="fx-button" data-fx="flash" title="Flash white (6)">FLASH</button>
+                    <button class="fx-button" data-fx="strobe" title="Strobe on beat (1) — may trigger photosensitive epilepsy">strobe</button>
+                    <button class="fx-button" data-fx="invert" title="Invert colors (2)">invert</button>
+                    <button class="fx-button" data-fx="bw" title="Black &amp; white (3)">b&amp;w</button>
+                    <button class="fx-button" data-fx="zoom" title="Beat-synced zoom (4)">zoom</button>
+                    <button class="fx-button" data-fx="freeze" title="Freeze frame (5)">freeze</button>
+                    <button class="fx-button" data-fx="flash" title="Flash white (6)">flash</button>
                 </div>
 
                 <div class="mixer-controls" id="mixer-controls" hidden></div>
@@ -311,7 +311,7 @@
                     </div>
                 </div>
                 <div class="deck-meta">
-                    <div class="deck-label">DECK B</div>
+                    <div class="deck-label">deck b</div>
                     <div class="deck-program" id="deck-b-name">—</div>
                     <div class="deck-tagline" id="deck-b-tagline"></div>
                 </div>
@@ -484,7 +484,7 @@
             </section>
 
             <section class="settings-section">
-                <h3>MIDI</h3>
+                <h3>midi</h3>
                 <div class="settings-row">
                     <button id="midi-enable" class="ghost-button">enable MIDI</button>
                     <span id="midi-info" class="settings-hint">not connected</span>
@@ -584,12 +584,12 @@
 
         <div class="boot-overlay" id="boot-overlay">
             <div class="boot-card">
-                <h1 class="boot-title">VISUALIZE</h1>
+                <h1 class="boot-title">Visualize</h1>
                 <p class="boot-tagline">music visualizer · vj gig player</p>
                 <p class="boot-small-screen-warning">
                     This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
                 </p>
-                <button id="boot-start" class="boot-button">START SET</button>
+                <button id="boot-start" class="boot-button">start set</button>
                 <p class="boot-hint">press start, then enable audio input from the settings panel</p>
             </div>
         </div>

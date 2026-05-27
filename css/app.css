@@ -148,7 +148,6 @@ select:focus-visible,
 
 .brand-tag {
     font-size: var(--hf-size-xs);
-    text-transform: uppercase;
     letter-spacing: var(--hf-tracking-wide);
     color: var(--hf-text-dim);
     margin-left: var(--hf-space-1);
@@ -330,7 +329,6 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 
 .panel-head h3 {
     font-size: var(--hf-size-xs);
-    text-transform: uppercase;
     letter-spacing: var(--hf-tracking-wide);
     color: var(--hf-text-dim);
     font-weight: var(--hf-weight-bold);
@@ -660,7 +658,6 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-size: var(--hf-size-xs);
     font-weight: var(--hf-weight-bold);
     letter-spacing: var(--hf-tracking-wide);
-    text-transform: uppercase;
 }
 .deck-a .deck-label { color: var(--hf-blue); }
 .deck-b .deck-label { color: var(--hf-red); }
@@ -1157,7 +1154,6 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .control-label {
     font-size: var(--hf-size-xs);
     letter-spacing: var(--hf-tracking-wide);
-    text-transform: uppercase;
     color: var(--hf-text-dim);
     font-family: var(--hf-font-family-mono);
     white-space: nowrap;
@@ -1384,7 +1380,6 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);
-    text-transform: uppercase;
     letter-spacing: var(--hf-tracking-wide);
     flex: 0 0 auto;
     white-space: nowrap;
@@ -1550,7 +1545,6 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
 .settings-section h3 {
     font-size: var(--hf-size-xs);
     letter-spacing: var(--hf-tracking-wide);
-    text-transform: uppercase;
     color: var(--hf-text-dim);
     margin-bottom: var(--hf-space-3);
     font-family: var(--hf-font-family-mono);
@@ -1646,7 +1640,6 @@ kbd {
 .midi-learn-list h4 {
     font-size: var(--hf-size-xs);
     letter-spacing: var(--hf-tracking-wide);
-    text-transform: uppercase;
     color: var(--hf-text-dim);
     margin-bottom: var(--hf-space-2);
 }
@@ -1963,7 +1956,6 @@ kbd {
 .mixer-control-label {
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
-    text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--hf-text-dim);
     text-align: right;

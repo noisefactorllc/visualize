@@ -21,7 +21,7 @@ const FADE_CURVES = {
 }
 
 export class AutoMix {
-    constructor({ library, decks, compositor, scheduler, getXfade, setXfade, onStatus, onLoad, rebind }) {
+    constructor({ library, decks, compositor, scheduler, getXfade, setXfade, onStatus, onLoad, rebind, audio, midi }) {
         this.library = library
         this.decks = decks
         this.compositor = compositor
@@ -34,9 +34,15 @@ export class AutoMix {
         // decks, not DOM.
         this.onLoad = onLoad || (() => {})
         // Optional rebind module. When present, _triggerSceneSwap fires
-        // a fresh rebindEq() on the just-loaded deck so each scene swap
-        // also shuffles which params are audio-driven.
+        // a fresh rebind on the just-loaded deck so each scene swap
+        // also shuffles param bindings.
         this.rebind = rebind || null
+        // Optional audio + midi singletons. AutoMix reads `.enabled` to
+        // pick which rebind path to run (rebindEq when audio is live,
+        // rebindMidi when MIDI is live, oscillator-only fallback when
+        // neither is — so the deck always animates).
+        this.audio = audio || null
+        this.midi = midi || null
 
         this._enabled = false
         this._barsPerScene = 8
@@ -148,15 +154,29 @@ export class AutoMix {
             }
             this.onStatus(`auto: ${incomingDeckId} ← ${program.title}`, true)
             this.onLoad(incomingDeckId, program)
-            // Auto-rebind on the freshly-loaded deck so the audio
+            // Auto-rebind on the freshly-loaded deck so the binding
             // mapping shuffles every scene change, not just the
             // program. Failures are non-fatal — keep the swap going.
             // Skip for util programs (camera, media, solid, scope,
             // spectrum, roll) — they're for direct operator control.
+            // Pick the same rebind path the operator would click:
+            //   audio enabled       → rebindEq (audio bands + osc mix)
+            //   midi enabled        → rebindMidi (channels + osc mix)
+            //   neither             → rebindEq forced all-osc so the
+            //                          deck animates instead of being
+            //                          left with silent audio bindings
             const isUtil = program?.tags?.includes('util')
             if (this._autoRebindEq && this.rebind && !isUtil) {
                 try {
-                    this.rebind.rebindEq(deck, program)
+                    const audioOn = !!this.audio?.enabled
+                    const midiOn = !!this.midi?.enabled
+                    if (audioOn) {
+                        this.rebind.rebindEq(deck, program)
+                    } else if (midiOn) {
+                        this.rebind.rebindMidi(deck)
+                    } else {
+                        this.rebind.rebindEq(deck, program, { oscillatorCount: 4 })
+                    }
                 } catch (err) {
                     console.warn('[AutoMix] auto-rebind failed', err)
                 }

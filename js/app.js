@@ -271,7 +271,7 @@ async function boot() {
 
     // Auto-mix
     const autoMix = new AutoMix({
-        library, decks: state.decks, compositor, scheduler, rebind,
+        library, decks: state.decks, compositor, scheduler, rebind, audio, midi,
         getXfade: () => state.crossfade,
         setXfade: (v) => {
             state.crossfade = v

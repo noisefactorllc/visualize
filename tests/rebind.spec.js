@@ -128,6 +128,31 @@ test('rebind: oscillatorCount=4 emits osc() in regenerated DSL', async ({ browse
     }
 })
 
+test('rebind: oscillatorCount override forces all-osc when audio is off', async ({ browser }) => {
+    // AutoMix uses this code path in its no-audio/no-midi fallback so
+    // the deck animates instead of being left with silent audio() bindings.
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const program = window.__visualize.__currentProgram
+            deck.rebind.oscillatorCount = 0   // operator setting
+            const ok = await window.__visualize.rebind.rebindEq(
+                deck, program, { oscillatorCount: 4 })
+            return { ok, newDsl: deck._currentDsl }
+        })
+        expect(result.ok).toBe(true)
+        // With count override of 4 and 2-4 params picked, EVERY pick
+        // should be an osc() — no NEW audio() automations beyond the
+        // pristine declarations.
+        const oscCount = (result.newDsl.match(/osc\(/g) || []).length
+        expect(oscCount).toBeGreaterThanOrEqual(2)
+        expect(/oscKind\.(sine|tri|saw|sawInv|square)/.test(result.newDsl)).toBe(true)
+    } finally {
+        await context.close()
+    }
+})
+
 test('rebind: util programs skip auto-rebind in AutoMix swap', async ({ browser }) => {
     const { context, page } = await bootAndLoad(browser, 'solid (blue)')
     try {
