@@ -39,7 +39,6 @@ const $ = (id) => document.getElementById(id)
 
 const state = {
     decks: { A: null, B: null },
-    deckDsl: { A: '', B: '' },        // last loaded DSL (for the editor)
     mainRes: { width: 1280, height: 720 },
     loopDuration: 10,
     preferWebGPU: false,
@@ -196,7 +195,7 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
-    window.__visualize = { audio, midi, decks: state.decks, rebind }
+    window.__visualize = { audio, midi, decks: state.decks, rebind, state }
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -434,7 +433,6 @@ async function boot() {
             toast(`${deckId}: ${res.error.slice(0, 60)}`)
             return
         }
-        state.deckDsl[deckId] = program.dsl
         // Refresh audio routing in case renderer recreated audioState
         audio.refreshDeckStates()
         const labels = deckLabels[deckId]
@@ -474,8 +472,12 @@ async function boot() {
 
                 // For auto mode, re-classify against the currently
                 // loaded DSL; for manual, just apply the chosen value.
+                // Use the rebind's pristine original DSL so a
+                // mid-roll re-classify doesn't get fooled by the
+                // override map (the effect set is the same either way).
                 if (next.mode === 'auto') {
-                    const dsl = state.deckDsl[deckId]
+                    const dsl = state.decks[deckId].rebind.originalDsl
+                        || state.decks[deckId]._currentDsl
                     const heavy = dsl && isHeavyDsl(dsl, state.decks[deckId]._renderer.manifest)
                     next.value = heavy ? 0.5 : 1.0
                 }
@@ -648,7 +650,7 @@ async function boot() {
                 panel.hidden = !opening
                 toggleBtn.classList.toggle('active', opening)
                 if (opening) {
-                    editor.value = state.deckDsl[deckId] || ''
+                    editor.value = state.decks[deckId]._currentDsl || ''
                     clearError()
                     requestAnimationFrame(() => editor.focus?.())
                 }
@@ -668,7 +670,6 @@ async function boot() {
                         return
                     }
                     clearError()
-                    state.deckDsl[deckId] = dsl
                     audio.refreshDeckStates()
                     const labels = deckLabels[deckId]
                     if (labels) {
@@ -700,13 +701,16 @@ async function boot() {
         }
     }
 
-    /** Keep an open editor in sync with the deck's currently loaded DSL. */
+    /** Keep an open editor in sync with the deck's currently loaded DSL.
+     *  Reads directly from the deck — the renderer is the single source
+     *  of truth (this covers post-load, post-rebind, and post-scene-
+     *  recall all in one path). */
     function syncDeckEditor(deckId) {
         const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
         const panel = deckEl.querySelector('.deck-editor')
         if (panel.hidden) return
         const editor = deckEl.querySelector('code-editor')
-        editor.value = state.deckDsl[deckId] || ''
+        editor.value = state.decks[deckId]._currentDsl || ''
     }
 
     wireDeckEditors()
@@ -1037,6 +1041,20 @@ async function boot() {
                 enabled: autoMix.enabled,
                 barsPerScene: parseInt($('automix-bars').value, 10),
                 curve: $('automix-curve').value
+            }),
+            // Mixer effect + per-effect overrides have major visual
+            // impact (different blend modes look wildly different).
+            // Captured so a scene round-trip reproduces what the
+            // operator was looking at.
+            getMixerState: () => mixerControlsPanel ? {
+                id: mixer.currentMixer.id,
+                overrides: { ...mixer._currentOverrides }
+            } : null,
+            // Per-deck pixel density — manual choice affects sharpness
+            // and the visual feel.
+            getDeckDensity: () => ({
+                A: { ...state.deckDensity.A },
+                B: { ...state.deckDensity.B }
             })
         }
     }
@@ -1089,10 +1107,33 @@ async function boot() {
                     $('automix-toggle').dataset.state = cfg.enabled ? 'on' : 'off'
                 }
             },
+            setMixerState: async (m) => {
+                if (!m || !m.id || !mixerControlsPanel) return
+                await mixer.setMixerEffect(m.id, m.overrides || {})
+                mixerControlsPanel.show(mixer.currentMixer.id)
+                const sel = $('mixer-effect')
+                if (sel) sel.value = mixer.currentMixer.id
+            },
+            setDeckDensity: (d) => {
+                if (!d) return
+                for (const id of ['A', 'B']) {
+                    const saved = d[id]
+                    if (!saved) continue
+                    state.deckDensity[id] = { mode: saved.mode, value: saved.value }
+                    state.decks[id].setPixelDensity(saved.value)
+                }
+            },
             refreshAudio: () => audio.refreshDeckStates(),
             refreshRebind: () => {
+                // After a scene recall the deck's _currentDsl is the
+                // regenerated rebind DSL — push it back into any open
+                // editor and refresh the per-deck UI chrome too.
                 updateBandpassBtn('A')
                 updateBandpassBtn('B')
+                updateDensityButton('A')
+                updateDensityButton('B')
+                syncDeckEditor('A')
+                syncDeckEditor('B')
             }
         }
     }
@@ -1161,6 +1202,14 @@ async function boot() {
     }
 
     state.curve = 'dipped' // track current curve so snapshots can read it
+
+    // Expose scene plumbing to the test hook so specs can drive
+    // save / recall without scraping the UI.
+    if (window.__visualize) {
+        window.__visualize.scenes = scenes
+        window.__visualize.takeSnapshot = () => Scenes.snapshot(snapshotAccessors())
+        window.__visualize.applySnapshot = (snap) => Scenes.apply(snap, applyAccessors())
+    }
 
     scenes.onChange(() => renderScenes())
     renderScenes()

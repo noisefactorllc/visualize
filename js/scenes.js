@@ -49,7 +49,7 @@ export class Scenes {
      * Build a snapshot from the current app state. The app supplies
      * accessors for everything; we don't poke at app internals.
      */
-    static snapshot({ decks, getXfade, getCurve, scheduler, getFxState, getAutoMixConfig }) {
+    static snapshot({ decks, getXfade, getCurve, scheduler, getFxState, getAutoMixConfig, getMixerState, getDeckDensity }) {
         return {
             createdAt: Date.now(),
             decks: {
@@ -71,7 +71,9 @@ export class Scenes {
             bpm: scheduler.bpm,
             divider: scheduler.divider,
             fx: getFxState(),
-            autoMix: getAutoMixConfig()
+            autoMix: getAutoMixConfig(),
+            mixer: getMixerState?.() || null,
+            deckDensity: getDeckDensity?.() || null
         }
     }
 
@@ -120,9 +122,16 @@ export class Scenes {
      * Returns a list of any errors encountered (per-deck load failures
      * mostly), but always applies as much as it can.
      */
-    static async apply(snapshot, { decks, setXfade, setCurve, scheduler, setFx, setAutoMixConfig, refreshAudio, refreshRebind }) {
+    static async apply(snapshot, { decks, setXfade, setCurve, scheduler, setFx, setAutoMixConfig, setMixerState, setDeckDensity, refreshAudio, refreshRebind }) {
         const errors = []
-        // Decks first (compile may take a beat)
+        // Per-deck density first — it affects the renderer's buffer
+        // size and must be set before compile so the new program
+        // renders at the right resolution from the first frame.
+        if (snapshot.deckDensity && setDeckDensity) {
+            try { setDeckDensity(snapshot.deckDensity) }
+            catch (err) { errors.push(`density: ${err?.message || err}`) }
+        }
+        // Decks (compile may take a beat)
         for (const id of ['A', 'B']) {
             const d = snapshot.decks?.[id]
             if (!d || !d.dsl) continue
@@ -163,6 +172,10 @@ export class Scenes {
         if (typeof snapshot.xfade === 'number') setXfade(snapshot.xfade)
         if (snapshot.fx) setFx(snapshot.fx)
         if (snapshot.autoMix) setAutoMixConfig(snapshot.autoMix)
+        if (snapshot.mixer && setMixerState) {
+            try { await setMixerState(snapshot.mixer) }
+            catch (err) { errors.push(`mixer: ${err?.message || err}`) }
+        }
         return errors
     }
 
