@@ -29,6 +29,17 @@ const TAG_TO_BAND = { bass: 0, mid: 1, high: 2 }
 // picked specific notes.
 const MIDI_MODE_INDICES = [2, 3, 4]
 
+// Oscillator types we'll randomize across. Mirrors oscKindNames order
+// in the bundle:
+//   0 sine, 1 tri, 2 saw, 3 sawInv, 4 square
+// Noise types (5, 6) are intentionally skipped — they're scrolling
+// random walks rather than repeating waveforms.
+const OSC_TYPE_INDICES = [0, 1, 2, 3, 4]
+
+// Integer speeds = clean loops against the deck's loop duration.
+// 1 = one cycle per loop, 2 = two cycles, etc.
+const OSC_SPEEDS = [1, 2, 4, 8]
+
 /**
  * Pick home bands for a program from its tags. A program tagged
  * ["bass", "mid"] returns [0, 1]. Untagged → all three bands.
@@ -136,6 +147,17 @@ function midiNode(channel, modeIndex, m1, m2) {
     }
 }
 
+/** Build an Oscillator automation in resolved form. */
+function oscNode(typeIndex, speed, m1, m2) {
+    return {
+        type: 'Oscillator',
+        oscType: typeIndex,
+        min: m1,
+        max: m2,
+        speed
+    }
+}
+
 /**
  * Convert the override map to the shape `unparse` expects: keyed by
  * globalStepIndex, with `{ [paramName]: value }` per step.
@@ -177,34 +199,51 @@ export function regenerateDsl(originalDsl, overrideMap) {
  * `rebindable` and constrained to `homeBands` when bandpass is true.
  */
 export function buildAudioOverrides({
-    rebindable, homeBands, bandpass, count, rand = Math.random
+    rebindable, homeBands, bandpass, count, oscillatorCount = 0,
+    rand = Math.random
 }) {
     if (rebindable.length === 0) return {}
     const n = Math.max(1, Math.min(count, rebindable.length))
     const picked = pickN(rebindable, n, rand)
     const bands = bandpass ? homeBands : [0, 1, 2]
+    const nOsc = Math.max(0, Math.min(oscillatorCount, picked.length))
     const out = {}
-    for (const p of picked) {
-        const bandIdx = bands[Math.floor(rand() * bands.length)]
+    for (let i = 0; i < picked.length; i++) {
+        const p = picked[i]
         const [m1, m2] = randomSubWindow(p.spec.min, p.spec.max, rand)
         out[p.stepIndex] ||= {}
-        out[p.stepIndex][p.paramName] = audioNode(bandIdx, m1, m2)
+        if (i < nOsc) {
+            const typeIdx = OSC_TYPE_INDICES[Math.floor(rand() * OSC_TYPE_INDICES.length)]
+            const speed   = OSC_SPEEDS[Math.floor(rand() * OSC_SPEEDS.length)]
+            out[p.stepIndex][p.paramName] = oscNode(typeIdx, speed, m1, m2)
+        } else {
+            const bandIdx = bands[Math.floor(rand() * bands.length)]
+            out[p.stepIndex][p.paramName] = audioNode(bandIdx, m1, m2)
+        }
     }
     return out
 }
 
 /** Build a fresh override map of n random Midi bindings. */
-export function buildMidiOverrides({ rebindable, count, rand = Math.random }) {
+export function buildMidiOverrides({ rebindable, count, oscillatorCount = 0, rand = Math.random }) {
     if (rebindable.length === 0) return {}
     const n = Math.max(1, Math.min(count, rebindable.length))
     const picked = pickN(rebindable, n, rand)
+    const nOsc = Math.max(0, Math.min(oscillatorCount, picked.length))
     const out = {}
-    for (const p of picked) {
-        const channel = Math.floor(rand() * 16)
-        const modeIndex = MIDI_MODE_INDICES[Math.floor(rand() * MIDI_MODE_INDICES.length)]
+    for (let i = 0; i < picked.length; i++) {
+        const p = picked[i]
         const [m1, m2] = randomSubWindow(p.spec.min, p.spec.max, rand)
         out[p.stepIndex] ||= {}
-        out[p.stepIndex][p.paramName] = midiNode(channel, modeIndex, m1, m2)
+        if (i < nOsc) {
+            const typeIdx = OSC_TYPE_INDICES[Math.floor(rand() * OSC_TYPE_INDICES.length)]
+            const speed   = OSC_SPEEDS[Math.floor(rand() * OSC_SPEEDS.length)]
+            out[p.stepIndex][p.paramName] = oscNode(typeIdx, speed, m1, m2)
+        } else {
+            const channel = Math.floor(rand() * 16)
+            const modeIndex = MIDI_MODE_INDICES[Math.floor(rand() * MIDI_MODE_INDICES.length)]
+            out[p.stepIndex][p.paramName] = midiNode(channel, modeIndex, m1, m2)
+        }
     }
     return out
 }
@@ -223,7 +262,8 @@ export async function rebindEq(deck, program, { rand = Math.random } = {}) {
     const homeBands = homeBandsForProgram(program)
     const count = 2 + Math.floor(rand() * 3)   // 2,3,4
     const overrides = buildAudioOverrides({
-        rebindable, homeBands, bandpass: rebind.bandpass, count, rand
+        rebindable, homeBands, bandpass: rebind.bandpass, count,
+        oscillatorCount: rebind.oscillatorCount || 0, rand
     })
     rebind.overrides = overrides
     return _applyAndLoad(deck)
@@ -236,7 +276,10 @@ export async function rebindMidi(deck, { rand = Math.random } = {}) {
     const rebindable = collectRebindableParams(rebind.originalDsl)
     if (rebindable.length === 0) return false
     const count = 2 + Math.floor(rand() * 3)
-    const overrides = buildMidiOverrides({ rebindable, count, rand })
+    const overrides = buildMidiOverrides({
+        rebindable, count,
+        oscillatorCount: rebind.oscillatorCount || 0, rand
+    })
     rebind.overrides = overrides
     return _applyAndLoad(deck)
 }

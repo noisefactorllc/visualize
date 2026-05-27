@@ -203,9 +203,9 @@
         <main class="stage">
             <div class="deck deck-a" data-deck="A">
                 <div class="deck-head">
-                    <button class="deck-density" data-deck="A" id="deck-a-density" title="Render zoom (click to cycle 100/75/50/25%)">
-                        <span class="icon">zoom_in</span>
-                        <span class="density-value">100%</span>
+                    <button class="deck-osc-count" data-deck="A" id="deck-a-osc-count" title="Oscillator count for rebind (click to cycle 0–4)">
+                        <span class="icon">waves</span>
+                        <span class="osc-value">×0</span>
                     </button>
                     <div class="deck-head-actions">
                         <button class="deck-rebind-eq" data-deck="A" title="Reshuffle audio bindings (E)"><span class="icon">graphic_eq</span></button>
@@ -214,6 +214,12 @@
                         <button class="deck-edit-toggle" data-deck="A" title="Edit DSL"><span class="icon">code</span></button>
                         <button class="deck-load-random" data-deck="A" title="Load random program"><span class="icon">shuffle</span></button>
                     </div>
+                </div>
+                <div class="deck-head-row2">
+                    <button class="deck-density" data-deck="A" id="deck-a-density" title="Render zoom (click to cycle 100/75/50/25%)">
+                        <span class="icon">zoom_in</span>
+                        <span class="density-value">100%</span>
+                    </button>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-a-canvas"></canvas>
@@ -260,9 +266,9 @@
 
             <div class="deck deck-b" data-deck="B">
                 <div class="deck-head">
-                    <button class="deck-density" data-deck="B" id="deck-b-density" title="Render zoom (click to cycle 100/75/50/25%)">
-                        <span class="icon">zoom_in</span>
-                        <span class="density-value">100%</span>
+                    <button class="deck-osc-count" data-deck="B" id="deck-b-osc-count" title="Oscillator count for rebind (click to cycle 0–4)">
+                        <span class="icon">waves</span>
+                        <span class="osc-value">×0</span>
                     </button>
                     <div class="deck-head-actions">
                         <button class="deck-rebind-eq" data-deck="B" title="Reshuffle audio bindings (Shift+E)"><span class="icon">graphic_eq</span></button>
@@ -271,6 +277,12 @@
                         <button class="deck-edit-toggle" data-deck="B" title="Edit DSL"><span class="icon">code</span></button>
                         <button class="deck-load-random" data-deck="B" title="Load random program"><span class="icon">shuffle</span></button>
                     </div>
+                </div>
+                <div class="deck-head-row2">
+                    <button class="deck-density" data-deck="B" id="deck-b-density" title="Render zoom (click to cycle 100/75/50/25%)">
+                        <span class="icon">zoom_in</span>
+                        <span class="density-value">100%</span>
+                    </button>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-b-canvas"></canvas>
@@ -360,6 +372,49 @@
                     <span class="status-icon icon">bolt</span>
                     <span class="status-text"><span id="fps-value">0</span> fps</span>
                 </div>
+
+                <span class="status-divider"></span>
+
+                <button id="automixer-toggle" class="status-pill status-toggle status-automixer" data-state="off" title="Auto-Mix — automate crossfader from a single source (mutually exclusive with Auto-VJ)">
+                    <span class="status-icon icon">tune</span>
+                    <span class="status-text">AUTO-MIX</span>
+                </button>
+                <label class="status-field" title="Auto-Mix source">
+                    <span class="status-field-label">source</span>
+                    <select id="automixer-source">
+                        <optgroup label="osc">
+                            <option value="osc:0" selected>sine</option>
+                            <option value="osc:1">tri</option>
+                            <option value="osc:2">saw</option>
+                            <option value="osc:3">sawInv</option>
+                            <option value="osc:4">square</option>
+                        </optgroup>
+                        <optgroup label="audio">
+                            <option value="audio:sub">sub</option>
+                            <option value="audio:low">low</option>
+                            <option value="audio:mid">mid</option>
+                            <option value="audio:high">high</option>
+                        </optgroup>
+                        <optgroup label="midi">
+                            <option value="midi:0">ch 1</option>
+                            <option value="midi:1">ch 2</option>
+                            <option value="midi:2">ch 3</option>
+                            <option value="midi:3">ch 4</option>
+                            <option value="midi:4">ch 5</option>
+                            <option value="midi:5">ch 6</option>
+                            <option value="midi:6">ch 7</option>
+                            <option value="midi:7">ch 8</option>
+                            <option value="midi:8">ch 9</option>
+                            <option value="midi:9">ch 10</option>
+                            <option value="midi:10">ch 11</option>
+                            <option value="midi:11">ch 12</option>
+                            <option value="midi:12">ch 13</option>
+                            <option value="midi:13">ch 14</option>
+                            <option value="midi:14">ch 15</option>
+                            <option value="midi:15">ch 16</option>
+                        </optgroup>
+                    </select>
+                </label>
 
                 <span class="status-divider"></span>
 

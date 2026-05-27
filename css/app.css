@@ -574,6 +574,19 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-family: var(--hf-font-family-mono);
 }
 
+/* Second deck-head row — holds the density/zoom button now that
+   OSC + the action rail fill the top row. */
+.deck-head-row2 {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--hf-space-2);
+    padding: 0 var(--hf-space-3) var(--hf-space-2);
+    font-family: var(--hf-font-family-mono);
+}
+
 .deck-head-actions {
     display: flex;
     align-items: center;
@@ -640,7 +653,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
    "75%" / "25%" / etc when the user has pinned a manual override.
    Border tint shifts amber when auto-stepped-down so the user can see
    at a glance that the deck dropped to a lower buffer. */
-.deck-density {
+.deck-density,
+.deck-osc-count {
     appearance: none;
     background: transparent;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
@@ -653,9 +667,14 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     letter-spacing: 0.04em;
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
-.deck-density:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
-.deck-density[data-mode="manual"] {
+.deck-density:hover,
+.deck-osc-count:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-density[data-mode="manual"],
+.deck-osc-count[data-active="1"] {
     color: var(--hf-text-bright);
     border-color: color-mix(in srgb, var(--hf-accent) 60%, transparent);
 }

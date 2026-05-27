@@ -98,6 +98,7 @@ export class Deck {
         this.rebind = {
             originalDsl: '',
             bandpass: true,
+            oscillatorCount: 0,   // 0..4 oscillators per rebind roll
             overrides: {}
         }
     }

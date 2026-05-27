@@ -28,7 +28,7 @@ export class SharedAudio {
         this._onStatus = null
         this._onMeters = null
 
-        this.meters = { low: 0, mid: 0, high: 0, vol: 0 }
+        this.meters = { sub: 0, low: 0, mid: 0, high: 0, vol: 0 }
         this.spectrum = new Uint8Array(128)
         this.waveform = new Uint8Array(256)
     }
@@ -148,9 +148,9 @@ export class SharedAudio {
         this._fftData = null
         this._timeDomainData = null
         this._enabled = false
-        this.meters.low = this.meters.mid = this.meters.high = this.meters.vol = 0
+        this.meters.sub = this.meters.low = this.meters.mid = this.meters.high = this.meters.vol = 0
         for (const state of this._audioStates.values()) {
-            state.low = 0; state.mid = 0; state.high = 0; state.vol = 0
+            state.sub = 0; state.low = 0; state.mid = 0; state.high = 0; state.vol = 0
             state.spectrum?.fill?.(0)
             state.waveform?.fill?.(0.5)
         }
@@ -196,17 +196,24 @@ export class SharedAudio {
         }
 
         const sens = this._sensitivity
+        // sub: just the deepest FFT bin (~0-187Hz at our 48kHz/256
+        // fftSize). Distinct from low (bins 0-3 avg) so the operator
+        // can target kick-drum fundamentals specifically — used by
+        // Auto-Mix's audio source picker.
+        const sub  = Math.min(1, (fft[0] / 255) * sens)
         const low  = Math.min(1, ((fft[0] + fft[1] + fft[2] + fft[3]) / 4 / 255) * sens)
         const mid  = Math.min(1, ((fft[4] + fft[6] + fft[8] + fft[10]) / 4 / 255) * sens)
         const high = Math.min(1, ((fft[16] + fft[20] + fft[24] + fft[28]) / 4 / 255) * sens)
         const vol  = (low + mid + high) / 3
 
+        this.meters.sub = sub
         this.meters.low = low
         this.meters.mid = mid
         this.meters.high = high
         this.meters.vol = vol
 
         for (const state of this._audioStates.values()) {
+            state.sub = sub
             state.low = low
             state.mid = mid
             state.high = high

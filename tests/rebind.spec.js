@@ -106,6 +106,28 @@ test('rebind: clearRebinds restores original DSL', async ({ browser }) => {
     }
 })
 
+test('rebind: oscillatorCount=4 emits osc() in regenerated DSL', async ({ browser }) => {
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const program = window.__visualize.__currentProgram
+            deck.rebind.oscillatorCount = 4
+            const ok = await window.__visualize.rebind.rebindEq(deck, program)
+            return { ok, newDsl: deck._currentDsl }
+        })
+        expect(result.ok).toBe(true)
+        // With count=4 and rebindEq picking 2-4 params, every binding
+        // should be an osc(). At least 2 osc() calls in the new DSL.
+        const oscCount = (result.newDsl.match(/osc\(/g) || []).length
+        expect(oscCount).toBeGreaterThanOrEqual(2)
+        // At least one oscType reference should appear.
+        expect(/oscKind\.(sine|tri|saw|sawInv|square)/.test(result.newDsl)).toBe(true)
+    } finally {
+        await context.close()
+    }
+})
+
 test('rebind: bandpass off allows non-home bands across rolls', async ({ browser }) => {
     const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
     try {

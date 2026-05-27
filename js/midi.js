@@ -82,6 +82,22 @@ export class SharedMidi {
         this._onBpm = null
         this._onTransport = null
         this._onClockStatusChange = null
+
+        // Track the most recent CC value (0..1) per MIDI channel. Used
+        // by Auto-Mix's MIDI source picker — "whichever knob the user
+        // just touched on this channel" drives the fader.
+        this._lastCcByChannel = new Map()
+        this._lastCcListeners = []
+    }
+
+    /** Subscribe to every CC arrival. Callback fires (channel, value01). */
+    onLastCcChange(cb) { this._lastCcListeners.push(cb) }
+
+    /** Synchronous: most recent CC value on a channel, or null if none. */
+    lastCcOnChannel(channel) {
+        return this._lastCcByChannel.has(channel)
+            ? this._lastCcByChannel.get(channel)
+            : null
     }
 
     onStatusChange(cb) { this._onStatus = cb }
@@ -300,6 +316,11 @@ export class SharedMidi {
             for (const state of this._midiStates.values()) {
                 this._writeCcIntoMidiState(state, channel, cc, raw01)
             }
+
+            // Track the latest CC value for the channel + fan out to
+            // subscribers (Auto-Mix watches this).
+            this._lastCcByChannel.set(channel, raw01)
+            for (const cb of this._lastCcListeners) cb(channel, raw01)
         }
 
         // Note on/off — mirror into midiState

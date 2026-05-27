@@ -25,6 +25,7 @@ import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import { Scenes } from './scenes.js'
 import * as rebind from './rebind.js'
+import { AutoXfade } from './autoxfade.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
@@ -195,7 +196,7 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
-    window.__visualize = { audio, midi, decks: state.decks, rebind, state }
+    window.__visualize = { audio, midi, decks: state.decks, rebind, state, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -293,6 +294,40 @@ async function boot() {
     // Drive the AutoMix fade per-frame for smooth interpolation
     // (per-beat would only give ~4 visible steps across a 1-bar fade).
     compositor.onFrame(() => autoMix.tickFrame())
+
+    // ── Auto-Mix (crossfader automation) ─────────────────────────────
+    // Mutually exclusive with Auto-VJ — each side calls setEnabled(false)
+    // on the other when it turns on.
+    const AUTOXFADE_STORAGE_KEY = 'visualize.autoxfade.v1'
+    const autoXfade = new AutoXfade({
+        scheduler, audio, midi,
+        setXfade: (v) => {
+            state.crossfade = v
+            compositor.setCrossfade(v)
+            xfaderEl.value = String(v)
+            updateLiveIndicator()
+        }
+    })
+    autoXfade.onEnableChange(on => { if (on) autoMix.setEnabled(false) })
+
+    function persistAutoXfade() {
+        try {
+            localStorage.setItem(
+                AUTOXFADE_STORAGE_KEY,
+                JSON.stringify(autoXfade.snapshot())
+            )
+        } catch {}
+    }
+    function loadAutoXfade() {
+        try {
+            const raw = localStorage.getItem(AUTOXFADE_STORAGE_KEY)
+            if (raw) autoXfade.restore(JSON.parse(raw))
+        } catch {}
+    }
+    loadAutoXfade()
+
+    // Drive autoXfade every frame; honours its own enabled flag.
+    compositor.onFrame(() => autoXfade.tick(performance.now()))
 
     // Recorder
     const recorder = new Recorder($('main-canvas'), {
@@ -499,23 +534,38 @@ async function boot() {
     // off picks any band.
     const REBIND_STORAGE_KEY = 'visualize.rebind.v1'
 
-    function loadBandpassState() {
+    function loadRebindUiState() {
         try {
             const raw = localStorage.getItem(REBIND_STORAGE_KEY)
             const parsed = raw ? JSON.parse(raw) : {}
-            return {
-                A: parsed.A !== false,
-                B: parsed.B !== false
+            const pick = (side) => {
+                // Forward-compat with older shape: { A: bool, B: bool }
+                const e = (parsed[side] && typeof parsed[side] === 'object')
+                    ? parsed[side] : { bandpass: parsed[side] }
+                return {
+                    bandpass: e.bandpass !== false,
+                    oscillatorCount: Math.max(0, Math.min(4, e.oscillatorCount | 0))
+                }
             }
+            return { A: pick('A'), B: pick('B') }
         } catch {
-            return { A: true, B: true }
+            return {
+                A: { bandpass: true, oscillatorCount: 0 },
+                B: { bandpass: true, oscillatorCount: 0 }
+            }
         }
     }
-    function persistBandpassState() {
+    function persistRebindUiState() {
         try {
             localStorage.setItem(REBIND_STORAGE_KEY, JSON.stringify({
-                A: state.decks.A.rebind.bandpass,
-                B: state.decks.B.rebind.bandpass
+                A: {
+                    bandpass: state.decks.A.rebind.bandpass,
+                    oscillatorCount: state.decks.A.rebind.oscillatorCount
+                },
+                B: {
+                    bandpass: state.decks.B.rebind.bandpass,
+                    oscillatorCount: state.decks.B.rebind.oscillatorCount
+                }
             }))
         } catch {}
     }
@@ -538,13 +588,27 @@ async function boot() {
             : 'Bandpass off: EQ rebind picks any band'
     }
 
+    function updateOscCountBtn(deckId) {
+        const btn = document.querySelector(`.deck-osc-count[data-deck="${deckId}"]`)
+        if (!btn) return
+        const n = state.decks[deckId].rebind.oscillatorCount || 0
+        const label = btn.querySelector('.osc-value')
+        if (label) label.textContent = `×${n}`
+        btn.dataset.active = n > 0 ? '1' : '0'
+        btn.title = n === 0
+            ? 'Oscillator count for rebind (click to cycle 0–4)'
+            : `Rebind uses ${n} oscillator${n === 1 ? '' : 's'} (click to cycle 0–4)`
+    }
+
     function wireRebindButtons() {
-        const persisted = loadBandpassState()
+        const persisted = loadRebindUiState()
         for (const deckId of ['A', 'B']) {
-            state.decks[deckId].rebind.bandpass = persisted[deckId]
+            state.decks[deckId].rebind.bandpass = persisted[deckId].bandpass
+            state.decks[deckId].rebind.oscillatorCount = persisted[deckId].oscillatorCount
             const eqBtn = document.querySelector(`.deck-rebind-eq[data-deck="${deckId}"]`)
             const midiBtn = document.querySelector(`.deck-rebind-midi[data-deck="${deckId}"]`)
             const bpBtn = document.querySelector(`.deck-bandpass[data-deck="${deckId}"]`)
+            const oscBtn = document.querySelector(`.deck-osc-count[data-deck="${deckId}"]`)
             if (eqBtn) eqBtn.addEventListener('click', async () => {
                 const ok = await rebind.rebindEq(state.decks[deckId], programForDeck(deckId))
                 if (ok) {
@@ -567,9 +631,16 @@ async function boot() {
             if (bpBtn) bpBtn.addEventListener('click', () => {
                 state.decks[deckId].rebind.bandpass = !state.decks[deckId].rebind.bandpass
                 updateBandpassBtn(deckId)
-                persistBandpassState()
+                persistRebindUiState()
+            })
+            if (oscBtn) oscBtn.addEventListener('click', () => {
+                const r = state.decks[deckId].rebind
+                r.oscillatorCount = ((r.oscillatorCount || 0) + 1) % 5
+                updateOscCountBtn(deckId)
+                persistRebindUiState()
             })
             updateBandpassBtn(deckId)
+            updateOscCountBtn(deckId)
         }
     }
     wireRebindButtons()
@@ -810,10 +881,51 @@ async function boot() {
         if (btn) btn.classList.toggle('active', active)
     }
 
-    // Auto-mix toggle
+    // Auto-VJ toggle (with mutual exclusion against Auto-Mix below)
     $('automix-toggle').addEventListener('click', () => {
         const on = autoMix.toggle()
         $('automix-toggle').dataset.state = on ? 'on' : 'off'
+        if (on && autoXfade.enabled) {
+            autoXfade.setEnabled(false)
+            updateAutoXfadeToggleUi()
+            persistAutoXfade()
+        }
+    })
+
+    // ── Auto-Mix UI wiring ───────────────────────────────────────────
+    const autoXfadeToggleEl = $('automixer-toggle')
+    const autoXfadeSourceEl = $('automixer-source')
+
+    function updateAutoXfadeToggleUi() {
+        autoXfadeToggleEl.dataset.state = autoXfade.enabled ? 'on' : 'off'
+    }
+    function syncAutoXfadeSourceUi() {
+        const s = autoXfade.source
+        let key = 'osc:0'
+        if (s.kind === 'osc') key = `osc:${s.oscType}`
+        else if (s.kind === 'audio') key = `audio:${s.band}`
+        else if (s.kind === 'midi') key = `midi:${s.channel}`
+        if (autoXfadeSourceEl) autoXfadeSourceEl.value = key
+    }
+    syncAutoXfadeSourceUi()
+    updateAutoXfadeToggleUi()
+
+    autoXfadeToggleEl.addEventListener('click', () => {
+        autoXfade.setEnabled(!autoXfade.enabled)
+        updateAutoXfadeToggleUi()
+        // The onEnableChange wiring above already disables autoMix when
+        // autoXfade goes on; mirror its pill state here.
+        $('automix-toggle').dataset.state = autoMix.enabled ? 'on' : 'off'
+        persistAutoXfade()
+    })
+
+    autoXfadeSourceEl.addEventListener('change', () => {
+        const v = autoXfadeSourceEl.value
+        const [kind, rest] = v.split(':')
+        if (kind === 'osc') autoXfade.setSource({ kind: 'osc', oscType: parseInt(rest, 10) })
+        else if (kind === 'audio') autoXfade.setSource({ kind: 'audio', band: rest })
+        else if (kind === 'midi') autoXfade.setSource({ kind: 'midi', channel: parseInt(rest, 10) })
+        persistAutoXfade()
     })
     $('automix-bars').addEventListener('change', (e) => {
         autoMix.setBarsPerScene(parseInt(e.target.value, 10))
@@ -1055,7 +1167,8 @@ async function boot() {
             getDeckDensity: () => ({
                 A: { ...state.deckDensity.A },
                 B: { ...state.deckDensity.B }
-            })
+            }),
+            getAutoXfadeConfig: () => autoXfade.snapshot()
         }
     }
 
@@ -1123,6 +1236,12 @@ async function boot() {
                     state.decks[id].setPixelDensity(saved.value)
                 }
             },
+            setAutoXfadeConfig: (cfg) => {
+                autoXfade.restore(cfg)
+                syncAutoXfadeSourceUi()
+                updateAutoXfadeToggleUi()
+                persistAutoXfade()
+            },
             refreshAudio: () => audio.refreshDeckStates(),
             refreshRebind: () => {
                 // After a scene recall the deck's _currentDsl is the
@@ -1130,6 +1249,8 @@ async function boot() {
                 // editor and refresh the per-deck UI chrome too.
                 updateBandpassBtn('A')
                 updateBandpassBtn('B')
+                updateOscCountBtn('A')
+                updateOscCountBtn('B')
                 updateDensityButton('A')
                 updateDensityButton('B')
                 syncDeckEditor('A')
