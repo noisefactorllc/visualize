@@ -308,7 +308,11 @@ async function boot() {
             compositor.setCrossfade(v)
             xfaderEl.value = String(v)
             updateLiveIndicator()
-        }
+        },
+        // Share Auto-VJ's cycle length so the operator picks one
+        // "musical cycle" knob (the cycle dropdown) that drives
+        // either automation mode.
+        getBarsPerCycle: () => autoMix.barsPerScene
     })
     autoXfade.onEnableChange(on => { if (on) autoMix.setEnabled(false) })
 
@@ -692,18 +696,40 @@ async function boot() {
             if (cameraSel) {
                 cameraSel.hidden = false
                 const devices = await dm.listCameras()
-                // Pre-permission browsers return entries with empty
-                // labels; let the operator click anyway to trigger the
-                // permission prompt by selecting "(default)".
+                // Build the option list. Rules:
+                //   1. Placeholder always at index 0 (value="").
+                //   2. Every labelled enumerated device gets its own
+                //      option keyed by deviceId.
+                //   3. If no labelled devices AND no camera is live,
+                //      render a "Enable camera" sentinel that prompts
+                //      for permission.
+                //   4. If a camera IS live, ALWAYS include its label
+                //      (under either its real deviceId or an
+                //      __active__ pseudo-id when the browser doesn't
+                //      report one), so the trigger can stay on the
+                //      operator's picked device across refreshes.
+                const labelled = devices.filter(d => d.label && d.deviceId)
                 const opts = [{ value: '', text: '— pick camera —' }]
-                for (const d of devices) {
-                    opts.push({
-                        value: d.deviceId,
-                        text: d.label || `camera ${d.deviceId.slice(0, 6)}`
-                    })
+                const seen = new Set([''])
+                for (const d of labelled) {
+                    if (seen.has(d.deviceId)) continue
+                    opts.push({ value: d.deviceId, text: d.label })
+                    seen.add(d.deviceId)
+                }
+                if (dm.active === 'camera' && dm.currentLabel) {
+                    const liveId = dm.currentCameraDeviceId || '__active__'
+                    if (!seen.has(liveId)) {
+                        opts.push({ value: liveId, text: dm.currentLabel })
+                        seen.add(liveId)
+                    }
+                } else if (labelled.length === 0) {
+                    opts.push({ value: '__default__', text: 'Enable camera (default device)' })
                 }
                 cameraSel.setOptions(opts)
-                cameraSel.setAttribute('value', dm.active === 'camera' ? '' : '')
+                const liveSel = dm.active === 'camera'
+                    ? (dm.currentCameraDeviceId || '__active__')
+                    : ''
+                cameraSel.setAttribute('value', liveSel)
             }
         } else {
             if (cameraSel) cameraSel.hidden = true
@@ -720,10 +746,21 @@ async function boot() {
             const labelEl = $(`deck-${deckId.toLowerCase()}-media-label`)
             if (cameraSel) cameraSel.addEventListener('change', async () => {
                 const v = cameraSel.value
-                if (!v) return
+                // Placeholder (empty) or __active__ (already-running
+                // camera) are no-ops.
+                if (!v || v === '__active__') return
+                // '__default__' = no labelled devices yet; pass empty
+                // deviceId to getUserMedia so it prompts for permission
+                // on whatever default camera the browser picks.
+                const deviceId = v === '__default__' ? '' : v
                 try {
-                    await deckMedia[deckId].setCamera(v)
+                    await deckMedia[deckId].setCamera(deviceId)
                     if (labelEl) labelEl.textContent = deckMedia[deckId].currentLabel
+                    // Re-render so post-permission enumerated labels
+                    // appear AND so the trigger picks up the live
+                    // camera's __active__ option if the browser
+                    // didn't report a deviceId.
+                    await refreshDeckMediaUi(deckId)
                 } catch (err) {
                     toast(`${deckId}: ${err.message || err}`)
                 }

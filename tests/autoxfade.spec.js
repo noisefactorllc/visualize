@@ -23,40 +23,67 @@ async function boot(browser) {
     return { context, page }
 }
 
-test('autoXfade: osc source sweeps a wide range across one bar (beat-aligned)', async ({ browser }) => {
+test('autoXfade: osc sweeps over the auto-VJ cycle length (beat-aligned)', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {
         const samples = await page.evaluate(() => {
             const ax = window.__visualize.autoXfade
             ax.setSource({ kind: 'osc', oscType: 0 })   // sine
-            // The osc phase is now derived from scheduler.beatInBar +
-            // scheduler.beatPhase. Drive the scheduler synthetically:
-            // override its phase fields directly across one bar.
+            // The osc phase is derived from scheduler.beatIndex +
+            // scheduler.beatPhase, spanning N bars where N comes
+            // from getBarsPerCycle() (= autoMix.barsPerScene).
+            // Default is 8 bars = 32 beats. Drive the scheduler
+            // synthetically across exactly that many beats.
             const sched = ax.scheduler
+            const bars = window.__visualize.autoMix.barsPerScene
+            const cycleBeats = bars * 4
             const out = []
-            const origInBar = sched._beatIndex
-            // Sample 17 phases across 4 beats (one bar).
+            const origIndex = sched._beatIndex
             for (let i = 0; i <= 16; i++) {
-                const t = i / 16   // 0..1 across bar
-                const beat = Math.floor(t * 4)
-                const phaseInBeat = (t * 4) - beat
-                // Stub: temporarily monkey-patch the getters via the
-                // backing fields the scheduler exposes.
-                Object.defineProperty(sched, 'beatInBar', {
-                    get: () => beat, configurable: true
-                })
+                const t = i / 16   // 0..1 across the full cycle
+                const beat = Math.floor(t * cycleBeats)
+                const phaseInBeat = (t * cycleBeats) - beat
+                sched._beatIndex = beat
                 Object.defineProperty(sched, 'beatPhase', {
                     get: () => phaseInBeat, configurable: true
                 })
                 out.push(ax.readSource(0))
             }
-            // Restore (define the original getters back as data)
-            sched._beatIndex = origInBar
+            sched._beatIndex = origIndex
             return out
         })
         const min = Math.min(...samples), max = Math.max(...samples)
-        // Sine across [0,1] full cycle should span close to 1.0.
+        // Sine across the cycle should span close to 1.0.
         expect(max - min).toBeGreaterThan(0.9)
+    } finally {
+        await context.close()
+    }
+})
+
+test('autoXfade: cycle length follows Auto-VJ bars setting', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const result = await page.evaluate(() => {
+            const ax = window.__visualize.autoXfade
+            const am = window.__visualize.autoMix
+            ax.setSource({ kind: 'osc', oscType: 2 })   // saw — strictly increasing 0..1
+            const sched = ax.scheduler
+            // With 4 bars (16 beats), sampling at beat 8 gives saw at
+            // phase 0.5 → value ≈ 0.5.
+            am.setBarsPerScene(4)
+            sched._beatIndex = 8
+            Object.defineProperty(sched, 'beatPhase', { get: () => 0, configurable: true })
+            const at4 = ax.readSource(0)
+            // With 8 bars (32 beats), sampling at beat 8 gives saw at
+            // phase 0.25 → value ≈ 0.25.
+            am.setBarsPerScene(8)
+            const at8 = ax.readSource(0)
+            return { at4, at8 }
+        })
+        // The same beat position yields half the value when the cycle
+        // doubles — confirms barsPerScene drives the phase divisor.
+        expect(result.at4).toBeCloseTo(0.5, 1)
+        expect(result.at8).toBeCloseTo(0.25, 1)
     } finally {
         await context.close()
     }

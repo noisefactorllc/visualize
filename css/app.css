@@ -906,14 +906,16 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     color: var(--hf-text-dim);
     border-radius: var(--hf-radius-sm);
-    width: 32px;
+    width: 44px;
     height: 32px;
-    font-size: var(--hf-size-base);
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
     display: inline-flex;
     align-items: center;
     justify-content: center;
+}
+.main-output-btn .icon {
+    font-size: var(--hf-size-lg);
 }
 .main-output-btn:hover {
     color: var(--hf-accent);
@@ -1111,7 +1113,6 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);
-    text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 

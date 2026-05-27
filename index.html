@@ -164,10 +164,10 @@
                     <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">TAP</button>
                     <div class="bpm-display" aria-live="polite" aria-atomic="true">
                         <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
-                        <select-dropdown id="bpm-divider" class="bpm-divider" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
+                        <select-dropdown id="bpm-divider" class="bpm-divider" value="4" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
                             <option value="1">/1</option>
                             <option value="2">/2</option>
-                            <option value="4" selected>/4</option>
+                            <option value="4">/4</option>
                             <option value="8">/8</option>
                             <option value="16">/16</option>
                             <option value="32">/32</option>
@@ -256,7 +256,7 @@
                 </div>
                 <div class="main-toolbar">
                     <select-dropdown id="mixer-effect" class="mixer-select" title="Center mixer effect (noisemaker mixer/*)"></select-dropdown>
-                    <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window"><span class="icon">picture_in_picture_alt</span></button>
+                    <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window"><span class="icon">display_external_input</span></button>
                 </div>
                 <div class="main-canvas-wrap">
                     <canvas class="main-canvas" id="main-canvas"></canvas>
@@ -337,9 +337,9 @@
                     <div class="xfader-quick">
                         <div class="xfader-fade xfader-fade-left">
                             <span class="xfader-fade-label">fade</span>
-                            <select-dropdown id="automix-curve" class="xfader-fade-curve" title="Fade curve (used by auto-fade + auto-VJ)">
+                            <select-dropdown id="automix-curve" class="xfader-fade-curve" value="dipped" title="Fade curve (used by auto-fade + auto-VJ)">
                                 <option value="linear">linear</option>
-                                <option value="dipped" selected>dipped</option>
+                                <option value="dipped">dipped</option>
                                 <option value="sharp">sharp</option>
                                 <option value="cut">cut</option>
                             </select-dropdown>
@@ -389,12 +389,12 @@
 
                 <button id="automixer-toggle" class="status-pill status-toggle status-automixer" data-state="off" title="Auto-Mix — automate crossfader from a single source (mutually exclusive with Auto-VJ)">
                     <span class="status-icon icon">tune</span>
-                    <span class="status-text">AUTO-MIX</span>
+                    <span class="status-text">auto-mix</span>
                 </button>
                 <label class="status-field" title="Auto-Mix source">
                     <span class="status-field-label">source</span>
-                    <select-dropdown id="automixer-source">
-                        <option value="osc:0" selected>osc · sine</option>
+                    <select-dropdown id="automixer-source" value="osc:0">
+                        <option value="osc:0">osc · sine</option>
                         <option value="osc:1">osc · tri</option>
                         <option value="osc:2">osc · saw</option>
                         <option value="osc:3">osc · sawInv</option>
@@ -426,13 +426,13 @@
 
                 <button id="automix-toggle" class="status-pill status-toggle status-automix" data-state="off" title="Auto-VJ — cycle through library">
                     <span class="status-icon icon">autorenew</span>
-                    <span class="status-text">AUTO-VJ</span>
+                    <span class="status-text">auto-vj</span>
                 </button>
                 <label class="status-field" title="Auto-VJ cycle length">
                     <span class="status-field-label">cycle</span>
-                    <select-dropdown id="automix-bars">
+                    <select-dropdown id="automix-bars" value="8">
                         <option value="4">4 bars</option>
-                        <option value="8" selected>8 bars</option>
+                        <option value="8">8 bars</option>
                         <option value="16">16 bars</option>
                         <option value="32">32 bars</option>
                     </select-dropdown>
@@ -446,7 +446,7 @@
                 </button>
                 <button id="record-toggle" class="status-pill record-button" data-state="off" title="Record main output">
                     <span class="record-dot"></span>
-                    <span class="status-text">REC</span>
+                    <span class="status-text">rec</span>
                     <span class="record-time" id="record-time">0:00</span>
                 </button>
             </div>
@@ -506,9 +506,9 @@
                 <h3>main</h3>
                 <div class="settings-row">
                     <label for="main-resolution">resolution</label>
-                    <select-dropdown id="main-resolution">
+                    <select-dropdown id="main-resolution" value="1280x720">
                         <option value="640x360">640×360 (low)</option>
-                        <option value="1280x720" selected>1280×720 (HD)</option>
+                        <option value="1280x720">1280×720 (HD)</option>
                         <option value="1920x1080">1920×1080 (full HD)</option>
                         <option value="2560x1440">2560×1440 (QHD)</option>
                     </select-dropdown>

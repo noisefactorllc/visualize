@@ -76,6 +76,7 @@ export class AutoMix {
     get enabled() { return this._enabled }
 
     setBarsPerScene(n) { this._barsPerScene = Math.max(1, Number(n) || 8) }
+    get barsPerScene() { return this._barsPerScene }
     setFadeDurationSec(s) { this._fadeDurSec = Math.max(0, Number(s) || 0) }
     setCurve(name) { if (FADE_CURVES[name]) this._curve = name }
     setAutoRebindEq(v) { this._autoRebindEq = !!v }

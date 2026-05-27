@@ -29,6 +29,7 @@ export class DeckMedia {
         this.deck = deck
         this._source = null         // 'camera' | 'file' | null
         this._label = ''            // device label or file name
+        this._cameraDeviceId = ''   // settled deviceId of the live camera
         this._video = null          // <video>
         this._img = null            // <img>
         this._stream = null         // MediaStream
@@ -37,6 +38,9 @@ export class DeckMedia {
 
     get active() { return this._source }
     get currentLabel() { return this._label }
+    /** Best-effort deviceId of the currently-running camera. Empty
+     *  when no camera is active or the browser didn't report one. */
+    get currentCameraDeviceId() { return this._cameraDeviceId }
 
     /** True if the deck is currently running a program with media(). */
     isMediaProgram() {
@@ -83,6 +87,10 @@ export class DeckMedia {
         const track = stream.getVideoTracks()[0]
         this._stream = stream
         this._label = track?.label || 'camera'
+        // After getUserMedia, the track settles to a real deviceId
+        // even when called with no constraint — use that so the UI
+        // can re-select the active device after the next refresh.
+        this._cameraDeviceId = track?.getSettings?.().deviceId || deviceId || ''
         this._ensureVideo()
         this._video.srcObject = stream
         await this._video.play().catch(() => { /* autoplay may need retry */ })
@@ -116,6 +124,7 @@ export class DeckMedia {
         if (this._img) this._img.src = ''
         this._source = null
         this._label = ''
+        this._cameraDeviceId = ''
     }
 
     /** Push the current source into the renderer. Cheap to call per
@@ -130,6 +139,27 @@ export class DeckMedia {
             this.deck._renderer.updateTextureFromSource?.(
                 `imageTex_step_${step}`, src, { flipY: false }
             )
+            // The synth/media shader samples its texture via
+            //   st = gl_FragCoord.xy / imageSize
+            // so imageSize must match the canvas the shader writes
+            // into — otherwise the texture lands in a fixed patch
+            // sized by the manifest default and the rest reads
+            // bgColor. Same trick mixer.js does for its deck-canvas
+            // inputs. Read from `canvas.width/height` (the deck's
+            // actual render-buffer size including pixel density)
+            // since the bundled CanvasRenderer doesn't expose
+            // public width/height getters. Cache to avoid uniform
+            // churn between frames.
+            const w = this.deck.canvas.width
+            const h = this.deck.canvas.height
+            if (w > 0 && h > 0 && (this._lastImageW !== w || this._lastImageH !== h || this._lastImageStep !== step)) {
+                this.deck._renderer.applyStepParameterValues?.({
+                    [`step_${step}`]: { imageSize: [w, h] }
+                })
+                this._lastImageW = w
+                this._lastImageH = h
+                this._lastImageStep = step
+            }
         } catch { /* mid-recompile */ }
     }
 

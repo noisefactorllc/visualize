@@ -58,7 +58,7 @@ export class MainCompositor {
         this._zoomActive = false
         this._freeze = false
 
-        this._onFrame = null
+        this._onFrame = []
 
         // Track last frame stats for FPS UI
         this._lastFrameMs = performance.now()
@@ -98,7 +98,9 @@ export class MainCompositor {
         if (XFADE_CURVES[name]) this._curve = name
     }
 
-    onFrame(cb) { this._onFrame = cb }
+    /** Subscribe to per-frame ticks. Multiple callers welcome — they
+     *  all run in registration order on each frame. */
+    onFrame(cb) { if (typeof cb === 'function') this._onFrame.push(cb) }
 
     /** Resize the main canvas. */
     resize(width, height) {
@@ -200,7 +202,11 @@ export class MainCompositor {
             this._flashAlpha *= 0.78
         }
 
-        if (this._onFrame) this._onFrame()
+        for (const cb of this._onFrame) {
+            try { cb() } catch (err) {
+                console.warn('[compositor] onFrame listener threw:', err)
+            }
+        }
     }
 
     // ── FX controls ───────────────────────────────────────────────────────

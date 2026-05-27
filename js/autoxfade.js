@@ -8,7 +8,9 @@
  *
  * Source kinds:
  *   { kind: 'osc',   oscType: 0..4 }      sine/tri/saw/sawInv/square,
- *                                          one full cycle per bar
+ *                                          one full cycle per N bars
+ *                                          (N = getBarsPerCycle(), shared
+ *                                          with Auto-VJ's cycle dropdown)
  *   { kind: 'audio', band: 'sub'|'low'|'mid'|'high' }
  *   { kind: 'midi',  channel: 0..15 }      latest CC seen on the channel
  *
@@ -35,11 +37,18 @@ function evalOsc(typeIndex, phase) {
 const DEFAULT_SOURCE = { kind: 'osc', oscType: 0 }
 
 export class AutoXfade {
-    constructor({ scheduler, audio, midi, setXfade }) {
+    constructor({ scheduler, audio, midi, setXfade, getBarsPerCycle }) {
         this.scheduler = scheduler
         this.audio = audio
         this.midi = midi
         this.setXfade = setXfade
+        // Optional () => number — the bars per oscillator cycle.
+        // We piggyback on Auto-VJ's `barsPerScene` so the two
+        // mutually-exclusive automation modes share a single
+        // "musical cycle length" knob (the existing cycle dropdown).
+        // Defaults to 1 bar when no getter is supplied.
+        this.getBarsPerCycle = typeof getBarsPerCycle === 'function'
+            ? getBarsPerCycle : () => 1
         this._enabled = false
         this._source = { ...DEFAULT_SOURCE }
         this._enableListeners = []
@@ -77,18 +86,22 @@ export class AutoXfade {
         const s = this._source
         if (s.kind === 'osc') {
             // Beat-aligned: phase comes from the BeatScheduler's
-            // position within the current 4-beat bar, so the cycle
-            // tracks the music (resets on tap, follows MIDI clock,
-            // doesn't drift). One full oscillator cycle per bar.
+            // position within an N-bar cycle (N = getBarsPerCycle(),
+            // shared with Auto-VJ's "cycle" dropdown). The cycle
+            // tracks the music — resets on tap, follows MIDI clock,
+            // doesn't drift.
+            const bars = Math.max(1, Number(this.getBarsPerCycle()) || 1)
+            const cycleBeats = bars * 4
             const sched = this.scheduler
-            if (sched && typeof sched.beatInBar === 'number'
+            if (sched && typeof sched.beatIndex === 'number'
                 && typeof sched.beatPhase === 'number') {
-                const phase = (sched.beatInBar + sched.beatPhase) / 4
+                const pos = (sched.beatIndex % cycleBeats) + sched.beatPhase
+                const phase = pos / cycleBeats
                 return evalOsc(s.oscType, phase)
             }
             // Fallback (no scheduler available) — wall-clock.
             const barSec = sched?.barSeconds?.() || 2
-            return evalOsc(s.oscType, (nowMs / 1000) / barSec)
+            return evalOsc(s.oscType, (nowMs / 1000) / (barSec * bars))
         }
         if (s.kind === 'audio') {
             return this.audio?.meters?.[s.band] ?? 0
