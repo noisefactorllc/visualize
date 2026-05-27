@@ -602,6 +602,16 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     flex: 1;
     min-width: 0;
 }
+/* Custom-element default styles (and our inline-flex on the wrapper)
+   override the browser's built-in [hidden] { display: none }. The
+   per-deck media row + its children should disappear entirely when
+   the current program isn't a media program — explicitly restore
+   the hidden behaviour. */
+.deck-media[hidden],
+.deck-media-camera[hidden],
+.deck-media-file-btn[hidden] {
+    display: none !important;
+}
 .deck-media-camera {
     min-width: 140px;
     flex: 0 1 auto;
