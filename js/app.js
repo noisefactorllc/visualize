@@ -26,6 +26,7 @@ import { OutputWindow } from './output.js'
 import { Scenes } from './scenes.js'
 import * as rebind from './rebind.js'
 import { AutoXfade } from './autoxfade.js'
+import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
@@ -289,6 +290,7 @@ async function boot() {
                 labels.name.textContent = program.title
                 labels.tag.textContent = program.tagline || ''
             }
+            refreshDeckMediaUi(deckId)
         }
     })
     // Drive the AutoMix fade per-frame for smooth interpolation
@@ -479,6 +481,9 @@ async function boot() {
         // newly loaded program — otherwise the editor would still show
         // the previous program's DSL.
         syncDeckEditor(deckId)
+        // Toggle the per-deck media picker row (Camera Input / Media
+        // Input show their picker here; other programs hide it).
+        refreshDeckMediaUi(deckId)
     }
 
     function updateDensityButton(deckId) {
@@ -645,6 +650,101 @@ async function boot() {
     }
     wireRebindButtons()
 
+    // ── Per-deck media (Camera Input / Media Input util programs) ─────
+    // One DeckMedia per deck. The picker UI is shown only when the
+    // currently-loaded program contains a synth/media call; the
+    // operator selects a camera device or a local file from the deck's
+    // own row, and we push it into the renderer's imageTex each frame.
+    const deckMedia = {
+        A: new DeckMedia({ deck: state.decks.A }),
+        B: new DeckMedia({ deck: state.decks.B })
+    }
+    compositor.onFrame(() => {
+        deckMedia.A.tick()
+        deckMedia.B.tick()
+    })
+
+    function getProgramForDeck(deckId) {
+        const title = state.decks[deckId].currentName
+        return library.byTitle(title)
+    }
+
+    async function refreshDeckMediaUi(deckId) {
+        const dm = deckMedia[deckId]
+        const wrap = $(`deck-${deckId.toLowerCase()}-media`)
+        const cameraSel = $(`deck-${deckId.toLowerCase()}-media-camera`)
+        const fileBtn = $(`deck-${deckId.toLowerCase()}-media-file-btn`)
+        const labelEl = $(`deck-${deckId.toLowerCase()}-media-label`)
+        if (!wrap) return
+        const program = getProgramForDeck(deckId)
+        const isMedia = dm.isMediaProgram()
+        wrap.hidden = !isMedia
+        if (!isMedia) {
+            dm.stop()
+            if (cameraSel) cameraSel.hidden = true
+            if (fileBtn) fileBtn.hidden = true
+            if (labelEl) labelEl.textContent = ''
+            return
+        }
+        const kind = program?.mediaSource || 'file'
+        if (kind === 'camera') {
+            if (fileBtn) fileBtn.hidden = true
+            if (cameraSel) {
+                cameraSel.hidden = false
+                const devices = await dm.listCameras()
+                // Pre-permission browsers return entries with empty
+                // labels; let the operator click anyway to trigger the
+                // permission prompt by selecting "(default)".
+                const opts = [{ value: '', text: '— pick camera —' }]
+                for (const d of devices) {
+                    opts.push({
+                        value: d.deviceId,
+                        text: d.label || `camera ${d.deviceId.slice(0, 6)}`
+                    })
+                }
+                cameraSel.setOptions(opts)
+                cameraSel.setAttribute('value', dm.active === 'camera' ? '' : '')
+            }
+        } else {
+            if (cameraSel) cameraSel.hidden = true
+            if (fileBtn) fileBtn.hidden = false
+        }
+        if (labelEl) labelEl.textContent = dm.currentLabel || ''
+    }
+
+    function wireDeckMediaControls() {
+        for (const deckId of ['A', 'B']) {
+            const cameraSel = $(`deck-${deckId.toLowerCase()}-media-camera`)
+            const fileBtn = $(`deck-${deckId.toLowerCase()}-media-file-btn`)
+            const fileInput = $(`deck-${deckId.toLowerCase()}-media-file-input`)
+            const labelEl = $(`deck-${deckId.toLowerCase()}-media-label`)
+            if (cameraSel) cameraSel.addEventListener('change', async () => {
+                const v = cameraSel.value
+                if (!v) return
+                try {
+                    await deckMedia[deckId].setCamera(v)
+                    if (labelEl) labelEl.textContent = deckMedia[deckId].currentLabel
+                } catch (err) {
+                    toast(`${deckId}: ${err.message || err}`)
+                }
+            })
+            if (fileBtn && fileInput) {
+                fileBtn.addEventListener('click', () => fileInput.click())
+                fileInput.addEventListener('change', async () => {
+                    const f = fileInput.files?.[0]
+                    if (!f) return
+                    try {
+                        await deckMedia[deckId].setFile(f)
+                        if (labelEl) labelEl.textContent = deckMedia[deckId].currentLabel
+                    } catch (err) {
+                        toast(`${deckId}: ${err.message || err}`)
+                    }
+                })
+            }
+        }
+    }
+    wireDeckMediaControls()
+
     /**
      * Populate + wire the mixer-effect dropdown. Per-effect mode
      * (e.g. blend's blendMode param) is now exposed by the
@@ -655,14 +755,11 @@ async function boot() {
         const sel = $('mixer-effect')
         if (!sel) return
 
-        sel.innerHTML = ''
-        for (const m of MIXERS) {
-            const opt = document.createElement('option')
-            opt.value = m.id
-            opt.textContent = m.label
-            sel.appendChild(opt)
-        }
-        sel.value = mixer.currentMixer.id
+        // <select-dropdown> parses <option> children only on
+        // connectedCallback, so post-connect population goes through
+        // its programmatic setOptions API instead.
+        sel.setOptions(MIXERS.map(m => ({ value: m.id, text: m.label })))
+        sel.setAttribute('value', mixer.currentMixer.id)
 
         function persist() {
             const m = mixer.currentMixer
@@ -994,43 +1091,41 @@ async function boot() {
     $('settings-close').addEventListener('click', closeSettings)
 
     async function refreshAudioDevices() {
+        // <select-dropdown> exposes setOptions() for programmatic
+        // population. We use that rather than appending <option>
+        // children because the component's children-parser remaps
+        // empty-value options to their textContent (so our
+        // <option value=""> placeholder would lose its sentinel).
         const sel = $('audio-device')
         const cur = sel.value
         const devices = await audio.listDevices()
-        sel.innerHTML = '<option value="">— pick to enable —</option>'
-
-        // Before mic permission has been granted, Chrome returns devices
-        // with empty deviceId + empty label per entry. Rendering those
-        // as <option value=""> makes every entry collide with the
-        // placeholder above, so the browser silently drops the change
-        // event when the user picks one — that's the "selecting a
-        // device does nothing" bug. Safari returns an empty list before
-        // permission. Either way: fall back to a single sentinel entry
-        // that maps to getUserMedia({audio:true}); once permission is
-        // granted the next refresh shows real labelled devices.
+        const opts = [{ value: '', text: '— pick to enable —' }]
+        // Pre-permission browsers return entries with empty deviceId
+        // + empty label. Safari returns an empty list. Either way:
+        // fall back to a single sentinel entry that maps to
+        // getUserMedia({audio:true}); the next refresh shows labels.
         const labelled = devices.filter(d => d.label && d.deviceId)
         if (labelled.length > 0) {
             for (const d of labelled) {
-                const opt = document.createElement('option')
-                opt.value = d.deviceId
-                opt.textContent = d.label
-                sel.appendChild(opt)
+                opts.push({ value: d.deviceId, text: d.label })
             }
         } else {
-            const opt = document.createElement('option')
-            opt.value = '__default__'
-            opt.textContent = 'Enable audio (default device)'
-            sel.appendChild(opt)
+            opts.push({ value: '__default__', text: 'Enable audio (default device)' })
         }
-
-        if (audio.enabled && audio.currentDeviceId) {
-            sel.value = audio.currentDeviceId
-        } else if (cur && [...sel.options].some(o => o.value === cur)) {
-            sel.value = cur
+        sel.setOptions(opts)
+        // Pick initial value: live device preferred, else what was
+        // selected before the refresh, else the placeholder.
+        let initialValue = ''
+        const validValues = new Set(opts.map(o => o.value))
+        if (audio.enabled && audio.currentDeviceId && validValues.has(audio.currentDeviceId)) {
+            initialValue = audio.currentDeviceId
+        } else if (cur && validValues.has(cur)) {
+            initialValue = cur
         }
+        sel.setAttribute('value', initialValue)
     }
 
-    $('audio-device').addEventListener('change', async (e) => {
+    async function handleAudioDeviceChange(e) {
         const sel = e.target
         const value = sel.value
         if (!value) {
@@ -1051,7 +1146,8 @@ async function boot() {
             // 'change' again — otherwise the user is stuck.
             sel.value = ''
         }
-    })
+    }
+    $('audio-device').addEventListener('change', handleAudioDeviceChange)
     $('audio-sensitivity').addEventListener('input', (e) => {
         const v = parseFloat(e.target.value)
         audio.setSensitivity(v)
@@ -1255,6 +1351,8 @@ async function boot() {
                 updateDensityButton('B')
                 syncDeckEditor('A')
                 syncDeckEditor('B')
+                refreshDeckMediaUi('A')
+                refreshDeckMediaUi('B')
             }
         }
     }

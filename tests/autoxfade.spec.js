@@ -23,20 +23,35 @@ async function boot(browser) {
     return { context, page }
 }
 
-test('autoXfade: osc source sweeps a wide range across one bar', async ({ browser }) => {
+test('autoXfade: osc source sweeps a wide range across one bar (beat-aligned)', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {
         const samples = await page.evaluate(() => {
             const ax = window.__visualize.autoXfade
             ax.setSource({ kind: 'osc', oscType: 0 })   // sine
-            // Read the actual bar duration from the live scheduler so
-            // we sweep exactly one full cycle (barSec varies with the
-            // saved BPM divider — default divider=4 gives 8s at 120BPM).
-            const barMs = ax.scheduler.barSeconds() * 1000
+            // The osc phase is now derived from scheduler.beatInBar +
+            // scheduler.beatPhase. Drive the scheduler synthetically:
+            // override its phase fields directly across one bar.
+            const sched = ax.scheduler
             const out = []
+            const origInBar = sched._beatIndex
+            // Sample 17 phases across 4 beats (one bar).
             for (let i = 0; i <= 16; i++) {
-                out.push(ax.readSource(i * barMs / 16))
+                const t = i / 16   // 0..1 across bar
+                const beat = Math.floor(t * 4)
+                const phaseInBeat = (t * 4) - beat
+                // Stub: temporarily monkey-patch the getters via the
+                // backing fields the scheduler exposes.
+                Object.defineProperty(sched, 'beatInBar', {
+                    get: () => beat, configurable: true
+                })
+                Object.defineProperty(sched, 'beatPhase', {
+                    get: () => phaseInBeat, configurable: true
+                })
+                out.push(ax.readSource(0))
             }
+            // Restore (define the original getters back as data)
+            sched._beatIndex = origInBar
             return out
         })
         const min = Math.min(...samples), max = Math.max(...samples)

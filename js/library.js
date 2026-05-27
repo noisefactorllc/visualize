@@ -40,23 +40,32 @@ export class Library {
         return this.programs
     }
 
-    /** Pick a random program. */
+    /** True if a program is in the "util" category — these are user-
+     *  selected only (camera input, solid fills, scope, etc.) and never
+     *  show up via random() / auto-VJ. */
+    static isUtil(program) {
+        return !!program?.tags?.includes('util')
+    }
+
+    /** Pick a random NON-util program. */
     random() {
-        if (!this.programs.length) return null
-        return this.programs[Math.floor(Math.random() * this.programs.length)]
+        const pool = this.programs.filter(p => !Library.isUtil(p))
+        if (!pool.length) return null
+        return pool[Math.floor(Math.random() * pool.length)]
     }
 
     /**
-     * Pick a random program whose title is not in `exclude`. Accepts a
-     * single title or an array of titles. Falls back to a plain random
-     * pick if the exclusion list covers (almost) the whole library.
+     * Pick a random non-util program whose title is not in `exclude`.
+     * Accepts a single title or an array of titles. Falls back to a
+     * plain random pick if the exclusion list covers all eligible.
      */
     randomExcept(exclude) {
-        if (!this.programs.length) return null
+        const pool = this.programs.filter(p => !Library.isUtil(p))
+        if (!pool.length) return null
         const excludeSet = new Set(
             (Array.isArray(exclude) ? exclude : [exclude]).filter(Boolean)
         )
-        const eligible = this.programs.filter(p => !excludeSet.has(p.title))
+        const eligible = pool.filter(p => !excludeSet.has(p.title))
         if (eligible.length === 0) return this.random()
         return eligible[Math.floor(Math.random() * eligible.length)]
     }

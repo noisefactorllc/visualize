@@ -1,5 +1,82 @@
 [
   {
+    "title": "Camera Input",
+    "tagline": "Live webcam — picker on the deck",
+    "tint": "#9ca3af",
+    "tags": [
+      "util",
+      "media",
+      "camera"
+    ],
+    "mediaSource": "camera",
+    "dsl": "search synth\nmedia().write(o0)\nrender(o0)"
+  },
+  {
+    "title": "Media Input",
+    "tagline": "Image or video file — picker on the deck",
+    "tint": "#9ca3af",
+    "tags": [
+      "util",
+      "media",
+      "file"
+    ],
+    "mediaSource": "file",
+    "dsl": "search synth\nmedia().write(o0)\nrender(o0)"
+  },
+  {
+    "title": "solid (black)",
+    "tagline": "Solid black fill",
+    "tint": "#1a1a1a",
+    "tags": [
+      "util",
+      "solid"
+    ],
+    "dsl": "search synth\nsolid(color: #000000).write(o0)\nrender(o0)"
+  },
+  {
+    "title": "solid (blue)",
+    "tagline": "Solid blue fill",
+    "tint": "#4a88fb",
+    "tags": [
+      "util",
+      "solid"
+    ],
+    "dsl": "search synth\nsolid(color: #4a88fb).write(o0)\nrender(o0)"
+  },
+  {
+    "title": "scope",
+    "tagline": "Audio waveform oscilloscope",
+    "tint": "#22c55e",
+    "tags": [
+      "util",
+      "audio",
+      "vis"
+    ],
+    "dsl": "search synth\nscope().write(o0)\nrender(o0)"
+  },
+  {
+    "title": "spectrum",
+    "tagline": "Audio spectrum analyzer",
+    "tint": "#22c55e",
+    "tags": [
+      "util",
+      "audio",
+      "vis"
+    ],
+    "dsl": "search synth\nspectrum().write(o0)\nrender(o0)"
+  },
+  {
+    "title": "roll",
+    "tagline": "MIDI piano roll visualizer",
+    "tint": "#a78bfa",
+    "tags": [
+      "util",
+      "midi",
+      "vis"
+    ],
+    "dsl": "search synth\nroll().write(o0)\nrender(o0)"
+  },
+  {
     "title": "Bass Bloom",
     "tagline": "Bass swirls the hue; sub flexes the scale",
     "tint": "#4ea8ff",

@@ -164,14 +164,14 @@
                     <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">TAP</button>
                     <div class="bpm-display" aria-live="polite" aria-atomic="true">
                         <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
-                        <select id="bpm-divider" class="bpm-divider" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
+                        <select-dropdown id="bpm-divider" class="bpm-divider" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
                             <option value="1">/1</option>
                             <option value="2">/2</option>
                             <option value="4" selected>/4</option>
                             <option value="8">/8</option>
                             <option value="16">/16</option>
                             <option value="32">/32</option>
-                        </select>
+                        </select-dropdown>
                         <span class="bpm-label" id="bpm-label">BPM</span>
                     </div>
                     <div class="beat-indicator" id="beat-indicator">
@@ -220,6 +220,12 @@
                         <span class="icon">zoom_in</span>
                         <span class="density-value">100%</span>
                     </button>
+                    <div class="deck-media" data-deck="A" id="deck-a-media" hidden>
+                        <select-dropdown class="deck-media-camera" id="deck-a-media-camera" data-deck="A" title="Camera source" hidden></select-dropdown>
+                        <button class="deck-media-file-btn" id="deck-a-media-file-btn" data-deck="A" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
+                        <span class="deck-media-label" id="deck-a-media-label"></span>
+                        <input type="file" class="deck-media-file-input" id="deck-a-media-file-input" data-deck="A" accept="image/*,video/*" hidden>
+                    </div>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-a-canvas"></canvas>
@@ -247,6 +253,10 @@
                         <span class="audio-band high" id="meter-high"><b></b></span>
                     </span>
                     <span class="main-res" id="main-res">1280×720</span>
+                </div>
+                <div class="main-toolbar">
+                    <select-dropdown id="mixer-effect" class="mixer-select" title="Center mixer effect (noisemaker mixer/*)"></select-dropdown>
+                    <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window"><span class="icon">picture_in_picture_alt</span></button>
                 </div>
                 <div class="main-canvas-wrap">
                     <canvas class="main-canvas" id="main-canvas"></canvas>
@@ -283,6 +293,12 @@
                         <span class="icon">zoom_in</span>
                         <span class="density-value">100%</span>
                     </button>
+                    <div class="deck-media" data-deck="B" id="deck-b-media" hidden>
+                        <select-dropdown class="deck-media-camera" id="deck-b-media-camera" data-deck="B" title="Camera source" hidden></select-dropdown>
+                        <button class="deck-media-file-btn" id="deck-b-media-file-btn" data-deck="B" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
+                        <span class="deck-media-label" id="deck-b-media-label"></span>
+                        <input type="file" class="deck-media-file-input" id="deck-b-media-file-input" data-deck="B" accept="image/*,video/*" hidden>
+                    </div>
                 </div>
                 <div class="deck-canvas-wrap">
                     <canvas class="deck-canvas" id="deck-b-canvas"></canvas>
@@ -313,10 +329,6 @@
                 </div>
 
                 <div class="controls-center">
-                    <div class="mixer-picker">
-                        <label for="mixer-effect" class="mixer-label">mixer</label>
-                        <select id="mixer-effect" class="mixer-select" title="Center mixer effect (noisemaker mixer/*)"></select>
-                    </div>
                     <div class="xfader-wrap">
                         <span class="xfader-label-a">A</span>
                         <input id="crossfader" type="range" min="0" max="1" step="0.001" value="0" class="xfader">
@@ -325,12 +337,12 @@
                     <div class="xfader-quick">
                         <div class="xfader-fade xfader-fade-left">
                             <span class="xfader-fade-label">fade</span>
-                            <select id="automix-curve" class="xfader-fade-curve" title="Fade curve (used by auto-fade + auto-VJ)">
+                            <select-dropdown id="automix-curve" class="xfader-fade-curve" title="Fade curve (used by auto-fade + auto-VJ)">
                                 <option value="linear">linear</option>
                                 <option value="dipped" selected>dipped</option>
                                 <option value="sharp">sharp</option>
                                 <option value="cut">cut</option>
-                            </select>
+                            </select-dropdown>
                         </div>
                         <div class="xfader-cuts">
                             <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
@@ -381,39 +393,33 @@
                 </button>
                 <label class="status-field" title="Auto-Mix source">
                     <span class="status-field-label">source</span>
-                    <select id="automixer-source">
-                        <optgroup label="osc">
-                            <option value="osc:0" selected>sine</option>
-                            <option value="osc:1">tri</option>
-                            <option value="osc:2">saw</option>
-                            <option value="osc:3">sawInv</option>
-                            <option value="osc:4">square</option>
-                        </optgroup>
-                        <optgroup label="audio">
-                            <option value="audio:sub">sub</option>
-                            <option value="audio:low">low</option>
-                            <option value="audio:mid">mid</option>
-                            <option value="audio:high">high</option>
-                        </optgroup>
-                        <optgroup label="midi">
-                            <option value="midi:0">ch 1</option>
-                            <option value="midi:1">ch 2</option>
-                            <option value="midi:2">ch 3</option>
-                            <option value="midi:3">ch 4</option>
-                            <option value="midi:4">ch 5</option>
-                            <option value="midi:5">ch 6</option>
-                            <option value="midi:6">ch 7</option>
-                            <option value="midi:7">ch 8</option>
-                            <option value="midi:8">ch 9</option>
-                            <option value="midi:9">ch 10</option>
-                            <option value="midi:10">ch 11</option>
-                            <option value="midi:11">ch 12</option>
-                            <option value="midi:12">ch 13</option>
-                            <option value="midi:13">ch 14</option>
-                            <option value="midi:14">ch 15</option>
-                            <option value="midi:15">ch 16</option>
-                        </optgroup>
-                    </select>
+                    <select-dropdown id="automixer-source">
+                        <option value="osc:0" selected>osc · sine</option>
+                        <option value="osc:1">osc · tri</option>
+                        <option value="osc:2">osc · saw</option>
+                        <option value="osc:3">osc · sawInv</option>
+                        <option value="osc:4">osc · square</option>
+                        <option value="audio:sub">audio · sub</option>
+                        <option value="audio:low">audio · low</option>
+                        <option value="audio:mid">audio · mid</option>
+                        <option value="audio:high">audio · high</option>
+                        <option value="midi:0">midi · ch 1</option>
+                        <option value="midi:1">midi · ch 2</option>
+                        <option value="midi:2">midi · ch 3</option>
+                        <option value="midi:3">midi · ch 4</option>
+                        <option value="midi:4">midi · ch 5</option>
+                        <option value="midi:5">midi · ch 6</option>
+                        <option value="midi:6">midi · ch 7</option>
+                        <option value="midi:7">midi · ch 8</option>
+                        <option value="midi:8">midi · ch 9</option>
+                        <option value="midi:9">midi · ch 10</option>
+                        <option value="midi:10">midi · ch 11</option>
+                        <option value="midi:11">midi · ch 12</option>
+                        <option value="midi:12">midi · ch 13</option>
+                        <option value="midi:13">midi · ch 14</option>
+                        <option value="midi:14">midi · ch 15</option>
+                        <option value="midi:15">midi · ch 16</option>
+                    </select-dropdown>
                 </label>
 
                 <span class="status-divider"></span>
@@ -424,12 +430,12 @@
                 </button>
                 <label class="status-field" title="Auto-VJ cycle length">
                     <span class="status-field-label">cycle</span>
-                    <select id="automix-bars">
+                    <select-dropdown id="automix-bars">
                         <option value="4">4 bars</option>
                         <option value="8" selected>8 bars</option>
                         <option value="16">16 bars</option>
                         <option value="32">32 bars</option>
-                    </select>
+                    </select-dropdown>
                 </label>
 
                 <span class="status-divider"></span>
@@ -442,10 +448,6 @@
                     <span class="record-dot"></span>
                     <span class="status-text">REC</span>
                     <span class="record-time" id="record-time">0:00</span>
-                </button>
-                <button id="output-window" class="status-pill" title="Open output window">
-                    <span class="status-icon icon">open_in_new</span>
-                    <span class="status-text">output</span>
                 </button>
             </div>
         </section>
@@ -469,9 +471,9 @@
                 <h3>audio input</h3>
                 <div class="settings-row">
                     <label for="audio-device">device</label>
-                    <select id="audio-device">
+                    <select-dropdown id="audio-device">
                         <option value="">— pick to enable —</option>
-                    </select>
+                    </select-dropdown>
                 </div>
                 <div class="settings-row">
                     <label for="audio-sensitivity">sensitivity</label>
@@ -504,12 +506,12 @@
                 <h3>main</h3>
                 <div class="settings-row">
                     <label for="main-resolution">resolution</label>
-                    <select id="main-resolution">
+                    <select-dropdown id="main-resolution">
                         <option value="640x360">640×360 (low)</option>
                         <option value="1280x720" selected>1280×720 (HD)</option>
                         <option value="1920x1080">1920×1080 (full HD)</option>
                         <option value="2560x1440">2560×1440 (QHD)</option>
-                    </select>
+                    </select-dropdown>
                 </div>
                 <div class="settings-row">
                     <label>loop duration</label>

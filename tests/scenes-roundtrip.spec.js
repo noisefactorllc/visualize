@@ -213,17 +213,20 @@ test('scenes round-trip: mixer effect and pixel density survive', async ({ brows
         // Wait for the mixer to come online (asynchronously initialized
         // in boot). The takeSnapshot helper already exists; we use the
         // window.__visualize hook to discover when the mixer is ready
-        // via the picker being populated.
+        // via the picker being populated. The picker is now a
+        // <select-dropdown>, which exposes getOptions() instead of
+        // .options.
         await page.waitForFunction(() => {
             const sel = document.getElementById('mixer-effect')
-            return sel && sel.options.length > 1
+            return sel && typeof sel.getOptions === 'function' && sel.getOptions().length > 1
         }, null, { timeout: 30_000 })
 
         // Pick the second mixer effect (whatever it is) and manually
         // pin deck A to 50% density.
         const savedMixerId = await page.evaluate(() => {
             const sel = document.getElementById('mixer-effect')
-            const candidate = [...sel.options].map(o => o.value).find(v => v !== sel.value)
+            const opts = sel.getOptions()
+            const candidate = opts.map(o => o.value).find(v => v !== sel.value)
             sel.value = candidate
             sel.dispatchEvent(new Event('change'))
             return candidate
@@ -242,7 +245,8 @@ test('scenes round-trip: mixer effect and pixel density survive', async ({ brows
         // Disturb: flip mixer back to the original, density back to auto
         await page.evaluate(async (origId) => {
             const sel = document.getElementById('mixer-effect')
-            const other = [...sel.options].map(o => o.value).find(v => v !== origId)
+            const opts = sel.getOptions()
+            const other = opts.map(o => o.value).find(v => v !== origId)
             sel.value = other
             sel.dispatchEvent(new Event('change'))
         }, savedMixerId)

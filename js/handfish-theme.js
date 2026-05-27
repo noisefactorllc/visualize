@@ -130,25 +130,29 @@ export function setTheme(value, { storageKey }) {
 }
 
 /**
- * Mount a native <select> as the picker into a container. We use a native
- * select so the picker works without depending on handfish's component
- * bundle loading first (and so it survives any future bundle changes).
+ * Mount a handfish <select-dropdown> as the picker into a container.
+ * The dropdown component is non-blocking (vs the native <select> which
+ * runs on the same thread as canvas updates and stutters the deck
+ * render).
  *
- * Returns the select element so callers can sync external changes back
- * into the UI by setting `el.value = '…'`.
+ * Returns the element so callers can sync external changes back into
+ * the UI by setting `el.value = '…'`.
  */
 export function mountThemePicker({ container, storageKey, defaultTheme = 'neutral-dark' }) {
     const value = applyStoredTheme({ storageKey, defaultTheme })
 
-    const select = document.createElement('select')
+    const select = document.createElement('select-dropdown')
     select.className = 'hf-theme-select'
     for (const t of THEMES) {
         const opt = document.createElement('option')
         opt.value = t.value
         opt.textContent = t.label
-        if (t.value === value) opt.selected = true
         select.appendChild(opt)
     }
+    // Set value AFTER children so the trigger label reflects it. The
+    // component reads <option> children on connect; setting `value`
+    // afterward updates the displayed label without re-rendering.
+    select.setAttribute('value', value)
     select.addEventListener('change', () => {
         setTheme(select.value, { storageKey })
     })

@@ -76,9 +76,19 @@ export class AutoXfade {
     readSource(nowMs) {
         const s = this._source
         if (s.kind === 'osc') {
-            const barSec = this.scheduler?.barSeconds?.() || 2
-            const phase = (nowMs / 1000) / barSec
-            return evalOsc(s.oscType, phase)
+            // Beat-aligned: phase comes from the BeatScheduler's
+            // position within the current 4-beat bar, so the cycle
+            // tracks the music (resets on tap, follows MIDI clock,
+            // doesn't drift). One full oscillator cycle per bar.
+            const sched = this.scheduler
+            if (sched && typeof sched.beatInBar === 'number'
+                && typeof sched.beatPhase === 'number') {
+                const phase = (sched.beatInBar + sched.beatPhase) / 4
+                return evalOsc(s.oscType, phase)
+            }
+            // Fallback (no scheduler available) — wall-clock.
+            const barSec = sched?.barSeconds?.() || 2
+            return evalOsc(s.oscType, (nowMs / 1000) / barSec)
         }
         if (s.kind === 'audio') {
             return this.audio?.meters?.[s.band] ?? 0

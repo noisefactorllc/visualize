@@ -79,13 +79,15 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
 
     // ─── Scenario 1: post-permission audio ──────────────────────────────
     await page.click('#settings-toggle')
-    await page.waitForFunction(() =>
-        document.getElementById('audio-device').options.length >= 2,
-        null, { timeout: 15_000 })
+    // <select-dropdown> exposes getOptions() instead of .options.
+    await page.waitForFunction(() => {
+        const sel = document.getElementById('audio-device')
+        return sel?.getOptions && sel.getOptions().length >= 2
+    }, null, { timeout: 15_000 })
 
     const dropdownPost = await page.evaluate(() => {
         const sel = document.getElementById('audio-device')
-        return [...sel.options].map(o => ({ value: o.value, text: o.text }))
+        return sel.getOptions()
     })
     expect(dropdownPost[0].value).toBe('')
     // First real device must have a non-empty value, otherwise picking
@@ -98,8 +100,8 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     // headless mode.
     await page.evaluate(() => {
         const sel = document.getElementById('audio-device')
-        const target = [...sel.options].find(o => o.value === 'default')
-            || sel.options[1]
+        const opts = sel.getOptions()
+        const target = opts.find(o => o.value === 'default') || opts[1]
         sel.value = target.value
         sel.dispatchEvent(new Event('change', { bubbles: true }))
     })
@@ -143,13 +145,14 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     await page.click('#settings-close')
     await page.click('#settings-toggle')
     await page.waitForFunction(() => {
-        const opts = document.getElementById('audio-device').options
+        const sel = document.getElementById('audio-device')
+        const opts = sel?.getOptions ? sel.getOptions() : []
         return opts.length === 2 && opts[1].value === '__default__'
     }, null, { timeout: 15_000 })
 
     const dropdownPre = await page.evaluate(() => {
         const sel = document.getElementById('audio-device')
-        return [...sel.options].map(o => ({ value: o.value, text: o.text }))
+        return sel.getOptions()
     })
     expect(dropdownPre).toHaveLength(2)
     expect(dropdownPre[1].value).toBe('__default__')

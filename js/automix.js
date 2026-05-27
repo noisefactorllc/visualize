@@ -150,7 +150,10 @@ export class AutoMix {
             // Auto-rebind on the freshly-loaded deck so the audio
             // mapping shuffles every scene change, not just the
             // program. Failures are non-fatal — keep the swap going.
-            if (this._autoRebindEq && this.rebind) {
+            // Skip for util programs (camera, media, solid, scope,
+            // spectrum, roll) — they're for direct operator control.
+            const isUtil = program?.tags?.includes('util')
+            if (this._autoRebindEq && this.rebind && !isUtil) {
                 try {
                     this.rebind.rebindEq(deck, program)
                 } catch (err) {

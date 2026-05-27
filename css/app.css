@@ -549,7 +549,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck {
     position: relative;          /* positioning context for canvas-wrap */
     display: grid;
-    grid-template-rows: auto 1fr auto;
+    /* head | head-row2 (zoom) | 1fr canvas area (absolute) | meta.
+       Explicit row placement on every child (below) keeps the
+       layout stable when we add rows. */
+    grid-template-rows: auto auto 1fr auto;
     background: var(--hf-bg-surface);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-md);
@@ -557,10 +560,14 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     min-height: 0;
     transition: var(--hf-transition-border);
 }
-/* Head / content / meta render *over* the absolutely-centered
-   canvas so the bg-elevated head + meta strips paint cleanly at
-   the top / bottom of the panel even when the canvas is large. */
-.deck-head, .deck-content, .deck-meta { position: relative; z-index: 1; }
+.deck-head      { grid-row: 1; }
+.deck-head-row2 { grid-row: 2; }
+.deck-content   { grid-row: 3; }
+.deck-meta      { grid-row: 4; }
+/* Head / row2 / content / meta render *over* the absolutely-centered
+   canvas so the bg-elevated strips paint cleanly at the top + bottom
+   of the panel even when the canvas is large. */
+.deck-head, .deck-head-row2, .deck-content, .deck-meta { position: relative; z-index: 1; }
 
 /* Deck head: single row, zoom (density) button left, edit + shuffle
    right. The DECK A / program-name / tagline identity block moved
@@ -575,7 +582,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 /* Second deck-head row — holds the density/zoom button now that
-   OSC + the action rail fill the top row. */
+   OSC + the action rail fill the top row. Also hosts the per-deck
+   media-source picker when a util/media program is loaded. */
 .deck-head-row2 {
     position: relative;
     z-index: 1;
@@ -585,6 +593,47 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     gap: var(--hf-space-2);
     padding: 0 var(--hf-space-3) var(--hf-space-2);
     font-family: var(--hf-font-family-mono);
+}
+
+.deck-media {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    flex: 1;
+    min-width: 0;
+}
+.deck-media-camera {
+    min-width: 140px;
+    flex: 0 1 auto;
+}
+.deck-media-file-btn {
+    appearance: none;
+    background: transparent;
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    color: var(--hf-text-dim);
+    border-radius: var(--hf-radius-sm);
+    width: 32px;
+    height: 32px;
+    font-size: var(--hf-size-base);
+    cursor: pointer;
+    transition: var(--hf-transition-color), var(--hf-transition-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.deck-media-file-btn:hover {
+    color: var(--hf-accent);
+    border-color: var(--hf-accent);
+}
+.deck-media-label {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 .deck-head-actions {
@@ -807,12 +856,12 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .main {
     position: relative;         /* positioning context for canvas-wrap */
     display: grid;
-    /* head (top) | 1fr empty space (canvas-wrap floats here) |
-       fx strip | mixer controls (bottom). The canvas is absolute,
-       so the 1fr row stays unoccupied — without explicit placement,
-       auto-placement would dump main-fx into the 1fr row and
-       stretch the strobe/invert/… buttons full-height. */
-    grid-template-rows: auto 1fr auto auto;
+    /* head | toolbar (mixer picker + output button) | 1fr empty
+       space (canvas-wrap floats here) | fx strip | mixer controls.
+       The canvas is absolute, so the 1fr row stays unoccupied —
+       without explicit placement, auto-placement would dump
+       main-fx into the 1fr row and stretch the buttons full-height. */
+    grid-template-rows: auto auto 1fr auto auto;
     background: var(--hf-bg-surface);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-md);
@@ -820,10 +869,46 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     min-height: 0;
 }
 .main-head        { grid-row: 1; }
-.main-fx          { grid-row: 3; }
-.mixer-controls   { grid-row: 4; }
-/* Head / FX strip / mixer-controls paint above the absolute canvas. */
-.main-head, .main-fx, .mixer-controls { position: relative; z-index: 1; }
+.main-toolbar     { grid-row: 2; }
+.main-fx          { grid-row: 4; }
+.mixer-controls   { grid-row: 5; }
+/* Head / toolbar / FX strip / mixer-controls paint above the
+   absolute canvas. */
+.main-head, .main-toolbar, .main-fx, .mixer-controls { position: relative; z-index: 1; }
+
+/* Toolbar row: mixer-effect picker (left) + output button (right). */
+.main-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--hf-space-2);
+    padding: var(--hf-space-2) var(--hf-space-3);
+    border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
+    background: var(--hf-bg-surface);
+}
+.main-toolbar #mixer-effect {
+    flex: 0 1 auto;
+    min-width: 180px;
+}
+.main-output-btn {
+    appearance: none;
+    background: transparent;
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    color: var(--hf-text-dim);
+    border-radius: var(--hf-radius-sm);
+    width: 32px;
+    height: 32px;
+    font-size: var(--hf-size-base);
+    cursor: pointer;
+    transition: var(--hf-transition-color), var(--hf-transition-border);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.main-output-btn:hover {
+    color: var(--hf-accent);
+    border-color: var(--hf-accent);
+}
 
 .main-head {
     display: flex;
@@ -1191,46 +1276,6 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
     min-width: 0;
     width: 100%;
 }
-
-/* Mixer-effect picker: dropdown above the crossfader. Optional
-   per-effect "mode" sub-dropdown appears next to it (e.g. blendMode's
-   add/multiply/screen/…). Both styled to match the existing ghost
-   buttons so the bottom strip feels uniform. */
-.mixer-picker {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--hf-space-2);
-}
-
-.mixer-label {
-    font-size: var(--hf-size-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: var(--hf-text-dim);
-    font-family: var(--hf-font-family-mono);
-}
-
-.mixer-select {
-    appearance: none;
-    background: var(--hf-bg-elevated);
-    color: var(--hf-text-normal);
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-sm);
-    padding: 3px 22px 3px 8px;
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    letter-spacing: 0.04em;
-    cursor: pointer;
-    background-image:
-        linear-gradient(45deg, transparent 50%, currentColor 50%),
-        linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position: right 9px top 50%, right 5px top 50%;
-    background-size: 4px 4px, 4px 4px;
-    background-repeat: no-repeat;
-}
-.mixer-select:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
-.mixer-select:focus { outline: none; border-color: var(--hf-accent); }
 
 .xfader-wrap {
     display: grid;
