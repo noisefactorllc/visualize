@@ -594,7 +594,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck-b .deck-label { color: var(--hf-red); }
 
 .deck-load-random,
-.deck-edit-toggle {
+.deck-edit-toggle,
+.deck-rebind-eq,
+.deck-rebind-midi,
+.deck-bandpass {
     appearance: none;
     background: transparent;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
@@ -607,10 +610,28 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     transition: var(--hf-transition-color), var(--hf-transition-border);
 }
 .deck-load-random:hover,
-.deck-edit-toggle:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
+.deck-edit-toggle:hover,
+.deck-rebind-eq:hover,
+.deck-rebind-midi:hover,
+.deck-bandpass:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
 .deck-edit-toggle.active {
     color: var(--hf-bg-base);
     background: var(--hf-accent);
+    border-color: var(--hf-accent);
+}
+
+/* Bandpass toggle: lit border + bright text when on (the default).
+   Off state uses the base dim look — the operator has explicitly
+   asked the EQ rebind to roam outside this program's home bands. */
+.deck-bandpass.lit {
+    color: var(--hf-text-bright);
+    border-color: color-mix(in srgb, var(--hf-accent) 60%, transparent);
+}
+
+/* Brief flash to indicate a successful re-roll fired. */
+.deck-rebind-eq.flash,
+.deck-rebind-midi.flash {
+    color: var(--hf-accent);
     border-color: var(--hf-accent);
 }
 

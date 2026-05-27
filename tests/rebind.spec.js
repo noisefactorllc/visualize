@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: MIT
+/**
+ * Rebind smoke test. Boots the full app, loads a known bass-tagged
+ * program into Deck A, then verifies:
+ *   - rebindEq() produces deck DSL containing audio() automations
+ *     and re-pushes it into the renderer
+ *   - With bandpass on, every audio() in the regenerated DSL is
+ *     in the program's home band (audioBand.low for "Bass Bloom")
+ *   - rebindMidi() produces midi() automations referencing midiMode.*
+ *   - clearRebinds() restores the original DSL
+ *   - With bandpass OFF, repeated rolls span more than one band
+ */
+import { test, expect } from '@playwright/test'
+
+test.describe.configure({ timeout: 120_000, retries: 1 })
+
+async function bootAndLoad(browser, programTitle) {
+    const context = await browser.newContext()
+    const page = await context.newPage()
+    await page.goto('/')
+    await page.click('#boot-start')
+    await page.waitForFunction(() =>
+        !!window.__visualize?.decks?.A && !!window.__visualize?.rebind,
+        null, { timeout: 30_000 })
+    // Load the target program into deck A by fetching the manifest
+    // directly so we don't depend on the library UI having rendered.
+    await page.evaluate(async (title) => {
+        const resp = await fetch('data/programs.json', { cache: 'no-cache' })
+        const programs = await resp.json()
+        const p = programs.find(x => x.title === title)
+        if (!p) throw new Error(`no program titled ${title}`)
+        const res = await window.__visualize.decks.A.load(p.dsl, p.title)
+        if (!res.success) throw new Error(`deck load failed: ${res.error}`)
+        window.__visualize.__currentProgram = p
+    }, programTitle)
+    return { context, page }
+}
+
+test('rebind: EQ produces audio() automations restricted to home band', async ({ browser }) => {
+    // "Bass Bloom" is tagged ["reactive", "bass", "noise"]: home band
+    // is low (band 0). It has multiple numeric params (xScale, yScale,
+    // hueRotation, refractAmt, speed, ...) so rebindable should be
+    // non-empty.
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const program = window.__visualize.__currentProgram
+            const originalDsl = deck.rebind.originalDsl
+            const ok = await window.__visualize.rebind.rebindEq(deck, program)
+            return { ok, originalDsl, newDsl: deck._currentDsl }
+        })
+        expect(result.ok).toBe(true)
+        expect(result.newDsl).not.toBe(result.originalDsl)
+        // Should still have at least 2 audio() bindings (rebindEq
+        // picks 2-4 random params; the original Bass Bloom had 2).
+        const newCount = (result.newDsl.match(/audio\(/g) || []).length
+        expect(newCount).toBeGreaterThanOrEqual(2)
+        // Bandpass default is ON. Bass Bloom's home is low → every
+        // audioBand reference in the regenerated DSL should be .low.
+        const allBands = [...result.newDsl.matchAll(/audioBand\.(\w+)/g)].map(m => m[1])
+        expect(allBands.length).toBeGreaterThan(0)
+        for (const b of allBands) {
+            expect(b).toBe('low')
+        }
+    } finally {
+        await context.close()
+    }
+})
+
+test('rebind: MIDI produces midi() automations', async ({ browser }) => {
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const ok = await window.__visualize.rebind.rebindMidi(deck)
+            return { ok, newDsl: deck._currentDsl }
+        })
+        expect(result.ok).toBe(true)
+        const midiCount = (result.newDsl.match(/midi\(/g) || []).length
+        expect(midiCount).toBeGreaterThanOrEqual(2)
+        // At least one bound MIDI call must include a channel arg.
+        expect(/midi\(channel:\s*\d+/.test(result.newDsl)).toBe(true)
+    } finally {
+        await context.close()
+    }
+})
+
+test('rebind: clearRebinds restores original DSL', async ({ browser }) => {
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const program = window.__visualize.__currentProgram
+            const original = deck.rebind.originalDsl
+            await window.__visualize.rebind.rebindEq(deck, program)
+            const afterRebind = deck._currentDsl
+            await window.__visualize.rebind.clearRebinds(deck)
+            const afterClear = deck._currentDsl
+            return { original, afterRebind, afterClear }
+        })
+        expect(result.afterRebind).not.toBe(result.original)
+        expect(result.afterClear).toBe(result.original)
+    } finally {
+        await context.close()
+    }
+})
+
+test('rebind: bandpass off allows non-home bands across rolls', async ({ browser }) => {
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const program = window.__visualize.__currentProgram
+            deck.rebind.bandpass = false
+            const bandsSeen = new Set()
+            for (let i = 0; i < 25; i++) {
+                await window.__visualize.rebind.rebindEq(deck, program)
+                const matches = [...deck._currentDsl.matchAll(/audioBand\.(\w+)/g)]
+                for (const m of matches) bandsSeen.add(m[1])
+            }
+            return [...bandsSeen]
+        })
+        // With band picked uniformly from 3 across 2-4 picks per roll
+        // for 25 rolls, hitting only one band is vanishingly unlikely.
+        expect(result.length).toBeGreaterThan(1)
+    } finally {
+        await context.close()
+    }
+})

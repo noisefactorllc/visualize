@@ -88,6 +88,18 @@ export class Deck {
         this._currentName = ''
         this._speed = 1
         this._pixelDensity = 1.0    // 1.0 = full mainRes; 0.5 = half-res buffer upscaled
+
+        // Per-deck rebind state. originalDsl is the pristine DSL from
+        // the library entry; overrides is the last-rolled EQ/MIDI
+        // override map (cleared on a fresh load(), preserved across
+        // reloadDsl() calls so the rebind module can push regenerated
+        // DSL without stomping its own state). bandpass is operator-set
+        // and persisted to localStorage by the app.
+        this.rebind = {
+            originalDsl: '',
+            bandpass: true,
+            overrides: {}
+        }
     }
 
     get pixelDensity() { return this._pixelDensity }
@@ -150,6 +162,12 @@ export class Deck {
             await this._renderer.compile(dsl)
             this._currentDsl = dsl
             this._currentName = name
+            // New program → rebind state resets to the author's
+            // original. The rebind module's reloadDsl() path does NOT
+            // touch this — it's how rebind can push regenerated DSL
+            // without wiping its own overrides.
+            this.rebind.originalDsl = dsl
+            this.rebind.overrides = {}
             this._normalizeColorUniforms()
             if (!this._renderer.isRunning) this._renderer.start()
             return { success: true }
@@ -157,6 +175,35 @@ export class Deck {
             const msg = typeof err === 'string' ? err
                 : err?.message || err?.error || 'Unknown compile error'
             console.error(`[${this.id}] load error:`, err)
+            return { success: false, error: msg }
+        }
+    }
+
+    /**
+     * Reload the renderer with a new DSL string WITHOUT resetting the
+     * deck's rebind state (originalDsl, overrides). Used by the rebind
+     * module to push regenerated DSL.
+     *
+     * On compile error the deck keeps running the previous DSL — same
+     * behaviour as load(). Returns { success, error? }.
+     */
+    async reloadDsl(dsl) {
+        if (!this._initialized) await this.init()
+        try {
+            const effectData = extractEffectNamesFromDsl(dsl, this._renderer.manifest || {})
+            const effectIds = effectData.map(e => e.effectId)
+            if (effectIds.length > 0) {
+                await this._renderer.loadEffects(effectIds)
+            }
+            await this._renderer.compile(dsl)
+            this._currentDsl = dsl
+            this._normalizeColorUniforms()
+            if (!this._renderer.isRunning) this._renderer.start()
+            return { success: true }
+        } catch (err) {
+            const msg = typeof err === 'string' ? err
+                : err?.message || err?.error || 'Unknown compile error'
+            console.error(`[${this.id}] reloadDsl error:`, err)
             return { success: false, error: msg }
         }
     }

@@ -23,6 +23,17 @@
 const STORAGE_KEY = 'visualize.scenes.v1'
 const MAX_SCENES = 16
 
+/** Snapshot a deck's rebind state. Overrides are pure AST nodes —
+ *  JSON-clone is safe (no functions, no cycles). */
+function cloneRebind(rebind) {
+    if (!rebind) return { originalDsl: '', bandpass: true, overrides: {} }
+    return {
+        originalDsl: rebind.originalDsl || '',
+        bandpass: rebind.bandpass !== false,
+        overrides: JSON.parse(JSON.stringify(rebind.overrides || {}))
+    }
+}
+
 export class Scenes {
     constructor() {
         this._scenes = this._load()
@@ -45,12 +56,14 @@ export class Scenes {
                 A: {
                     title: decks.A.currentName,
                     dsl: decks.A.currentDsl,
-                    speed: decks.A._speed ?? 1
+                    speed: decks.A._speed ?? 1,
+                    rebind: cloneRebind(decks.A.rebind)
                 },
                 B: {
                     title: decks.B.currentName,
                     dsl: decks.B.currentDsl,
-                    speed: decks.B._speed ?? 1
+                    speed: decks.B._speed ?? 1,
+                    rebind: cloneRebind(decks.B.rebind)
                 }
             },
             xfade: getXfade(),
@@ -107,21 +120,43 @@ export class Scenes {
      * Returns a list of any errors encountered (per-deck load failures
      * mostly), but always applies as much as it can.
      */
-    static async apply(snapshot, { decks, setXfade, setCurve, scheduler, setFx, setAutoMixConfig, refreshAudio }) {
+    static async apply(snapshot, { decks, setXfade, setCurve, scheduler, setFx, setAutoMixConfig, refreshAudio, refreshRebind }) {
         const errors = []
         // Decks first (compile may take a beat)
         for (const id of ['A', 'B']) {
             const d = snapshot.decks?.[id]
             if (!d || !d.dsl) continue
             try {
-                const res = await decks[id].load(d.dsl, d.title || '')
-                if (!res.success) errors.push(`deck ${id}: ${res.error}`)
+                // Load the original DSL first — load() resets rebind
+                // state, so we have to do this BEFORE restoring the
+                // override map. Snapshots from before rebind shipped
+                // won't have rebind.originalDsl, so fall back to dsl.
+                const originalDsl = d.rebind?.originalDsl || d.dsl
+                const res = await decks[id].load(originalDsl, d.title || '')
+                if (!res.success) {
+                    errors.push(`deck ${id}: ${res.error}`)
+                    continue
+                }
                 decks[id].setSpeed(d.speed ?? 1)
+                // Restore the operator's bandpass + overrides choice,
+                // then re-roll the regenerated DSL on top via the
+                // rebind module (reloadDsl preserves the state we
+                // just put back).
+                if (d.rebind) {
+                    decks[id].rebind.bandpass = d.rebind.bandpass !== false
+                    decks[id].rebind.overrides = JSON.parse(JSON.stringify(d.rebind.overrides || {}))
+                    if (Object.keys(decks[id].rebind.overrides).length > 0) {
+                        const { regenerateDsl } = await import('./rebind.js')
+                        const newDsl = regenerateDsl(decks[id].rebind.originalDsl, decks[id].rebind.overrides)
+                        if (newDsl) await decks[id].reloadDsl(newDsl)
+                    }
+                }
             } catch (err) {
                 errors.push(`deck ${id}: ${err?.message || err}`)
             }
         }
         refreshAudio?.()
+        refreshRebind?.()
         if (typeof snapshot.bpm === 'number') scheduler.bpm = snapshot.bpm
         if (typeof snapshot.divider === 'number') scheduler.divider = snapshot.divider
         if (snapshot.curve) setCurve(snapshot.curve)

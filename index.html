@@ -7,6 +7,9 @@
     <meta name="description" content="Audio-reactive shader visualizer and VJ gig player. Two decks, crossfader, MIDI, auto-mix. Built on Noisemaker.">
     <meta name="author" content="Noise Factor">
 
+    <!-- Inline transparent SVG favicon — silences the otherwise-noisy
+         /favicon.ico 404 that fails the smoke spec's strict error check. -->
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3C/svg%3E">
     <link rel="preconnect" href="https://fonts.noisefactor.io" crossorigin>
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
     <link rel="preconnect" href="https://handfish.noisefactor.io" crossorigin>
@@ -205,6 +208,9 @@
                         <span class="density-value">100%</span>
                     </button>
                     <div class="deck-head-actions">
+                        <button class="deck-rebind-eq" data-deck="A" title="Reshuffle audio bindings (E)"><span class="icon">graphic_eq</span></button>
+                        <button class="deck-rebind-midi" data-deck="A" title="Reshuffle MIDI bindings (M)"><span class="icon">piano</span></button>
+                        <button class="deck-bandpass" data-deck="A" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
                         <button class="deck-edit-toggle" data-deck="A" title="Edit DSL"><span class="icon">code</span></button>
                         <button class="deck-load-random" data-deck="A" title="Load random program"><span class="icon">shuffle</span></button>
                     </div>
@@ -259,6 +265,9 @@
                         <span class="density-value">100%</span>
                     </button>
                     <div class="deck-head-actions">
+                        <button class="deck-rebind-eq" data-deck="B" title="Reshuffle audio bindings (Shift+E)"><span class="icon">graphic_eq</span></button>
+                        <button class="deck-rebind-midi" data-deck="B" title="Reshuffle MIDI bindings (Shift+M)"><span class="icon">piano</span></button>
+                        <button class="deck-bandpass" data-deck="B" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
                         <button class="deck-edit-toggle" data-deck="B" title="Edit DSL"><span class="icon">code</span></button>
                         <button class="deck-load-random" data-deck="B" title="Load random program"><span class="icon">shuffle</span></button>
                     </div>

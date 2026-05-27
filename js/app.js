@@ -24,6 +24,7 @@ import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import { Scenes } from './scenes.js'
+import * as rebind from './rebind.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
@@ -195,7 +196,7 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
-    window.__visualize = { audio, midi, decks: state.decks }
+    window.__visualize = { audio, midi, decks: state.decks, rebind }
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -269,7 +270,7 @@ async function boot() {
 
     // Auto-mix
     const autoMix = new AutoMix({
-        library, decks: state.decks, compositor, scheduler,
+        library, decks: state.decks, compositor, scheduler, rebind,
         getXfade: () => state.crossfade,
         setXfade: (v) => {
             state.crossfade = v
@@ -486,6 +487,90 @@ async function boot() {
         }
     }
     wireDensityButtons()
+
+    // ── Rebind (EQ + MIDI) ───────────────────────────────────────────
+    // Per-deck operator-triggered reshuffle of audio/MIDI parameter
+    // bindings. The rebind module rewrites the deck's currently
+    // running DSL via compile()/unparse(), substituting fresh Audio
+    // or Midi automations on 2-4 random numeric params. Bandpass on
+    // (default) keeps EQ rebind inside the program's tagged bands;
+    // off picks any band.
+    const REBIND_STORAGE_KEY = 'visualize.rebind.v1'
+
+    function loadBandpassState() {
+        try {
+            const raw = localStorage.getItem(REBIND_STORAGE_KEY)
+            const parsed = raw ? JSON.parse(raw) : {}
+            return {
+                A: parsed.A !== false,
+                B: parsed.B !== false
+            }
+        } catch {
+            return { A: true, B: true }
+        }
+    }
+    function persistBandpassState() {
+        try {
+            localStorage.setItem(REBIND_STORAGE_KEY, JSON.stringify({
+                A: state.decks.A.rebind.bandpass,
+                B: state.decks.B.rebind.bandpass
+            }))
+        } catch {}
+    }
+    function programForDeck(deckId) {
+        const title = state.decks[deckId].currentName
+        return library.byTitle(title) || { tags: [] }
+    }
+    function flashRebindBtn(btn) {
+        if (!btn) return
+        btn.classList.add('flash')
+        setTimeout(() => btn.classList.remove('flash'), 250)
+    }
+    function updateBandpassBtn(deckId) {
+        const btn = document.querySelector(`.deck-bandpass[data-deck="${deckId}"]`)
+        if (!btn) return
+        const on = state.decks[deckId].rebind.bandpass
+        btn.classList.toggle('lit', on)
+        btn.title = on
+            ? "Bandpass on: EQ rebind stays in this program's bands"
+            : 'Bandpass off: EQ rebind picks any band'
+    }
+
+    function wireRebindButtons() {
+        const persisted = loadBandpassState()
+        for (const deckId of ['A', 'B']) {
+            state.decks[deckId].rebind.bandpass = persisted[deckId]
+            const eqBtn = document.querySelector(`.deck-rebind-eq[data-deck="${deckId}"]`)
+            const midiBtn = document.querySelector(`.deck-rebind-midi[data-deck="${deckId}"]`)
+            const bpBtn = document.querySelector(`.deck-bandpass[data-deck="${deckId}"]`)
+            if (eqBtn) eqBtn.addEventListener('click', async () => {
+                const ok = await rebind.rebindEq(state.decks[deckId], programForDeck(deckId))
+                if (ok) {
+                    flashRebindBtn(eqBtn)
+                    audio.refreshDeckStates()
+                    syncDeckEditor(deckId)
+                } else {
+                    toast(`${deckId}: no rebindable params`)
+                }
+            })
+            if (midiBtn) midiBtn.addEventListener('click', async () => {
+                const ok = await rebind.rebindMidi(state.decks[deckId])
+                if (ok) {
+                    flashRebindBtn(midiBtn)
+                    syncDeckEditor(deckId)
+                } else {
+                    toast(`${deckId}: no rebindable params`)
+                }
+            })
+            if (bpBtn) bpBtn.addEventListener('click', () => {
+                state.decks[deckId].rebind.bandpass = !state.decks[deckId].rebind.bandpass
+                updateBandpassBtn(deckId)
+                persistBandpassState()
+            })
+            updateBandpassBtn(deckId)
+        }
+    }
+    wireRebindButtons()
 
     /**
      * Populate + wire the mixer-effect dropdown. Per-effect mode
@@ -1004,7 +1089,11 @@ async function boot() {
                     $('automix-toggle').dataset.state = cfg.enabled ? 'on' : 'off'
                 }
             },
-            refreshAudio: () => audio.refreshDeckStates()
+            refreshAudio: () => audio.refreshDeckStates(),
+            refreshRebind: () => {
+                updateBandpassBtn('A')
+                updateBandpassBtn('B')
+            }
         }
     }
 
@@ -1175,6 +1264,18 @@ async function boot() {
             case '4': toggleFx('zoom'); break
             case '5': toggleFx('freeze'); break
             case '6': toggleFx('flash'); break
+            case 'e': {
+                const deckId = e.shiftKey ? 'B' : 'A'
+                const btn = document.querySelector(`.deck-rebind-eq[data-deck="${deckId}"]`)
+                btn?.click()
+                break
+            }
+            case 'm': {
+                const deckId = e.shiftKey ? 'B' : 'A'
+                const btn = document.querySelector(`.deck-rebind-midi[data-deck="${deckId}"]`)
+                btn?.click()
+                break
+            }
             case 'escape':
                 if (drawer.getAttribute('aria-hidden') === 'false') {
                     closeSettings()

@@ -21,7 +21,7 @@ const FADE_CURVES = {
 }
 
 export class AutoMix {
-    constructor({ library, decks, compositor, scheduler, getXfade, setXfade, onStatus, onLoad }) {
+    constructor({ library, decks, compositor, scheduler, getXfade, setXfade, onStatus, onLoad, rebind }) {
         this.library = library
         this.decks = decks
         this.compositor = compositor
@@ -33,11 +33,19 @@ export class AutoMix {
         // labels / tagline / audio routing. AutoMix only knows about
         // decks, not DOM.
         this.onLoad = onLoad || (() => {})
+        // Optional rebind module. When present, _triggerSceneSwap fires
+        // a fresh rebindEq() on the just-loaded deck so each scene swap
+        // also shuffles which params are audio-driven.
+        this.rebind = rebind || null
 
         this._enabled = false
         this._barsPerScene = 8
         this._fadeDurSec = 3        // wall-clock seconds (shared with the manual auto-fade button)
         this._curve = 'dipped'
+        // Default on — auto-VJ exists to keep the visual moving, and
+        // a fresh rebind on each load is the simplest way to keep it
+        // really moving. Operator can flip it off via setAutoRebindEq.
+        this._autoRebindEq = true
 
         this._lastSwitchBeat = 0
         this._fadeStartMs = null
@@ -70,6 +78,8 @@ export class AutoMix {
     setBarsPerScene(n) { this._barsPerScene = Math.max(1, Number(n) || 8) }
     setFadeDurationSec(s) { this._fadeDurSec = Math.max(0, Number(s) || 0) }
     setCurve(name) { if (FADE_CURVES[name]) this._curve = name }
+    setAutoRebindEq(v) { this._autoRebindEq = !!v }
+    get autoRebindEq() { return this._autoRebindEq }
 
     /**
      * Called by the UI whenever the user touches the crossfader.
@@ -137,6 +147,16 @@ export class AutoMix {
             }
             this.onStatus(`auto: ${incomingDeckId} ← ${program.title}`, true)
             this.onLoad(incomingDeckId, program)
+            // Auto-rebind on the freshly-loaded deck so the audio
+            // mapping shuffles every scene change, not just the
+            // program. Failures are non-fatal — keep the swap going.
+            if (this._autoRebindEq && this.rebind) {
+                try {
+                    this.rebind.rebindEq(deck, program)
+                } catch (err) {
+                    console.warn('[AutoMix] auto-rebind failed', err)
+                }
+            }
         } catch (err) {
             console.error('[AutoMix] load error', err)
             return
