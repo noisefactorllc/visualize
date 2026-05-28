@@ -288,25 +288,22 @@ export class Library {
         const actions = document.createElement('div')
         actions.className = 'pc-actions'
 
-        // Per-card include checkbox: drives Library.random() /
+        // Per-card include toggle: drives Library.random() /
         // randomExcept() (= Auto-VJ's pool). Util programs are never
-        // in the pool, so they don't get a checkbox.
+        // in the pool, so they don't get a toggle.
         if (!Library.isUtil(p)) {
-            const incLabel = document.createElement('label')
-            incLabel.className = 'pc-include'
-            incLabel.title = 'Include in Auto-VJ pool'
+            const incBox = document.createElement('toggle-switch')
+            incBox.className = 'pc-include'
+            incBox.title = 'Include in Auto-VJ pool'
+            if (!this._excluded.has(p.title)) incBox.setAttribute('checked', '')
             // Stop click from also triggering the card's load-on-click
             // behaviours (drag, dblclick).
-            incLabel.addEventListener('click', (e) => e.stopPropagation())
-            const incBox = document.createElement('input')
-            incBox.type = 'checkbox'
-            incBox.checked = !this._excluded.has(p.title)
+            incBox.addEventListener('click', (e) => e.stopPropagation())
             incBox.addEventListener('change', () => {
                 this.setIncluded(p.title, incBox.checked)
                 card.dataset.excluded = incBox.checked ? '0' : '1'
             })
-            incLabel.appendChild(incBox)
-            actions.appendChild(incLabel)
+            actions.appendChild(incBox)
             card.dataset.excluded = this._excluded.has(p.title) ? '1' : '0'
         }
 

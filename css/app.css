@@ -509,19 +509,29 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
    buttons in the action row. When unchecked, the card dims so
    the operator can see at a glance which programs are out of
    the auto-VJ rotation. */
-.program-card .pc-include {
-    display: inline-flex;
+/* pc-include is a <toggle-switch>; override the stock 2rem × 1rem
+   track to fit the dense card-action row alongside the A/B buttons.
+   Thumb slides via `left:` (not transform), so checked-position math
+   has to account for the smaller thumb + track.
+
+   The flex/align-items here centers the 12px track inside the host,
+   which flexbox stretches to match the A/B buttons' 16px height. */
+.program-card toggle-switch.pc-include {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
     margin-right: 2px;
 }
-.program-card .pc-include input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
-    accent-color: var(--hf-accent);
+.program-card toggle-switch.pc-include .ts-track {
+    width: 22px;
+    height: 12px;
+}
+.program-card toggle-switch.pc-include .ts-thumb {
+    width: 8px;
+    height: 8px;
+    left: 2px;
+}
+.program-card toggle-switch.pc-include .ts-track.ts-checked .ts-thumb {
+    left: calc(100% - 10px);
 }
 .program-card[data-excluded="1"] {
     opacity: 0.55;

@@ -1221,6 +1221,17 @@ async function boot() {
         midi.followClock = e.target.checked
         toast(midi.followClock ? 'following MIDI clock for BPM' : 'BPM is manual / tap')
     })
+    // <label>-for-input association doesn't work with custom elements,
+    // so forward clicks on the row's text span to the inner toggle.
+    for (const row of document.querySelectorAll('.checkbox-row')) {
+        row.addEventListener('click', (e) => {
+            const toggle = row.querySelector('toggle-switch')
+            if (!toggle || toggle.disabled) return
+            if (e.target === toggle || toggle.contains(e.target)) return
+            toggle.checked = !toggle.checked
+            toggle.dispatchEvent(new Event('change', { bubbles: true }))
+        })
+    }
 
     // MIDI learn rows
     registerMidiControls(midi, {
