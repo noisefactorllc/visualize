@@ -1421,32 +1421,15 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
     white-space: nowrap;
 }
 
-/* Compact fade curve dropdown. Fixed width matches the duration
-   slider on the opposite side so the two affordances are exactly
-   the same width — the user wants them visually balanced and
-   "not wider than necessary". */
+/* Fixed-width sizing for the handfish <select-dropdown>; matches
+   the duration slider on the opposite side so the two affordances
+   are visually balanced. The dropdown trigger draws its own chrome
+   (border, arrow, hover) — don't paint a second one here. */
 .xfader-fade-curve {
-    appearance: none;
-    background: var(--hf-bg-base);
-    color: var(--hf-text-normal);
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-sm);
-    padding: 3px 18px 3px 8px;
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    cursor: pointer;
     height: 26px;
     width: 110px;
     flex: 0 0 110px;
-    background-image:
-        linear-gradient(45deg, transparent 50%, currentColor 50%),
-        linear-gradient(135deg, currentColor 50%, transparent 50%);
-    background-position: right 7px top 50%, right 3px top 50%;
-    background-size: 4px 4px, 4px 4px;
-    background-repeat: no-repeat;
-    transition: var(--hf-transition-border);
 }
-.xfader-fade-curve:hover { border-color: var(--hf-accent); }
 
 /* Duration slider sizing. handfish gives <slider-value> a
    `display: contents` host, so width on the host itself is
