@@ -29,6 +29,7 @@ import { AutoXfade } from './autoxfade.js'
 import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
+import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer.
 import { dslTokenizer } from 'handfish'
@@ -351,7 +352,7 @@ async function boot() {
     })
     if (!Recorder.isSupported()) {
         $('record-toggle').disabled = true
-        $('record-toggle').title = 'MediaRecorder not supported'
+        setTooltip($('record-toggle'), 'MediaRecorder not supported')
     }
 
     // Output window
@@ -595,9 +596,9 @@ async function boot() {
         if (!btn) return
         const on = state.decks[deckId].rebind.bandpass
         btn.classList.toggle('lit', on)
-        btn.title = on
+        setTooltip(btn, on
             ? "Bandpass on: EQ rebind stays in this program's bands"
-            : 'Bandpass off: EQ rebind picks any band'
+            : 'Bandpass off: EQ rebind picks any band')
     }
 
     function updateOscCountBtn(deckId) {
@@ -607,9 +608,9 @@ async function boot() {
         const label = btn.querySelector('.osc-value')
         if (label) label.textContent = `×${n}`
         btn.dataset.active = n > 0 ? '1' : '0'
-        btn.title = n === 0
+        setTooltip(btn, n === 0
             ? 'Oscillator count for rebind (click to cycle 0–4)'
-            : `Rebind uses ${n} oscillator${n === 1 ? '' : 's'} (click to cycle 0–4)`
+            : `Rebind uses ${n} oscillator${n === 1 ? '' : 's'} (click to cycle 0–4)`)
     }
 
     function wireRebindButtons() {
@@ -1444,7 +1445,7 @@ async function boot() {
             const del = document.createElement('button')
             del.className = 'sr-delete'
             del.textContent = '✕'
-            del.title = 'delete'
+            setTooltip(del, 'delete')
             del.addEventListener('click', (e) => {
                 e.stopPropagation()
                 if (confirm(`Delete scene "${s.name}"?`)) {
@@ -1640,6 +1641,11 @@ async function boot() {
         }
     }
 
+    // Boot complete — wire handfish tooltips (registers hover/focus
+    // handlers + migrates any `title=` in static markup over to the
+    // [data-title].tooltip convention).
+    setupTooltips()
+
     toast('ready — open settings to enable audio/MIDI')
 }
 
@@ -1683,19 +1689,19 @@ function renderLearnRows(rows, midi) {
         if (row.learning) {
             const cancel = document.createElement('button')
             cancel.textContent = '✕'
-            cancel.title = 'cancel learn'
+            setTooltip(cancel, 'cancel learn')
             cancel.addEventListener('click', () => midi.cancelLearn())
             actions.appendChild(cancel)
         } else {
             const learn = document.createElement('button')
             learn.textContent = row.cc != null ? '↻' : '◉'
-            learn.title = row.cc != null ? 'relearn' : 'learn'
+            setTooltip(learn, row.cc != null ? 'relearn' : 'learn')
             learn.addEventListener('click', () => midi.startLearn(row.controlId))
             actions.appendChild(learn)
             if (row.cc != null) {
                 const clear = document.createElement('button')
                 clear.textContent = '✕'
-                clear.title = 'clear'
+                setTooltip(clear, 'clear')
                 clear.addEventListener('click', () => midi.clearAssignment(row.controlId))
                 actions.appendChild(clear)
             }

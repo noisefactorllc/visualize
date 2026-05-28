@@ -15,6 +15,7 @@
 
 import { getCachedThumb, putCachedThumb, hashDsl } from './thumbnailCache.js'
 import { getThumbnailRenderer } from './thumbnailRenderer.js'
+import { setTooltip } from './tooltips.js'
 
 const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
 
@@ -273,7 +274,7 @@ export class Library {
         if (p.source?.username) {
             tooltipParts.push(`by ${p.source.username} · ${p.source.app || 'noisedeck'} · ${p.source.code}`)
         }
-        titleEl.title = tooltipParts.filter(Boolean).join('\n')
+        setTooltip(titleEl, tooltipParts.filter(Boolean).join('\n'))
         overlay.appendChild(titleEl)
 
         const tagEl = document.createElement('div')
@@ -294,7 +295,7 @@ export class Library {
         if (!Library.isUtil(p)) {
             const incBox = document.createElement('toggle-switch')
             incBox.className = 'pc-include'
-            incBox.title = 'Include in Auto-VJ pool'
+            setTooltip(incBox, 'Include in Auto-VJ pool')
             if (!this._excluded.has(p.title)) incBox.setAttribute('checked', '')
             // Stop click from also triggering the card's load-on-click
             // behaviours (drag, dblclick).
@@ -311,7 +312,7 @@ export class Library {
         loadA.className = 'pc-load'
         loadA.dataset.deck = 'A'
         loadA.textContent = 'A'
-        loadA.title = 'Load into Deck A'
+        setTooltip(loadA, 'Load into Deck A')
         loadA.addEventListener('click', (e) => {
             e.stopPropagation()
             this._onLoadToDeck?.('A', p)
@@ -321,7 +322,7 @@ export class Library {
         loadB.className = 'pc-load'
         loadB.dataset.deck = 'B'
         loadB.textContent = 'B'
-        loadB.title = 'Load into Deck B'
+        setTooltip(loadB, 'Load into Deck B')
         loadB.addEventListener('click', (e) => {
             e.stopPropagation()
             this._onLoadToDeck?.('B', p)

@@ -29,6 +29,7 @@
  */
 
 import { getEffect } from '../noisemaker/bundle.js'
+import { setTooltip } from '../tooltips.js'
 
 export class MixerControls {
     constructor(rootEl, mixer) {
@@ -90,7 +91,7 @@ export class MixerControls {
         label.className = 'mixer-control-label'
         const labelText = spec.ui?.label || paramName
         label.textContent = labelText
-        label.title = labelText      // tooltip surfaces ellipsis-truncated long labels
+        setTooltip(label, labelText) // tooltip surfaces ellipsis-truncated long labels
 
         let control
         const current = this.mixer.getOverride(paramName) ?? spec.default
