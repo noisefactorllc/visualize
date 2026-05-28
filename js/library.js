@@ -16,8 +16,28 @@
 import { getCachedThumb, putCachedThumb, hashDsl } from './thumbnailCache.js'
 import { getThumbnailRenderer } from './thumbnailRenderer.js'
 import { setTooltip } from './tooltips.js'
+import { buildDefaultPrograms } from './defaultPrograms.js'
 
 const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
+
+// Section ordering for the grid. Each program is assigned a category
+// at load time via Library.categoryFor(); render() emits a <details>
+// section per non-empty category in this exact order.
+const CATEGORY_ORDER = Object.freeze([
+    'default-particles',
+    'default-sim',
+    'built-in',
+    'noiseblaster',
+    'util',
+])
+
+const CATEGORY_LABELS = Object.freeze({
+    'default-particles': 'particles',
+    'default-sim': 'sims',
+    'built-in': 'built-in',
+    'noiseblaster': 'noiseblaster',
+    'util': 'utility',
+})
 
 export class Library {
     constructor() {
@@ -43,10 +63,29 @@ export class Library {
         this._pendingThumbCards = new Set()
     }
 
-    async load(path = 'data/programs.json') {
-        const resp = await fetch(path, { cache: 'no-cache' })
-        if (!resp.ok) throw new Error(`Failed to load library: ${resp.status}`)
-        this.programs = await resp.json()
+    async load(path = 'data/programs.json', { renderer = null } = {}) {
+        const fetched = fetch(path, { cache: 'no-cache' }).then(async resp => {
+            if (!resp.ok) throw new Error(`Failed to load library: ${resp.status}`)
+            return resp.json()
+        })
+
+        // Engine defaults (points namespace + sim tag) need a renderer
+        // with a resolved manifest. When no renderer is supplied
+        // (tests, headless tooling) the default sections stay empty —
+        // the curated list is still served as before.
+        const defaults = renderer
+            ? buildDefaultPrograms(renderer).catch(err => {
+                console.warn('[library] default programs failed:', err)
+                return []
+            })
+            : Promise.resolve([])
+
+        const [curated, defs] = await Promise.all([fetched, defaults])
+        // Default-particles + default-sim go to the front so the
+        // sections render in the configured order regardless of
+        // search filter behaviour. Internal ordering still flows
+        // through Library.categoryFor() at render time.
+        this.programs = [...defs, ...curated]
         return this.programs
     }
 
@@ -55,6 +94,23 @@ export class Library {
      *  show up via random() / auto-VJ. */
     static isUtil(program) {
         return !!program?.tags?.includes('util')
+    }
+
+    /**
+     * Group a program into one of the five top-level sections. The
+     * order of these checks matters: an engine-default entry that
+     * happened to be tagged "util" upstream should still land in its
+     * default-particles / default-sim section, not in utility.
+     */
+    static categoryFor(program) {
+        if (program?.source?.kind === 'engine-default') {
+            return program.source.namespace === 'points'
+                ? 'default-particles'
+                : 'default-sim'
+        }
+        if (Library.isUtil(program)) return 'util'
+        if (program?.source?.feed === 'noiseblaster') return 'noiseblaster'
+        return 'built-in'
     }
 
     /** True if this title is currently eligible for the Auto-VJ random
@@ -217,12 +273,51 @@ export class Library {
         this._pendingThumbCards.clear()
 
         const filtered = this.programs.filter(p => this._matches(p))
-        this._gridEl.innerHTML = ''
+
+        // Bucket by category, preserving in-array order within each.
+        const buckets = new Map(CATEGORY_ORDER.map(c => [c, []]))
         for (const p of filtered) {
-            const card = this._renderCard(p)
-            this._gridEl.appendChild(card)
-            if (this._observer) this._observer.observe(card)
+            const cat = Library.categoryFor(p)
+            if (!buckets.has(cat)) buckets.set(cat, [])
+            buckets.get(cat).push(p)
         }
+
+        this._gridEl.innerHTML = ''
+        for (const category of CATEGORY_ORDER) {
+            const programs = buckets.get(category) || []
+            if (programs.length === 0) continue
+
+            const section = document.createElement('details')
+            section.className = 'lib-section'
+            section.dataset.category = category
+            section.open = true
+
+            const summary = document.createElement('summary')
+            summary.className = 'lib-section-summary'
+
+            const label = document.createElement('span')
+            label.className = 'lib-section-label'
+            label.textContent = CATEGORY_LABELS[category] || category
+            summary.appendChild(label)
+
+            const count = document.createElement('span')
+            count.className = 'lib-section-count'
+            count.textContent = String(programs.length)
+            summary.appendChild(count)
+
+            section.appendChild(summary)
+
+            const sectionGrid = document.createElement('div')
+            sectionGrid.className = 'lib-section-grid'
+            for (const p of programs) {
+                const card = this._renderCard(p)
+                sectionGrid.appendChild(card)
+                if (this._observer) this._observer.observe(card)
+            }
+            section.appendChild(sectionGrid)
+            this._gridEl.appendChild(section)
+        }
+
         if (this._countEl) {
             this._countEl.textContent = `${filtered.length} program${filtered.length === 1 ? '' : 's'}`
         }

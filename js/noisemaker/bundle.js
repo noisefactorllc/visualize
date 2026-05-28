@@ -49,6 +49,12 @@ export const {
     formatDslError,
     isStarterEffect,
     isIOFunction,
+    hasTexSurfaceParam,
+    hasExplicitTexParam,
+    getVolGeoParams,
+    is3dGenerator,
+    is3dProcessor,
+    unparseCall,
     VERSION
 } = bundle
 

@@ -358,13 +358,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     flex: 1;
     overflow-y: auto;
     padding: var(--hf-space-2);
-    display: grid;
-    /* Single-column card list. Each card stays a compact 16:9 tile
-       with title + load buttons superimposed on the rendered
-       thumbnail; at 190px library width that's ~175px per card →
-       ~98px tall. */
-    grid-template-columns: 1fr;
-    grid-auto-rows: max-content;
+    display: flex;
+    flex-direction: column;
     gap: var(--hf-space-2);
     scrollbar-width: thin;
     scrollbar-color: var(--hf-border-subtle) transparent;
@@ -372,6 +367,79 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 
 .library-grid::-webkit-scrollbar { width: 6px; }
 .library-grid::-webkit-scrollbar-thumb { background: var(--hf-border-subtle); border-radius: 3px; }
+
+/* Collapsible section per program category. Native <details> drives
+   the collapse, so screen readers and keyboard users get it for free.
+   Open by default — operators can fold a category to hide it from
+   sight without changing pool eligibility (Auto-VJ still draws from
+   every included card regardless of section state). */
+.lib-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--hf-space-2);
+}
+
+.lib-section-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--hf-space-2);
+    padding: 4px 6px;
+    border-radius: var(--hf-radius-sm);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    color: var(--hf-text-dim);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    font-weight: var(--hf-weight-bold);
+    text-transform: lowercase;
+    transition: var(--hf-transition-color);
+}
+
+.lib-section-summary::-webkit-details-marker { display: none; }
+.lib-section-summary::marker { content: ''; }
+
+/* Use a unicode triangle marker before the label so the affordance
+   reads at a glance without leaning on the native UA chevron (which
+   doesn't pick up theme colours). Rotates on open via [open]. */
+.lib-section-summary::before {
+    content: '▸';
+    flex: 0 0 auto;
+    width: 10px;
+    color: var(--hf-text-faint, var(--hf-text-dim));
+    transition: transform 120ms ease;
+}
+.lib-section[open] > .lib-section-summary::before {
+    transform: rotate(90deg);
+}
+
+.lib-section-summary:hover { color: var(--hf-text-normal); }
+
+.lib-section-label {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.lib-section-count {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--hf-text-faint, var(--hf-text-dim));
+    background: var(--hf-bg-base);
+    border-radius: 999px;
+    padding: 0 6px;
+    line-height: 16px;
+    font-size: 10px;
+}
+
+.lib-section-grid {
+    display: grid;
+    /* Same single-column tile geometry the old flat grid used; each
+       card is a 16:9 tile with the overlay stack on top. */
+    grid-template-columns: 1fr;
+    grid-auto-rows: max-content;
+    gap: var(--hf-space-2);
+}
 
 .program-card {
     aspect-ratio: 16 / 9;
