@@ -301,6 +301,7 @@ export async function clearRebinds(deck) {
     deck.rebind.overrides = {}
     if (!deck.rebind.originalDsl) return false
     const res = await deck.reloadDsl(deck.rebind.originalDsl)
+    if (res?.success) deck.clearSurfaces?.()
     return !!res?.success
 }
 
@@ -314,5 +315,8 @@ async function _applyAndLoad(deck) {
     const dsl = regenerateDsl(deck.rebind.originalDsl, deck.rebind.overrides)
     if (!dsl) return false
     const res = await deck.reloadDsl(dsl)
+    // recompile() preserves o0..oN surfaces; a shuffle is supposed to
+    // feel like a fresh seed for stateful effects, so wipe them here.
+    if (res?.success) deck.clearSurfaces?.()
     return !!res?.success
 }

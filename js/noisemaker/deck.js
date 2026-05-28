@@ -170,6 +170,11 @@ export class Deck {
             this.rebind.originalDsl = dsl
             this.rebind.overrides = {}
             this._normalizeColorUniforms()
+            // recompile() preserves o0..oN textures so stateful effects
+            // (reaction-diffusion, MNCA, CA, feedback) keep evolving on
+            // recompile. For a fresh program load that's wrong — the
+            // new program inherits the old's seed. Wipe surfaces here.
+            this.clearSurfaces()
             if (!this._renderer.isRunning) this._renderer.start()
             return { success: true }
         } catch (err) {
@@ -262,6 +267,29 @@ export class Deck {
     dispose() {
         this.stop()
         if (this._renderer.dispose) this._renderer.dispose()
+    }
+
+    /**
+     * Clear all global o0..oN surface textures to transparent black.
+     * Resets persistent state for stateful effects (reaction-diffusion,
+     * MNCA, cellular automata, feedback loops) that ping-pong through
+     * the named global textures. No-op for programs that regenerate
+     * o0..oN from scratch every frame.
+     *
+     * The runtime's recompile() deliberately preserves these surfaces
+     * across recompiles, so rebind + load paths call this explicitly
+     * when they want a fresh seed instead of continuing the simulation.
+     */
+    clearSurfaces() {
+        const pipeline = this._renderer?._pipeline
+        if (!pipeline?.surfaces || typeof pipeline.clearSurface !== 'function') return
+        for (const name of pipeline.surfaces.keys()) {
+            try {
+                pipeline.clearSurface(name)
+            } catch (err) {
+                console.warn(`[${this.id}] clearSurface(${name}) failed`, err)
+            }
+        }
     }
 
     /**

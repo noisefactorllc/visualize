@@ -181,6 +181,67 @@ test('rebind: util programs skip auto-rebind in AutoMix swap', async ({ browser 
     }
 })
 
+test('rebind: shuffle wipes o0..oN surfaces (stateful effect reset)', async ({ browser }) => {
+    // recompile() preserves global surfaces so stateful sims (RD/MNCA/CA)
+    // keep evolving — but a shuffle should feel like a fresh seed. Verify
+    // by spying on pipeline.clearSurface: every surface on the deck's
+    // pipeline must be cleared on rebindEq, rebindMidi, and clearRebinds.
+    const { context, page } = await bootAndLoad(browser, 'multires reaction-diffusion')
+    try {
+        const result = await page.evaluate(async () => {
+            const deck = window.__visualize.decks.A
+            const program = window.__visualize.__currentProgram
+            const pipeline = deck.inner._pipeline
+            const surfaceNames = [...pipeline.surfaces.keys()]
+            const calls = { eq: [], midi: [], clear: [], load: [] }
+            const origClear = pipeline.clearSurface.bind(pipeline)
+            let phase = 'load'
+            pipeline.clearSurface = (name) => {
+                calls[phase].push(name)
+                return origClear(name)
+            }
+            // Phase 1: EQ shuffle
+            phase = 'eq'
+            await window.__visualize.rebind.rebindEq(deck, program)
+            // Phase 2: MIDI shuffle (use the same pipeline, may have been
+            // recreated — re-spy)
+            const p2 = deck.inner._pipeline
+            const origClear2 = p2.clearSurface.bind(p2)
+            p2.clearSurface = (name) => {
+                calls[phase].push(name)
+                return origClear2(name)
+            }
+            phase = 'midi'
+            await window.__visualize.rebind.rebindMidi(deck)
+            // Phase 3: clearRebinds (restore original)
+            const p3 = deck.inner._pipeline
+            const origClear3 = p3.clearSurface.bind(p3)
+            p3.clearSurface = (name) => {
+                calls[phase].push(name)
+                return origClear3(name)
+            }
+            phase = 'clear'
+            await window.__visualize.rebind.clearRebinds(deck)
+            return { surfaceNames, calls }
+        })
+        // multires reaction-diffusion writes to o0..o4 so at minimum
+        // five global surfaces should exist on the deck.
+        expect(result.surfaceNames.length).toBeGreaterThanOrEqual(5)
+        // Every phase must have cleared every surface (set match, not
+        // order, since map iteration is insertion-order but we don't
+        // care).
+        const surfaceSet = new Set(result.surfaceNames)
+        for (const phase of ['eq', 'midi', 'clear']) {
+            const cleared = new Set(result.calls[phase])
+            for (const s of surfaceSet) {
+                expect(cleared.has(s)).toBe(true)
+            }
+        }
+    } finally {
+        await context.close()
+    }
+})
+
 test('rebind: bandpass off allows non-home bands across rolls', async ({ browser }) => {
     const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
     try {
