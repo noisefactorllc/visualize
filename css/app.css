@@ -141,12 +141,13 @@ select:focus-visible,
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    animation: gradient-shift 6s ease-in-out infinite;
-}
-
-@keyframes gradient-shift {
-    0%, 100% { background-position: 0% 50%; }
-    50%      { background-position: 100% 50%; }
+    /* Background position tracks the crossfader: 0% = blue-dominant
+       (deck A live), 100% = red-dominant (deck B live), 50% = pure
+       yellow (mixer effect dominant). app.js writes --brand-mix as a
+       percentage every time the crossfade changes; default to the
+       midpoint so a fresh boot reads as "mixer-live". */
+    background-position: var(--brand-mix, 50%) 50%;
+    transition: background-position 80ms linear;
 }
 
 .brand-tag {
@@ -669,6 +670,29 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck-head-row2 { grid-row: 2; }
 .deck-content   { grid-row: 3; }
 .deck-meta      { grid-row: 4; }
+
+/* Bottom-edge identity band on each stage column. ::after overlays an
+   absolutely-positioned strip inside the rounded corner so the existing
+   .deck.live box-shadow glow keeps working untouched. Colors match the
+   per-deck identity used elsewhere (deck-A blue, deck-B red) with the
+   mixer column carrying the same yellow as the topbar logotype's
+   middle gradient stop. */
+.stage > .deck::after,
+.stage > .main::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 3px;
+    pointer-events: none;
+    z-index: 2;
+    border-bottom-left-radius: inherit;
+    border-bottom-right-radius: inherit;
+}
+.stage > .deck.deck-a::after { background: var(--hf-blue); }
+.stage > .main::after        { background: var(--hf-yellow); }
+.stage > .deck.deck-b::after { background: var(--hf-red); }
 /* Head / row2 / content / meta render *over* the absolutely-centered
    canvas so the bg-elevated strips paint cleanly at the top + bottom
    of the panel even when the canvas is large. */
@@ -1955,7 +1979,16 @@ kbd {
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    /* The boot card shows before the crossfader is meaningful, so the
+       title still animates on its own — once the user clicks start
+       and the topbar brand takes over, the live crossfader drives
+       that one via --brand-mix instead. */
     animation: gradient-shift 6s ease-in-out infinite;
+}
+
+@keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
 }
 
 .boot-tagline {

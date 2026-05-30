@@ -249,6 +249,23 @@ async function boot() {
     )
     compositor.start()
 
+    // Mirror the crossfader value into a CSS variable that drives the
+    // topbar logotype gradient — 0 (deck A live) reads as blue,
+    // 1 (deck B live) as red, with the middle landing on yellow when
+    // the mixer is dominant. Wrapping setCrossfade rather than hooking
+    // each call site means every path (slider input, MIDI, MIDI clock
+    // automation, AutoMix, AutoXfade, scenes, keyboard shortcuts)
+    // updates the gradient with no further plumbing.
+    const _originalSetCrossfade = compositor.setCrossfade.bind(compositor)
+    compositor.setCrossfade = (v01) => {
+        _originalSetCrossfade(v01)
+        const clamped = Math.max(0, Math.min(1, Number(v01) || 0))
+        document.documentElement.style.setProperty('--brand-mix', `${clamped * 100}%`)
+    }
+    // Set the initial position so the gradient doesn't snap on first
+    // change — defaults to deck A live (xfade=0) at boot.
+    compositor.setCrossfade(state.crossfade)
+
     // Bring the mixer online in the background — manifest fetch +
     // shader compile takes a beat, and we don't want to block the
     // boot path on it. Once it's up, swap the compositor onto the
