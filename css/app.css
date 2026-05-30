@@ -643,11 +643,17 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
        Explicit row placement on every child (below) keeps the
        layout stable when we add rows. */
     grid-template-rows: auto auto 1fr auto;
+    /* minmax(0, 1fr) + min-width: 0 stop a long `white-space: nowrap`
+       deck-tagline from inflating the implicit column to max-content
+       and shoving the right-aligned .deck-head-actions past the
+       overflow-clip boundary. */
+    grid-template-columns: minmax(0, 1fr);
     background: var(--hf-bg-surface);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-md);
     overflow: hidden;
     min-height: 0;
+    min-width: 0;
     transition: var(--hf-transition-border);
 }
 .deck-head      { grid-row: 1; }
