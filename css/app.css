@@ -214,30 +214,14 @@ select:focus-visible,
     white-space: nowrap;
 }
 
+/* BPM divider is a handfish <select-dropdown>. The custom element
+   renders its own button/chevron/border; we just supply sizing +
+   spacing. Same fix the xfader-fade-curve got (commit 2b45ca8) —
+   without stripping the native-select chrome you get a faux outer
+   dropdown wrapping the real one (double border, double chevron). */
 .bpm-divider {
-    appearance: none;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    background-color: var(--hf-bg-base);
-    color: var(--hf-text-normal);
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-sm);
-    padding: 2px 14px 2px 6px;
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    line-height: 1.3;
-    cursor: pointer;
-    outline: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 5' fill='currentColor'%3E%3Cpath d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 4px center;
-    background-size: 6px;
-    transition: var(--hf-transition-border);
     margin: 0 var(--hf-space-1);
 }
-.bpm-divider:hover { border-color: var(--hf-border-hover); }
-.bpm-divider:focus { border-color: var(--hf-accent); }
-.bpm-divider option { background: var(--hf-bg-elevated); color: var(--hf-text-normal); }
 
 .bpm-block.midi-sync .bpm-label,
 .bpm-block.midi-sync #bpm-input { color: var(--hf-accent); }
@@ -1008,8 +992,13 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 .main-head        { grid-row: 1; }
 .main-toolbar     { grid-row: 2; }
-.main-fx          { grid-row: 4; }
-.mixer-controls   { grid-row: 5; }
+/* Mixer-effect parameter sliders sit just below the live canvas so
+   their controls live next to the picker that summons them. The
+   per-deck FX row (strobe/invert/etc) drops to the very bottom of
+   the column, mirroring the deck-meta strip on the flanking deck
+   panels. */
+.mixer-controls   { grid-row: 4; }
+.main-fx          { grid-row: 5; }
 /* Head / toolbar / FX strip / mixer-controls paint above the
    absolute canvas. */
 .main-head, .main-toolbar, .main-fx, .mixer-controls { position: relative; z-index: 1; }
@@ -1444,15 +1433,46 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
     margin: 0;
 }
 
-.xfader::-webkit-slider-runnable-track {
+/* Midpoint tick: a thin yellow band sitting at 50% across the track
+   so the operator can see when the crossfader is parked on the
+   mixer-dominant centre. The yellow matches the logotype's middle
+   gradient stop + the mixer column's bottom border.
+
+   Selector specificity matters here — the generic
+   `input[type="range"]:not(.slider)::-webkit-slider-runnable-track`
+   rule above wins against a plain `.xfader::-...` rule (it has both
+   an element + attribute selector), so we have to lead with
+   `input.xfader[type="range"]` to keep the 24px height + tick
+   gradient from being overridden by the 6px generic track. */
+input.xfader[type="range"]::-webkit-slider-runnable-track {
     height: 24px;
-    background: var(--hf-bg-base);
+    background-color: var(--hf-bg-base);
+    background-image: linear-gradient(
+        to right,
+        transparent calc(50% - 1.5px),
+        var(--hf-yellow) calc(50% - 1.5px),
+        var(--hf-yellow) calc(50% + 1.5px),
+        transparent calc(50% + 1.5px)
+    );
+    background-repeat: no-repeat;
+    background-size: 100% 70%;
+    background-position: center;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-sm);
 }
-.xfader::-moz-range-track {
+input.xfader[type="range"]::-moz-range-track {
     height: 24px;
-    background: var(--hf-bg-base);
+    background-color: var(--hf-bg-base);
+    background-image: linear-gradient(
+        to right,
+        transparent calc(50% - 1.5px),
+        var(--hf-yellow) calc(50% - 1.5px),
+        var(--hf-yellow) calc(50% + 1.5px),
+        transparent calc(50% + 1.5px)
+    );
+    background-repeat: no-repeat;
+    background-size: 100% 70%;
+    background-position: center;
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-sm);
 }
@@ -2299,7 +2319,6 @@ kbd {
    element a step toward the accent so the hover reads even without
    a stroke. color-mix keeps the tint consistent across themes. */
 .tap-button:hover,
-.bpm-divider:hover,
 .icon-button:hover,
 button.status-pill:hover,
 .deck-edit-toggle:hover,
@@ -2351,8 +2370,7 @@ button.status-pill[data-state="on"]:hover {
    box-shadow so we don't need a border. */
 #library-search:focus,
 .mixer-select:focus,
-.status-field select:focus,
-.bpm-divider:focus {
+.status-field select:focus {
     outline: none;
     box-shadow: inset 0 0 0 1px var(--hf-accent);
 }
