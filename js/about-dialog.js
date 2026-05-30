@@ -10,7 +10,7 @@ const APP_VERSION = '0.1.0-SNAPSHOT'
 const about = new AboutDialog({
     name: 'Visualize',
     version: APP_VERSION,
-    logo: `<span class="icon" style="font-size:64px;color:var(--hf-accent)">equalizer</span>`,
+    logo: `<img src="/img/visualize.png" alt="" style="width:64px;height:64px;border-radius:12px;display:block">`,
     repo: 'noisefactorllc/visualize',
     ecosystem: `Visualize is a free tool by <a href="https://noisefactor.io/" target="_blank" rel="noopener">Noise Factor</a>, powered by the <a href="https://noisemaker.app/" target="_blank" rel="noopener">Noisemaker</a> open source engine.`,
 })
