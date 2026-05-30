@@ -1691,6 +1691,59 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
     margin-top: var(--hf-space-1);
 }
 
+/* Status hint colour-codes mid-import feedback so a failed install
+   doesn't blend in with the neutral default hint text. */
+.settings-hint[data-kind="busy"] { color: var(--hf-text-normal); }
+.settings-hint[data-kind="ok"] { color: var(--hf-green, var(--hf-accent)); }
+.settings-hint[data-kind="error"] { color: var(--hf-red); }
+
+.user-effects-import-row { align-items: center; gap: var(--hf-space-3); }
+
+.user-effect-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--hf-space-1);
+    margin-top: var(--hf-space-2);
+}
+
+.user-effect-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: var(--hf-space-2);
+    padding: 6px 8px;
+    background: var(--hf-bg-base);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border-radius: var(--hf-radius-sm);
+}
+
+.user-effect-name {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-sm);
+    color: var(--hf-text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-effect-date {
+    font-size: var(--hf-size-xs);
+    color: var(--hf-text-faint, var(--hf-text-dim));
+    font-variant-numeric: tabular-nums;
+}
+
+.user-effect-delete {
+    padding: 4px 10px;
+    font-size: var(--hf-size-xs);
+}
+.user-effect-delete:hover { border-color: var(--hf-red); color: var(--hf-red); }
+
+.user-effect-empty {
+    text-align: center;
+    padding: var(--hf-space-3) 0;
+    margin: 0;
+}
+
 .settings-credit {
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);

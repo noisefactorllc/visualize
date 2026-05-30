@@ -31,6 +31,7 @@ import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
+import { getUserEffectsManager } from './userEffects.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer.
 import { dslTokenizer } from 'handfish'
@@ -126,17 +127,6 @@ async function prepareShareDialog() {
 
     const title = composition?.title || `code ${code}`
 
-    // hasEffects=true means the composition relies on portable custom
-    // effects (foundry-built bundles) that visualize doesn't load.
-    // Refuse rather than half-load the DSL — a missing-effect compile
-    // error mid-boot would be much more confusing than a clear "won't
-    // work here" message at the dialog.
-    if (composition?.hasEffects) {
-        if (prompt) prompt.textContent = `"${title}" uses custom effects`
-        if (hint) hint.textContent = 'visualize plays only stock noisemaker effects — open this in noisedeck or polymorphic'
-        return null
-    }
-
     if (prompt) {
         prompt.innerHTML = ''
         prompt.appendChild(document.createTextNode('Load program '))
@@ -145,7 +135,18 @@ async function prepareShareDialog() {
         prompt.appendChild(em)
         prompt.appendChild(document.createTextNode(' from sharing into which deck?'))
     }
-    if (hint) hint.textContent = 'pick a deck to load it; the other deck gets a random program'
+    if (hint) {
+        // hasEffects=true means the composition bundles portable custom
+        // shaders. Visualize now accepts these via the user-effects
+        // manager — call out the install behavior so the operator knows
+        // the effects are being persisted, not just transiently loaded.
+        if (composition?.hasEffects) {
+            const n = composition.effects?.length || 0
+            hint.textContent = `bundles ${n} custom effect${n === 1 ? '' : 's'} — they'll be installed into your library`
+        } else {
+            hint.textContent = 'pick a deck to load it; the other deck gets a random program'
+        }
+    }
     if (btnA) btnA.disabled = false
     if (btnB) btnB.disabled = false
     return composition
@@ -188,18 +189,45 @@ async function boot() {
         return
     }
 
+    // User effects — hydrate from IndexedDB and register with deck A's
+    // renderer BEFORE library.load(). The engine's effect registry is a
+    // module-level singleton, so registering against one renderer
+    // (deck A's) lights up the effects globally for the compiler. We
+    // do this before library.load() so user effects participate in the
+    // defaultPrograms scan and show up in the library's "user" section.
+    const userEffects = getUserEffectsManager()
+    try {
+        await userEffects.initialize(state.decks.A.inner)
+    } catch (err) {
+        console.error('User effects init failed', err)
+    }
+
     // Library
     const library = new Library()
     try {
         // Pass deck A's renderer so the library can synthesize the
-        // default-particles / default-sim sections from the engine's
-        // points/* + sim-tagged effects via getAllEffects().
+        // default-particles / default-sim / user sections from the
+        // engine's points/* + sim-tagged + user-namespace effects via
+        // getAllEffects().
         await library.load('data/programs.json', { renderer: state.decks.A.inner })
     } catch (err) {
         console.error('Library load failed', err)
         toast('failed to load programs.json')
         return
     }
+
+    // Re-render the library whenever the user installs or deletes an
+    // effect, so the "user" section reflects the new state immediately
+    // without a reload. We rebuild defaults from the renderer's current
+    // effect set, then re-render the grid.
+    userEffects.onChange(async () => {
+        try {
+            await library.reloadDefaults(state.decks.A.inner)
+            library.render()
+        } catch (err) {
+            console.error('library reloadDefaults failed:', err)
+        }
+    })
 
     // Mixer (third pipeline) — blends deck A + deck B through any of
     // the noisemaker mixer/* effects. Created here, initialized
@@ -1202,6 +1230,12 @@ async function boot() {
     })
     $('settings-close').addEventListener('click', closeSettings)
 
+    // User effects panel — import + delete affordances. The list
+    // re-renders from IndexedDB on each onChange so the operator's
+    // view stays in sync with whatever the share-loader path or other
+    // tabs of the same app are doing.
+    setupUserEffectsPanel(userEffects, state.decks.A.inner)
+
     async function refreshAudioDevices() {
         // <select-dropdown> exposes setOptions() for programmatic
         // population. We use that rather than appending <option>
@@ -1703,13 +1737,38 @@ async function boot() {
     if (gesture?.deckId) {
         const composition = await sharePromise
         if (composition?.dsl) {
+            // If the composition shipped portable effects, install them
+            // BEFORE compiling the DSL — the compiler would otherwise
+            // bail with "unknown function user.foo" mid-load. Each
+            // install also persists to IndexedDB so a future reload of
+            // the same composition (or any other DSL that references
+            // these effects) compiles cleanly without re-fetching.
+            const bundled = Array.isArray(composition.effects) ? composition.effects : []
+            if (bundled.length > 0) {
+                for (const payload of bundled) {
+                    try {
+                        await userEffects.uploadFromPayload(payload, state.decks.A.inner)
+                    } catch (err) {
+                        console.error('[share-loader] effect install failed:', payload?.name, err)
+                    }
+                }
+                // Wait for the library to absorb the newly-registered
+                // effects so the "user" section reflects them before
+                // we render the toast.
+                await library.reloadDefaults(state.decks.A.inner)
+                library.render()
+            }
+
             await loadProgram(gesture.deckId, {
                 title: composition.title || `code ${composition.code || ''}`,
                 tagline: composition.description || 'shared from sharing.noisedeck.app',
                 dsl: composition.dsl,
             })
             updateLiveIndicator()
-            toast(`loaded "${composition.title || 'shared program'}" into deck ${gesture.deckId}`)
+            const bundledNote = bundled.length > 0
+                ? ` (+${bundled.length} custom effect${bundled.length === 1 ? '' : 's'} installed)`
+                : ''
+            toast(`loaded "${composition.title || 'shared program'}" into deck ${gesture.deckId}${bundledNote}`)
         }
         // Strip ?code= so a reload doesn't re-prompt with the same
         // share dialog — the operator already made their choice.
@@ -1743,6 +1802,93 @@ async function boot() {
 }
 
 /** Register each Visualize control as a MIDI-learnable target. */
+/**
+ * Wire the settings drawer's "user effects" section: file-picker
+ * import + list-with-per-row-delete. Re-renders the list on every
+ * change (whether triggered here, by the share-loader path, or by
+ * another tab of the same app via IndexedDB).
+ *
+ * The manager is also re-bound to the renderer on import so a
+ * freshly uploaded effect is callable from DSL immediately, without a
+ * reload.
+ */
+function setupUserEffectsPanel(userEffects, renderer) {
+    const importBtn = $('user-effect-import')
+    const fileInput = $('user-effect-file')
+    const statusEl = $('user-effect-status')
+    const listEl = $('user-effect-list')
+    if (!importBtn || !fileInput || !listEl) return
+
+    const setStatus = (msg, kind = 'info') => {
+        if (!statusEl) return
+        statusEl.textContent = msg
+        statusEl.dataset.kind = kind
+    }
+
+    importBtn.addEventListener('click', () => fileInput.click())
+
+    fileInput.addEventListener('change', async () => {
+        const file = fileInput.files?.[0]
+        fileInput.value = ''   // allow re-importing the same file
+        if (!file) return
+        setStatus(`installing ${file.name}…`, 'busy')
+        try {
+            const { name } = await userEffects.uploadFromZip(file, renderer)
+            setStatus(`installed user/${name}`, 'ok')
+        } catch (err) {
+            const msg = err?.message || String(err)
+            setStatus(`import failed: ${msg}`, 'error')
+            console.error('[userEffects] upload error:', err)
+        }
+    })
+
+    const renderList = async () => {
+        const installed = await userEffects.listInstalled()
+        listEl.innerHTML = ''
+        if (installed.length === 0) {
+            const empty = document.createElement('p')
+            empty.className = 'settings-hint user-effect-empty'
+            empty.textContent = 'no user effects installed yet'
+            listEl.appendChild(empty)
+            return
+        }
+        for (const eff of installed) {
+            const row = document.createElement('div')
+            row.className = 'user-effect-row'
+            row.dataset.id = eff.id
+
+            const label = document.createElement('span')
+            label.className = 'user-effect-name'
+            label.textContent = eff.id
+            row.appendChild(label)
+
+            const stamp = document.createElement('span')
+            stamp.className = 'user-effect-date'
+            const d = new Date(eff.uploadedAt)
+            stamp.textContent = d.toLocaleDateString()
+            row.appendChild(stamp)
+
+            const del = document.createElement('button')
+            del.className = 'ghost-button user-effect-delete'
+            del.textContent = 'delete'
+            del.addEventListener('click', async () => {
+                if (!confirm(`Delete ${eff.id}? Programs that reference it will fail to compile until reinstall.`)) return
+                try {
+                    await userEffects.deleteEffect(eff.id)
+                    setStatus(`deleted ${eff.id} — reload to fully purge from this session`, 'ok')
+                } catch (err) {
+                    setStatus(`delete failed: ${err?.message || err}`, 'error')
+                }
+            })
+            row.appendChild(del)
+            listEl.appendChild(row)
+        }
+    }
+
+    userEffects.onChange(renderList)
+    renderList().catch(err => console.error('[userEffects] initial list:', err))
+}
+
 function registerMidiControls(midi, controls) {
     midi.registerControl('crossfader', 'crossfader',     controls.crossfader)
     midi.registerControl('speedA',     'speed A',         controls.speedA)

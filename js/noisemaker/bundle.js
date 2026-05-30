@@ -27,6 +27,7 @@ export const {
     CanvasRenderer,
     Effect,
     registerEffect,
+    unregisterEffect,
     getEffect,
     getAllEffects,
     registerOp,

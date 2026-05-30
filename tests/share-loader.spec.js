@@ -65,7 +65,7 @@ test('share-loader: ?code= → pick B → deck B has shared program', async ({ p
     expect(pageErrors, pageErrors.join('\n')).toEqual([])
 })
 
-test('share-loader: composition with hasEffects=true refuses to load', async ({ page }) => {
+test('share-loader: composition with hasEffects=true announces install', async ({ page }) => {
     await page.route('https://sharing.noisedeck.app/api/composition/**', async (route) => {
         await route.fulfill({
             status: 200,
@@ -73,20 +73,24 @@ test('share-loader: composition with hasEffects=true refuses to load', async ({ 
             body: JSON.stringify({
                 code: 'CUSTOMFX',
                 title: 'has portable effects',
-                dsl: 'irrelevant',
+                dsl: 'search synth, render\n\nnoise().write(o0)\n\nrender(o0)',
                 hasEffects: true,
-                effects: [{ name: 'fakeFx', passes: [], shaders: {} }],
+                effects: [{
+                    name: 'fakeFx', func: 'fakeFx', namespace: 'user',
+                    description: 'demo', tags: ['user'],
+                    globals: {}, passes: [], shaders: {},
+                }],
             }),
         })
     })
 
     await page.goto('/?code=CUSTOMFX')
 
-    // The dialog tells the user it won't work, and leaves the deck
-    // buttons disabled so they can't accidentally trigger a bad load.
-    await expect(page.locator('#boot-share-prompt')).toContainText('custom effects', { timeout: 20_000 })
-    await expect(page.locator('#boot-share-a')).toBeDisabled()
-    await expect(page.locator('#boot-share-b')).toBeDisabled()
+    // Buttons are enabled; hint mentions the bundled-effects install.
+    await expect(page.locator('#boot-share-prompt')).toContainText('has portable effects', { timeout: 20_000 })
+    await expect(page.locator('#boot-share-hint')).toContainText('1 custom effect')
+    await expect(page.locator('#boot-share-a')).toBeEnabled()
+    await expect(page.locator('#boot-share-b')).toBeEnabled()
 })
 
 test('share-loader: failed fetch surfaces the error inline', async ({ page }) => {

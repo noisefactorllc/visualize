@@ -526,6 +526,19 @@
             </section>
 
             <section class="settings-section">
+                <h3>user effects</h3>
+                <div class="settings-row user-effects-import-row">
+                    <input type="file" id="user-effect-file" accept=".zip" hidden>
+                    <button id="user-effect-import" class="ghost-button">import .zip</button>
+                    <span id="user-effect-status" class="settings-hint">drop a portable effect zip to add custom shaders</span>
+                </div>
+                <div id="user-effect-list" class="user-effect-list" aria-live="polite"></div>
+                <p class="settings-hint">
+                    Portable packages: <code>definition.json</code> + <code>glsl/*.glsl</code> (+ optional <code>wgsl/*.wgsl</code>). Installed effects show up in the library's "user" section and persist across reloads.
+                </p>
+            </section>
+
+            <section class="settings-section">
                 <h3>keyboard</h3>
                 <div class="shortcut-grid">
                     <div><kbd>Space</kbd> toggle auto-VJ</div>

@@ -23,9 +23,15 @@ const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
 // Section ordering for the grid. Each program is assigned a category
 // at load time via Library.categoryFor(); render() emits a <details>
 // section per non-empty category in this exact order.
+//
+// `user` sits between the engine-default sections and the curated
+// list so an operator's imported portable effects get prominent
+// visibility (right under particles + sims) without crowding the
+// engine-defaults at the very top.
 const CATEGORY_ORDER = Object.freeze([
     'default-particles',
     'default-sim',
+    'user',
     'built-in',
     'noiseblaster',
     'util',
@@ -34,6 +40,7 @@ const CATEGORY_ORDER = Object.freeze([
 const CATEGORY_LABELS = Object.freeze({
     'default-particles': 'particles',
     'default-sim': 'sims',
+    'user': 'user',
     'built-in': 'built-in',
     'noiseblaster': 'noiseblaster',
     'util': 'utility',
@@ -104,13 +111,28 @@ export class Library {
      */
     static categoryFor(program) {
         if (program?.source?.kind === 'engine-default') {
-            return program.source.namespace === 'points'
-                ? 'default-particles'
-                : 'default-sim'
+            if (program.source.namespace === 'user') return 'user'
+            if (program.source.namespace === 'points') return 'default-particles'
+            return 'default-sim'
         }
         if (Library.isUtil(program)) return 'util'
         if (program?.source?.feed === 'noiseblaster') return 'noiseblaster'
         return 'built-in'
+    }
+
+    /**
+     * Rebuild only the engine-default entries (particles, sims, user)
+     * by re-running buildDefaultPrograms against the renderer. Used by
+     * the user-effects manager's onChange path so installing or
+     * deleting a portable effect updates the library without a full
+     * fetch of programs.json. Keeps non-default (curated) entries in
+     * place.
+     */
+    async reloadDefaults(renderer) {
+        if (!renderer) return
+        const defaults = await buildDefaultPrograms(renderer)
+        const curated = this.programs.filter(p => p?.source?.kind !== 'engine-default')
+        this.programs = [...defaults, ...curated]
     }
 
     /** True if this title is currently eligible for the Auto-VJ random

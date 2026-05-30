@@ -1,14 +1,14 @@
 /**
  * Default programs synthesized from the engine's effect registry.
  *
- * For each effect in the points/* namespace or tagged "sim" (excluding
- * the util-tagged loop primitives), synthesize the same default DSL
- * that noisedeck's "examples" tab and demo-ui's "buildDslSource" emit
- * — these are the canonical demonstrations of each effect, with pure
- * default parameter values.
+ * For each effect in the points/* namespace, tagged "sim", or in the
+ * user namespace (imported portable effects), synthesize the same
+ * default DSL that noisedeck's "examples" tab and demo-ui's
+ * "buildDslSource" emit — canonical demonstrations of each effect with
+ * pure default parameter values.
  *
- * Library uses them to populate the default-particles and default-sim
- * sections of the side panel.
+ * Library uses them to populate the default-particles, default-sim,
+ * and user sections of the side panel.
  */
 
 import { getAllEffects } from './noisemaker/bundle.js'
@@ -16,6 +16,7 @@ import { buildDslSource } from './dslSourceBuilder.js'
 
 const POINTS_TINT = '#7fd6ff'      // cool cyan
 const SIM_TINT = '#d28cff'         // muted magenta
+const USER_TINT = '#ffd24e'        // warm yellow — distinct from engine defaults
 
 /**
  * Pull all effect IDs that should populate the default-particles or
@@ -38,7 +39,22 @@ function selectIds(manifest) {
     return ids
 }
 
+/**
+ * Pull every user-namespace effect from the engine's getAllEffects()
+ * map. User effects don't live in the manifest (they're imported at
+ * runtime via the user-effects manager), so we discover them by
+ * scanning the registry for `user/...` keys.
+ */
+function selectUserIds(registry) {
+    const ids = []
+    for (const key of registry.keys()) {
+        if (typeof key === 'string' && key.startsWith('user/')) ids.push(key)
+    }
+    return ids
+}
+
 function categoryFor(effect) {
+    if (effect.namespace === 'user') return 'user'
     if (effect.namespace === 'points') return 'default-particles'
     return 'default-sim'
 }
@@ -68,14 +84,21 @@ function prettify(name) {
 export async function buildDefaultPrograms(renderer) {
     if (!renderer?.manifest) return []
 
-    const ids = selectIds(renderer.manifest)
-    if (!ids.length) return []
-
-    // Load all in parallel — already-loaded effects are no-ops thanks
-    // to the renderer's internal dedup.
-    await renderer.loadEffects(ids)
+    const manifestIds = selectIds(renderer.manifest)
+    if (manifestIds.length) {
+        // Load all in parallel — already-loaded effects are no-ops thanks
+        // to the renderer's internal dedup.
+        await renderer.loadEffects(manifestIds)
+    }
 
     const registry = getAllEffects()
+    // User effects were registered out-of-band by UserEffectsManager
+    // (initialize/uploadFromZip) — they're in the registry but never
+    // hit renderer.loadEffects, so we discover them here by namespace.
+    const userIds = selectUserIds(registry)
+    const ids = [...manifestIds, ...userIds]
+    if (!ids.length) return []
+
     const programs = []
 
     for (const id of ids) {
@@ -100,15 +123,29 @@ export async function buildDefaultPrograms(renderer) {
         if (!dsl) continue
 
         const category = categoryFor(effect)
-        const tint = category === 'default-particles' ? POINTS_TINT : SIM_TINT
+        let tint = SIM_TINT
+        if (category === 'default-particles') tint = POINTS_TINT
+        else if (category === 'user') tint = USER_TINT
         const funcName = instance?.func || name
         const manifestMeta = renderer.manifest[id] || {}
 
+        // User-effect descriptions live in the Effect instance, not in
+        // the renderer's manifest (which only catalogs CDN-hosted
+        // effects). Fall back through both.
+        const tagline = manifestMeta.description
+            || effect.instance?.description
+            || instance?.description
+            || ''
+        const manifestTags = manifestMeta.tags
+            || effect.instance?.tags
+            || instance?.tags
+            || []
+
         programs.push({
             title: prettify(funcName),
-            tagline: manifestMeta.description || effect.instance?.description || '',
+            tagline,
             tint,
-            tags: [...new Set([effect.namespace, ...(manifestMeta.tags || [])].filter(Boolean))],
+            tags: [...new Set([effect.namespace, ...manifestTags].filter(Boolean))],
             dsl,
             source: {
                 kind: 'engine-default',
@@ -119,12 +156,18 @@ export async function buildDefaultPrograms(renderer) {
         })
     }
 
-    // Stable order: points namespace first (alphabetical), then sim
-    // (alphabetical). Library renders sections in the configured order
-    // — within a section, alphabetical is the most predictable.
+    // Stable order within each category: points first (alphabetical),
+    // then sim (alphabetical), then user (alphabetical). Library
+    // renders sections in the configured order — within a section,
+    // alphabetical is the most predictable.
+    const categoryRank = {
+        'default-particles': 0,
+        'default-sim': 1,
+        'user': 2,
+    }
     programs.sort((a, b) => {
-        const ca = a.source.kind === 'engine-default' && a.source.namespace === 'points' ? 0 : 1
-        const cb = b.source.kind === 'engine-default' && b.source.namespace === 'points' ? 0 : 1
+        const ca = categoryRank[categoryFor({ namespace: a.source.namespace })] ?? 9
+        const cb = categoryRank[categoryFor({ namespace: b.source.namespace })] ?? 9
         if (ca !== cb) return ca - cb
         return a.title.localeCompare(b.title)
     })
