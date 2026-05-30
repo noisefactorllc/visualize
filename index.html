@@ -589,25 +589,81 @@
                 <p class="boot-small-screen-warning">
                     This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
                 </p>
-                <button id="boot-start" class="boot-button">start set</button>
-                <p class="boot-hint">press start, then enable audio input from the settings panel</p>
+                <!-- Default boot UI: single "start set" button. When ?code= is
+                     present in the URL, the inline script below hides this
+                     block and reveals .boot-share so the user picks which
+                     deck the shared program lands on. -->
+                <div class="boot-default" id="boot-default">
+                    <button id="boot-start" class="boot-button">start set</button>
+                    <p class="boot-hint">press start, then enable audio input from the settings panel</p>
+                </div>
+                <div class="boot-share" id="boot-share" hidden>
+                    <p class="boot-detail" id="boot-share-prompt">loading shared program…</p>
+                    <div class="boot-share-buttons">
+                        <button id="boot-share-a" class="boot-button boot-button-deck-a" disabled>A&nbsp;Deck</button>
+                        <button id="boot-share-b" class="boot-button boot-button-deck-b" disabled>B&nbsp;Deck</button>
+                    </div>
+                    <p class="boot-hint" id="boot-share-hint">fetching from sharing.noisedeck.app…</p>
+                </div>
             </div>
         </div>
 
     </div>
 
-    <!-- Wire the START SET click synchronously so a fast click (test rig,
-         eager user) doesn't race the deferred module graph. The shader
-         bundle uses a top-level `await import()` from the shaders CDN, so
-         app.js doesn't reach its event-wiring code until that round-trip
-         finishes; without this inline shim the first click is dropped. -->
+    <!-- Wire boot clicks synchronously so a fast click (test rig, eager
+         user) doesn't race the deferred module graph. The shader bundle
+         uses a top-level `await import()` from the shaders CDN, so
+         app.js doesn't reach its event-wiring code until that
+         round-trip finishes; without this inline shim the first click
+         is dropped.
+
+         Two boot paths share one __visualizeBootGesture promise:
+           - Default: gesture resolves with `null`.
+           - Share:   gesture resolves with `{ deckId: 'A'|'B' }` so
+                      app.js knows which deck to drop the shared
+                      program into. The composition itself is fetched
+                      and stashed on window.__visualizeShareCode /
+                      window.__visualizeSharePromise by this inline
+                      script — kicking the fetch off here (rather than
+                      waiting for app.js) makes the dialog populate
+                      faster on cold loads. -->
     <script>
-    window.__visualizeBootGesture = new Promise(function (resolve) {
-        document.getElementById('boot-start').addEventListener('click', function () {
-            document.getElementById('boot-overlay').classList.add('hidden')
-            resolve()
-        }, { once: true })
-    })
+    (function () {
+        var params = new URLSearchParams(window.location.search)
+        var code = params.get('code')
+
+        window.__visualizeBootGesture = new Promise(function (resolve) {
+            var overlay = document.getElementById('boot-overlay')
+            var bootDefault = document.getElementById('boot-default')
+            var bootShare = document.getElementById('boot-share')
+
+            document.getElementById('boot-start').addEventListener('click', function () {
+                overlay.classList.add('hidden')
+                resolve(null)
+            }, { once: true })
+
+            if (code) {
+                bootDefault.hidden = true
+                bootShare.hidden = false
+                window.__visualizeShareCode = code
+                window.__visualizeSharePromise = fetch(
+                    'https://sharing.noisedeck.app/api/composition/' + encodeURIComponent(code)
+                ).then(function (r) {
+                    if (!r.ok) throw new Error('http ' + r.status)
+                    return r.json()
+                })
+
+                var wireDeckPick = function (btnId, deckId) {
+                    document.getElementById(btnId).addEventListener('click', function () {
+                        overlay.classList.add('hidden')
+                        resolve({ deckId: deckId })
+                    }, { once: true })
+                }
+                wireDeckPick('boot-share-a', 'A')
+                wireDeckPick('boot-share-b', 'B')
+            }
+        })
+    })()
     </script>
     <script type="module" src="js/app.js"></script>
 </body>

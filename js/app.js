@@ -30,6 +30,7 @@ import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
+import { clearCodeFromUrl } from './sharingLoader.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer.
 import { dslTokenizer } from 'handfish'
@@ -90,6 +91,66 @@ function setStatusPill(id, text, state) {
     el.querySelector('.status-text').textContent = text
 }
 
+/**
+ * Resolve the share-loader UI as soon as the composition title arrives.
+ *
+ * The inline boot script in index.html (a) detects `?code=`, (b) flips
+ * the boot card from default → share variant, (c) kicks off the fetch
+ * to sharing.noisedeck.app and stashes the promise on window. This
+ * function runs in parallel with deck init: it awaits that fetch and
+ * either populates the prompt + enables the A/B buttons, or surfaces
+ * the failure inline so the user can still click "start set" via a
+ * graceful fallback.
+ *
+ * Returns the composition payload (or null) so post-gesture code can
+ * load it into the chosen deck without re-fetching.
+ */
+async function prepareShareDialog() {
+    const code = window.__visualizeShareCode
+    const promise = window.__visualizeSharePromise
+    if (!code || !promise) return null
+
+    const prompt = $('boot-share-prompt')
+    const hint = $('boot-share-hint')
+    const btnA = $('boot-share-a')
+    const btnB = $('boot-share-b')
+
+    let composition
+    try {
+        composition = await promise
+    } catch (err) {
+        if (prompt) prompt.textContent = `couldn't load shared program (${code})`
+        if (hint) hint.textContent = String(err.message || err)
+        return null
+    }
+
+    const title = composition?.title || `code ${code}`
+
+    // hasEffects=true means the composition relies on portable custom
+    // effects (foundry-built bundles) that visualize doesn't load.
+    // Refuse rather than half-load the DSL — a missing-effect compile
+    // error mid-boot would be much more confusing than a clear "won't
+    // work here" message at the dialog.
+    if (composition?.hasEffects) {
+        if (prompt) prompt.textContent = `"${title}" uses custom effects`
+        if (hint) hint.textContent = 'visualize plays only stock noisemaker effects — open this in noisedeck or polymorphic'
+        return null
+    }
+
+    if (prompt) {
+        prompt.innerHTML = ''
+        prompt.appendChild(document.createTextNode('Load program '))
+        const em = document.createElement('strong')
+        em.textContent = `"${title}"`
+        prompt.appendChild(em)
+        prompt.appendChild(document.createTextNode(' from sharing into which deck?'))
+    }
+    if (hint) hint.textContent = 'pick a deck to load it; the other deck gets a random program'
+    if (btnA) btnA.disabled = false
+    if (btnB) btnB.disabled = false
+    return composition
+}
+
 async function boot() {
     // Boot overlay stays up while everything below initializes and starts
     // rendering — the user sees the app's first two decks playing
@@ -98,6 +159,13 @@ async function boot() {
     // index.html that runs before any module imports; we await its
     // promise at the very end of boot() so a fast click doesn't race the
     // deferred module graph.
+
+    // If the URL carries ?code=, prepareShareDialog races the sharing
+    // API fetch in parallel with deck init and populates the boot
+    // card's share-loader UI as soon as the title lands. The promise
+    // is held so post-gesture code can load the composition without
+    // re-fetching.
+    const sharePromise = prepareShareDialog()
 
     // Construct decks
     state.decks.A = new Deck($('deck-a-canvas'), {
@@ -1623,8 +1691,30 @@ async function boot() {
     setStatusPill('midi-status', 'midi off', 'off')
 
     // App is now fully running behind the boot overlay (decks rendering,
-    // compositor compositing). Wait for the user to click START SET.
-    await window.__visualizeBootGesture
+    // compositor compositing). Wait for the user to click START SET (or,
+    // on the share-loader path, A Deck / B Deck).
+    const gesture = await window.__visualizeBootGesture
+
+    // Share-loader path: gesture payload tells us which deck the user
+    // wants to drop the incoming composition onto. The fetch was kicked
+    // off by the inline boot script and prepared during boot, so the
+    // composition is usually already in hand — just swap the random
+    // start program for the shared one on the chosen deck.
+    if (gesture?.deckId) {
+        const composition = await sharePromise
+        if (composition?.dsl) {
+            await loadProgram(gesture.deckId, {
+                title: composition.title || `code ${composition.code || ''}`,
+                tagline: composition.description || 'shared from sharing.noisedeck.app',
+                dsl: composition.dsl,
+            })
+            updateLiveIndicator()
+            toast(`loaded "${composition.title || 'shared program'}" into deck ${gesture.deckId}`)
+        }
+        // Strip ?code= so a reload doesn't re-prompt with the same
+        // share dialog — the operator already made their choice.
+        clearCodeFromUrl()
+    }
 
     // Live decks are up and stable; defer library thumbnails to an idle
     // window so the offscreen renderer doesn't compete for GPU during

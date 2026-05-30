@@ -1936,6 +1936,40 @@ kbd {
 }
 
 .boot-button:hover { background: var(--hf-accent-hover); }
+.boot-button:disabled {
+    background: var(--hf-bg-base);
+    color: var(--hf-text-faint, var(--hf-text-dim));
+    cursor: progress;
+}
+
+/* Share-loader path: two deck-tinted buttons side-by-side. A on the
+   left in deck-A blue, B on the right in deck-B red, mirroring the
+   crossfader's left/right orientation so the choice maps spatially to
+   the live deck layout. */
+.boot-share-buttons {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: var(--hf-space-3);
+    margin-top: var(--hf-space-4);
+}
+.boot-share-buttons .boot-button {
+    flex: 1 1 0;
+    padding: var(--hf-space-4) var(--hf-space-6);
+    max-width: 180px;
+}
+.boot-button-deck-a {
+    background: var(--hf-blue);
+}
+.boot-button-deck-a:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--hf-blue) 80%, white);
+}
+.boot-button-deck-b {
+    background: var(--hf-red);
+}
+.boot-button-deck-b:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--hf-red) 80%, white);
+}
 
 .boot-hint {
     margin-top: var(--hf-space-6);
