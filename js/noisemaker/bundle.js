@@ -5,7 +5,9 @@
  * non-minified for local dev so stack traces stay readable.
  */
 
-const SHADER_CDN = 'https://shaders.noisedeck.app/1'
+const SHADER_CDN = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? 'app://visualize/vendor/noisemaker/0.8.0'
+    : 'https://shaders.noisedeck.app/1'
 
 const isLocalDev = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' ||

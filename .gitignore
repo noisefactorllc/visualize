@@ -10,3 +10,8 @@ playwright-report/
 .env.local
 *.swp
 *~
+
+# Desktop build artifacts
+/vendor/
+/dist-desktop/
+/desktop/node_modules/

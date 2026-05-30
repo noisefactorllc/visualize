@@ -34,6 +34,8 @@ if (!isLocalDev) {
     }).catch(() => {})
 }
 
-about.setNoisemakerFromUrl('https://shaders.noisedeck.app/1/deployment-meta.json')
+if (!(typeof window !== 'undefined' && window.electronAPI?.isElectron)) {
+    about.setNoisemakerFromUrl('https://shaders.noisedeck.app/1/deployment-meta.json')
+}
 
 export { about as aboutDialog }
