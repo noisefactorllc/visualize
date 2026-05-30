@@ -24,14 +24,13 @@ const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
 // at load time via Library.categoryFor(); render() emits a <details>
 // section per non-empty category in this exact order.
 //
-// `user` sits between the engine-default sections and the curated
-// list so an operator's imported portable effects get prominent
-// visibility (right under particles + sims) without crowding the
-// engine-defaults at the very top.
+// `user` leads — the operator's own imported portable effects are
+// what they care about most, so they sit at the very top of the list
+// above the engine defaults and curated entries.
 const CATEGORY_ORDER = Object.freeze([
+    'user',
     'default-particles',
     'default-sim',
-    'user',
     'built-in',
     'noiseblaster',
     'util',

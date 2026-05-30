@@ -7,7 +7,7 @@
  */
 import { test, expect } from '@playwright/test'
 
-const EXPECTED_ORDER = ['default-particles', 'default-sim', 'built-in', 'noiseblaster', 'util']
+const EXPECTED_ORDER = ['user', 'default-particles', 'default-sim', 'built-in', 'noiseblaster', 'util']
 
 test('library renders sectioned + ordered', async ({ page }) => {
     const pageErrors = []
@@ -33,9 +33,11 @@ test('library renders sectioned + ordered', async ({ page }) => {
     const expectedSubset = EXPECTED_ORDER.filter(c => sections.includes(c))
     expect(ordered).toEqual(expectedSubset)
 
-    // The five categories that exist in this snapshot of the data
-    // should all be present.
-    for (const cat of EXPECTED_ORDER) {
+    // `user` only renders when the operator has imported portable
+    // effects; with a clean IndexedDB it's correctly absent. Every
+    // other category ships populated by default and must be present.
+    const REQUIRED_SECTIONS = EXPECTED_ORDER.filter(c => c !== 'user')
+    for (const cat of REQUIRED_SECTIONS) {
         expect(sections, `missing section: ${cat}`).toContain(cat)
     }
 
