@@ -206,9 +206,7 @@ async function boot() {
     const library = new Library()
     try {
         // Pass deck A's renderer so the library can synthesize the
-        // default-particles / default-sim / user sections from the
-        // engine's points/* + sim-tagged + user-namespace effects via
-        // getAllEffects().
+        // user section from user-namespace effects via getAllEffects().
         await library.load('data/programs.json', { renderer: state.decks.A.inner })
     } catch (err) {
         console.error('Library load failed', err)

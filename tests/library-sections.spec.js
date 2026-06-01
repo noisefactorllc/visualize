@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 /**
  * Verifies the library renders as collapsible category sections in the
- * expected order, that all sections open by default, that section
- * toggles work, and that the engine-default sections (default-particles,
- * default-sim) get populated from the manifest at load time.
+ * expected order, that all sections open by default, and that section
+ * toggles work.
  */
 import { test, expect } from '@playwright/test'
 
-const EXPECTED_ORDER = ['user', 'default-particles', 'default-sim', 'built-in', 'noiseblaster', 'util']
+const EXPECTED_ORDER = [
+    'user', 'abstract', 'attractor', 'geometric', 'life', 'particles',
+    'built-in', 'noiseblaster', 'util',
+]
 
 test('library renders sectioned + ordered', async ({ page }) => {
     const pageErrors = []
@@ -16,12 +18,9 @@ test('library renders sectioned + ordered', async ({ page }) => {
     await page.goto('/')
     await page.click('#boot-start')
 
-    // The default-particles + default-sim sections are populated
-    // asynchronously via renderer.loadEffects after manifest load, so
-    // wait for them to appear specifically (not just for the library
-    // to have *some* content).
-    await page.waitForSelector('.lib-section[data-category="default-particles"]', { timeout: 30_000 })
-    await page.waitForSelector('.lib-section[data-category="default-sim"]', { timeout: 30_000 })
+    // Wait for curated categories to appear (loaded from programs.json).
+    await page.waitForSelector('.lib-section[data-category="abstract"]', { timeout: 30_000 })
+    await page.waitForSelector('.lib-section[data-category="particles"]', { timeout: 30_000 })
 
     const sections = await page.$$eval('.lib-section', els =>
         els.map(el => el.dataset.category))
@@ -69,27 +68,27 @@ test('library renders sectioned + ordered', async ({ page }) => {
         expect(utilTitlesInBuiltIn).not.toContain(title)
     }
 
-    // Default-particles has the expected point-namespace titles —
-    // prettified from the effect funcName (e.g. physarum → Physarum,
-    // dla → Dla). Verify a representative sample.
-    const particleTitles = await page.$$eval(
-        '.lib-section[data-category="default-particles"] .program-card',
+    // Curated categories have their expected programs.
+    const abstractTitles = await page.$$eval(
+        '.lib-section[data-category="abstract"] .program-card',
         els => els.map(el => el.dataset.title)
     )
-    expect(particleTitles).toContain('Physarum')
-    expect(particleTitles).toContain('Buddhabrot')
-    expect(particleTitles).toContain('Lenia')
+    expect(abstractTitles).toContain('Color Flow')
+    expect(abstractTitles).toContain('Wave Rider')
 
-    // Default-sim has cellular-automata / reaction-diffusion entries
-    // — exactly the kind of "not a shadertoy" content the section
-    // exists to surface.
-    const simTitles = await page.$$eval(
-        '.lib-section[data-category="default-sim"] .program-card',
+    const attractorTitles = await page.$$eval(
+        '.lib-section[data-category="attractor"] .program-card',
         els => els.map(el => el.dataset.title)
     )
-    expect(simTitles).toContain('Mnca')
-    expect(simTitles).toContain('Reaction Diffusion')
-    expect(simTitles).toContain('Cellular Automata')
+    expect(attractorTitles).toContain('Dark Attractor')
+    expect(attractorTitles).toContain('Infinite Flow')
+
+    const particleTitles = await page.$$eval(
+        '.lib-section[data-category="particles"] .program-card',
+        els => els.map(el => el.dataset.title)
+    )
+    expect(particleTitles).toContain('Flowing Sparks')
+    expect(particleTitles).toContain('Particle Life')
 
     // Footer count reflects the sum across sections
     const libCount = await page.textContent('#library-count')

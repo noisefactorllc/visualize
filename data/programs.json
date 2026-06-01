@@ -1,5 +1,205 @@
 [
   {
+    "title": "Color Flow",
+    "tagline": "Warped noise edges through CRT and snow",
+    "tint": "#ff8b3d",
+    "tags": [
+      "abstract"
+    ],
+    "category": "abstract",
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.saw)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 1,\n  loopOffset: verticalScan,\n  loopScale: 100,\n  speed: -100\n)\n  .seamless(repeat: 1)\n  .translate(y: osc1)\n  .posterize(\n    levels: 16,\n    gamma: 0.7,\n    _skip: true\n  )\n  .wormhole(\n    kink: 0.1,\n    stride: 2,\n    rotation: -22\n  )\n  .edge(\n    size: kernel7x7,\n    amount: 500,\n    mix: 0\n  )\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 13.6, passthru: 74.69)\n    .crt(alpha: 0.57)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.11,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.72)\n    .motionBlur()\n    .smooth()\n  }\n  .adjust(saturation: 0.83, contrast: 0.82)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Warp Flow",
+    "tagline": "Luminance-traced warps with edge detection",
+    "tint": "#ff8b3d",
+    "tags": [
+      "abstract"
+    ],
+    "category": "abstract",
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.saw)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 59.55,\n  loopOffset: verticalScan,\n  loopScale: 100,\n  speed: -100\n)\n  .seamless(repeat: 1)\n  .translate(y: osc1)\n  .posterize(\n    levels: 16,\n    gamma: 0.7,\n    _skip: true\n  )\n  .wormhole(\n    kink: 0.1,\n    stride: 2,\n    rotation: 157,\n    alpha: 0.33\n  )\n  .edge(\n    size: kernel7x7,\n    channel: luminance,\n    amount: 500,\n    threshold: 42.01\n  )\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 13.6, passthru: 55.42)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.11,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.72)\n    .motionBlur()\n    .smooth()\n  }\n  .adjust(saturation: 0.83, contrast: 0.82)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Warpberry",
+    "tagline": "Particle lenia in warped feedback space",
+    "tint": "#ff8b3d",
+    "tags": [
+      "abstract"
+    ],
+    "category": "abstract",
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nfrom(classicNoisedeck, noise(\n  type: hermite,\n  xScale: 100,\n  yScale: 100,\n  ridges: true,\n  hueRotation: 210.01\n))\n  .kaleido(\n    sides: 13,\n    metric: square,\n    loopOffset: square,\n    loopScale: 20.11,\n    speed: 12.74,\n    direction: clockwise,\n    _skip: true\n  )\n  .subchain(name: \"particle lenia\", id: \"1eyj\") {\n    .pointsEmit(attrition: 3.38)\n    .lenia(\n      muK: 16.5,\n      sigmaK: 7.6,\n      searchRadius: 20,\n      depositAmount: 3.4\n    )\n    .flow(\n      behavior: chaotic,\n      stride: 73,\n      strideDeviation: 0,\n      kink: 5.8\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 47.95,\n      inputIntensity: 31.32\n    )\n  }\n  .blur(radiusX: 10, radiusY: 10)\n  .adjust(\n    mode: hsv,\n    rotation: -73.03,\n    hueRange: 31.86\n  )\n  .subchain(name: \"feedback loop with warp\", id: \"p9to\") {\n    .loopBegin(alpha: 87.66)\n    .warp(strength: 4.56)\n    .feedback(\n      blendMode: lighten,\n      mix: 65.89,\n      refractBAmt: 1.96,\n      refractBDir: 199.73,\n      intensity: -28.75\n    )\n    .loopEnd()\n  }\n  .lighting(\n    normalStrength: 5,\n    smoothing: 3.6,\n    reflection: 16.9,\n    refraction: 13.9,\n    aberration: 17.7\n  )\n  .adjust(\n    hueRange: 200,\n    brightness: 1.62,\n    contrast: 0.69\n  )\n  .motionBlur()\n  .smooth()\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Wave Rider",
+    "tagline": "Reaction-diffusion waves through wormhole glass",
+    "tint": "#ff8b3d",
+    "tags": [
+      "abstract"
+    ],
+    "category": "abstract",
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.sine)\n\nreactionDiffusion(\n  tex: read(o0),\n  zoom: x2,\n  smoothing: bSpline4x4,\n  speed: 46.25,\n  sourceF: brightness,\n  feed: 96.83,\n  kill: 57.68,\n  rate1: 93.22,\n  rate2: 28.98,\n  weight: 38.78,\n  inputIntensity: 95.63\n)\n  .warp(\n    strength: 4.22,\n    scale: 0.77,\n    speed: 1\n  )\n  .write(o0)\n\nread(o0)\n  .wormhole(\n    kink: 0.1,\n    rotation: -25,\n    alpha: 0.34\n  )\n  .subchain(name: \"lens effects\", id: \"olow\") {\n    .chromaticAberration(aberration: 10.83)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.4, alpha: 0.28)\n  }\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Dark Attractor",
+    "tagline": "Chen attractor driving a fluid simulation",
+    "tint": "#4ea8ff",
+    "tags": [
+      "attractor"
+    ],
+    "category": "attractor",
+    "dsl": "// chen attractor with navier-stokes fluid sim\n\nsearch synth, filter, render, points, mixer\n\nnoise(\n  type: hermite,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 12,\n  loopScale: 1,\n  speed: 37,\n  colorMode: mono\n)\n  .subchain(name: \"flow field particles\", id: \"lkjw\") {\n    .pointsEmit()\n    .attractor(attractor: chen, speed: 0.25)\n    .life(friction: 0.08, _skip: true)\n    .pointsRender(\n      density: 100,\n      intensity: 53.26,\n      inputIntensity: 70.4,\n      viewMode: ortho,\n      rotateX: 2,\n      viewScale: 2,\n      posX: 2,\n      posY: 15\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 31.48,\n      pointSize: 24.89,\n      sizeVariation: 100,\n      density: 7.26,\n      intensity: 0,\n      inputIntensity: 100,\n      viewMode: ortho,\n      rotateX: 2,\n      viewScale: 2,\n      posX: 2,\n      posY: 15\n    )\n  }\n  .invert()\n  .blur()\n  .write(o0)\n\nnavierStokes(\n  tex: read(o0),\n  iterations: 40,\n  smoothing: bSpline4x4,\n  speed: 145,\n  dyeDecay: 98.98,\n  velocityDecay: 100,\n  inputForce: 1,\n  inputDye: 0.81,\n  inputIntensity: 4.44\n)\n  .palette(\n    index: grayscale,\n    offset: 52,\n    alpha: 0.44\n  )\n  .lighting(\n    normalStrength: 3.45,\n    specularIntensity: 1.1,\n    shininess: 97,\n    reflection: 21.8,\n    refraction: 19.6,\n    aberration: 18.4\n  )\n  .subchain(name: \"lens effects\", id: \"esfj\") {\n    .chromaticAberration(aberration: 31.44, passthru: 33.15)\n    .bloom(\n      threshold: 0.55,\n      intensity: 0.9,\n      radius: 33,\n      taps: 45,\n      tint: #00b2ff\n    )\n    .lens(displacement: -0.6)\n    .vignette(brightness: 0.12, alpha: 0.45)\n  }\n  .smoothstep(edge0: 0.05, edge1: 0.73)\n  .adjust(\n    saturation: 0.72,\n    brightness: 1.36,\n    contrast: 0.44\n  )\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Dual Vortex",
+    "tagline": "Twin vortices from a Chen attractor in fluid",
+    "tint": "#4ea8ff",
+    "tags": [
+      "attractor"
+    ],
+    "category": "attractor",
+    "dsl": "// chen attractor with navier-stokes fluid sim\n\nsearch synth, filter, render, points, mixer\n\nnoise(\n  type: hermite,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 12,\n  loopScale: 1,\n  speed: 37,\n  colorMode: mono\n)\n  .subchain(name: \"flow field particles\", id: \"lkjw\") {\n    .pointsEmit()\n    .attractor(attractor: chen, speed: 0.1)\n    .life(friction: 0.08, _skip: true)\n    .pointsRender(\n      density: 100,\n      intensity: 53.26,\n      inputIntensity: 70.4,\n      viewMode: ortho,\n      rotateX: 2,\n      viewScale: 4,\n      posX: 2,\n      posY: 15\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 100,\n      pointSize: 24.89,\n      sizeVariation: 100,\n      density: 7.26,\n      intensity: 0,\n      inputIntensity: 100,\n      viewMode: ortho,\n      rotateX: 2,\n      viewScale: 4,\n      posX: 2,\n      posY: 15\n    )\n  }\n  .invert()\n  .blur()\n  .write(o0)\n\nnavierStokes(\n  tex: read(o0),\n  iterations: 40,\n  smoothing: bSpline4x4,\n  speed: 145,\n  dyeDecay: 98.98,\n  velocityDecay: 100,\n  inputForce: 1,\n  inputDye: 0.81,\n  inputIntensity: 4.44\n)\n  .palette(\n    index: ghostly,\n    offset: 58,\n    alpha: 0.44\n  )\n  .lighting(\n    normalStrength: 3.45,\n    specularIntensity: 1.1,\n    shininess: 97,\n    reflection: 21.8,\n    refraction: 19.6,\n    aberration: 18.4\n  )\n  .subchain(name: \"lens effects\", id: \"esfj\") {\n    .chromaticAberration(aberration: 31.44, passthru: 33.15)\n    .bloom(\n      threshold: 0.55,\n      intensity: 0.9,\n      radius: 33,\n      taps: 45,\n      tint: #00b2ff\n    )\n    .lens(displacement: -0.6)\n    .vignette(brightness: 0.12, alpha: 0.45)\n  }\n  .smoothstep(edge0: 0.05, edge1: 0.73)\n  .adjust(\n    saturation: 0.72,\n    brightness: 1.36,\n    contrast: 0.44\n  )\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Infinite Flow",
+    "tagline": "Lorenz attractor dissolving into smoke",
+    "tint": "#4ea8ff",
+    "tags": [
+      "attractor"
+    ],
+    "category": "attractor",
+    "dsl": "// lorenz attractor with navier-stokes fluid sim\n\nsearch synth, filter, render, points, mixer\n\nnoise(\n  type: hermite,\n  octaves: 4,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 40,\n  loopScale: 100,\n  speed: 100,\n  colorMode: mono\n)\n  .subchain(name: \"flow field particles\", id: \"lkjw\") {\n    .pointsEmit()\n    .attractor(speed: 0.15)\n    .life(friction: 0.08, _skip: true)\n    .pointsRender(\n      density: 15.85,\n      intensity: 62.8,\n      inputIntensity: 59.72,\n      viewMode: ortho,\n      rotateY: 0.7,\n      viewScale: 2,\n      posX: -15,\n      posY: 9\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 19.7,\n      pointSize: 16.48,\n      sizeVariation: 100,\n      density: 26.72,\n      intensity: 0,\n      inputIntensity: 100,\n      viewMode: ortho,\n      rotateY: 0.7,\n      viewScale: 2,\n      posX: -15,\n      posY: 9\n    )\n  }\n  .blur()\n  .write(o0)\n\nnavierStokes(\n  tex: read(o0),\n  iterations: 40,\n  smoothing: bSpline4x4,\n  speed: 145,\n  dyeDecay: 97.24,\n  velocityDecay: 100,\n  inputForce: 1,\n  inputDye: 1,\n  inputIntensity: 4.73\n)\n  .palette(\n    index: grayscale,\n    offset: 62,\n    alpha: 0.13\n  )\n  .lighting(\n    normalStrength: 4.15,\n    specularIntensity: 1.1,\n    shininess: 97,\n    reflection: 21.8,\n    refraction: 23,\n    aberration: 18.4\n  )\n  .subchain(name: \"lens effects\", id: \"esfj\") {\n    .chromaticAberration(aberration: 29.18, passthru: 50.12)\n    .bloom(\n      threshold: 0.55,\n      intensity: 0.45,\n      radius: 33,\n      taps: 45,\n      tint: #00b2ff\n    )\n    .lens(displacement: -0.6)\n    .vignette(brightness: 0.12, alpha: 0.45)\n  }\n  .smoothstep(edge0: 0.05, edge1: 0.43)\n  .adjust(brightness: 1.64, contrast: 0.47)\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Singularity Edge",
+    "tagline": "Lorenz attractor particles blooming at the edge",
+    "tint": "#4ea8ff",
+    "tags": [
+      "attractor"
+    ],
+    "category": "attractor",
+    "dsl": "// lorenz attractor with particle renderers\n\nsearch synth, filter, render, points, mixer\n\nnoise(\n  type: hermite,\n  octaves: 4,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 40,\n  loopScale: 100,\n  speed: 100,\n  colorMode: mono\n)\n  .subchain(name: \"flow field particles\", id: \"lkjw\") {\n    .pointsEmit()\n    .attractor(speed: 0.12)\n    .life(friction: 0.08, _skip: true)\n    .pointsRender(\n      density: 100,\n      intensity: 81.19,\n      inputIntensity: 70.4,\n      viewMode: ortho,\n      rotateY: 0.7,\n      viewScale: 8,\n      posX: -15,\n      posY: 9\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 100,\n      pointSize: 32.84,\n      sizeVariation: 100,\n      density: 2.18,\n      intensity: 0,\n      inputIntensity: 100,\n      viewMode: ortho,\n      rotateY: 0.7,\n      viewScale: 8,\n      posX: -15,\n      posY: 9\n    )\n  }\n  .blur()\n  .write(o0)\n\nnavierStokes(\n  tex: read(o0),\n  iterations: 40,\n  smoothing: bSpline4x4,\n  speed: 145,\n  dyeDecay: 95.63,\n  velocityDecay: 100,\n  inputForce: 1,\n  inputDye: 1,\n  inputIntensity: 8.45\n)\n  .palette(\n    index: grayscale,\n    offset: 62,\n    alpha: 0.13\n  )\n  .lighting(\n    normalStrength: 5,\n    specularIntensity: 1.1,\n    shininess: 112,\n    reflection: 23.1,\n    refraction: 21.3,\n    aberration: 18.4\n  )\n  .subchain(name: \"lens effects\", id: \"esfj\") {\n    .chromaticAberration(aberration: 29.18, passthru: 50.13)\n    .bloom(\n      threshold: 0.2,\n      intensity: 0.55,\n      radius: 33,\n      taps: 45,\n      tint: #00b2ffff\n    )\n    .lens(displacement: -0.6)\n    .vignette(brightness: 0.12, alpha: 0.45)\n  }\n  .smoothstep(edge0: 0.05, edge1: 0.43)\n  .adjust(\n    saturation: 0.72,\n    brightness: 1.64,\n    contrast: 0.49\n  )\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Crystal Ash",
+    "tagline": "Crystalline low-poly terrain with caustic light",
+    "tint": "#a78bfa",
+    "tags": [
+      "geometric"
+    ],
+    "category": "geometric",
+    "dsl": "search filter, synth, classicNoisedeck, render, points, mixer\n\nperlin(\n  scale: 83.98,\n  octaves: 6,\n  seed: 53,\n  speed: 2\n)\n  .palette(\n    index: silvermane,\n    rotation: fwd,\n    offset: 86,\n    repeat: 6,\n    alpha: 0.798\n  )\n  .lowPoly(\n    scale: 97,\n    seed: 47,\n    mode: distance2,\n    edgeStrength: 0.09,\n    speed: 5\n  )\n  .motionBlur()\n  .refract(\n    blendMode: screen,\n    mix: 67.48,\n    mode: reflect,\n    amount: 41.39\n  )\n  .lighting(\n    normalStrength: 1.39,\n    smoothing: 1.9,\n    specularIntensity: 1.51,\n    shininess: 204,\n    lightDirection: vec3(-0.539, 0.394, 0.744),\n    reflection: 51.4,\n    refraction: 72.5,\n    aberration: 27.2\n  )\n  .coalesce(\n    tex: read(o1),\n    blendMode: darken,\n    mix: -22.4,\n    refractBAmt: 100,\n    refractBDir: -162.87\n  )\n  .seamless(blend: 0.15, repeat: 1)\n  .subchain(name: \"flow field particles\", id: \"gq5w\") {\n    .pointsEmit()\n    .flow(behavior: chaotic)\n    .physical(\n      gravity: -1.73,\n      wind: 0.68,\n      energy: 0.03,\n      drag: 0.02,\n      deviation: 0.45,\n      wander: 1\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 68.42,\n      inputIntensity: 67.82\n    )\n  }\n  .subchain(name: \"lens effects\", id: \"ym6e\") {\n    .temporalAberration()\n    .bloom(threshold: 0.4, taps: 15)\n    .lens(displacement: -0.68)\n    .vignette(alpha: 0.65)\n  }\n  .fxaa()\n  .adjust(brightness: 1.31, contrast: 0.55)\n  .write(o0)\n\ncaustic(\n  noiseScale: 146.71,\n  speed: 100,\n  seed: 49,\n  hueRotation: 60.59,\n  hueRange: 17.52,\n  intensity: -49.55\n)\n  .write(o1)\n\nrender(o0)"
+  },
+  {
+    "title": "Crystal Cave",
+    "tagline": "Low-poly caverns refracting deep light",
+    "tint": "#a78bfa",
+    "tags": [
+      "geometric"
+    ],
+    "category": "geometric",
+    "dsl": "search synth, filter, classicNoisedeck, render, points, mixer\n\nperlin(scale: 52.81)\n  .lowPoly(\n    scale: 96,\n    seed: 42,\n    mode: distance2,\n    edgeStrength: 0.82,\n    alpha: 0.7,\n    speed: 5\n  )\n  .adjust(\n    mode: hsv,\n    rotation: 120,\n    hueRange: 40\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.9,\n    specularIntensity: 2,\n    shininess: 156,\n    reflection: 21.3,\n    refraction: 45.4,\n    aberration: 36.1\n  )\n  .write(o0)\n\ncaustic(\n  interp: catmullRom4x4,\n  noiseScale: 192.39,\n  speed: 57.27,\n  seed: 52\n)\n  .coalesce(\n    tex: read(o0),\n    blendMode: screen,\n    mix: 8.27,\n    refractAAmt: 63.56\n  )\n  .subchain(name: \"lens effects\", id: \"zapp\") {\n    .temporalAberration()\n    .bloom(\n      threshold: 0.95,\n      softKnee: 0.4,\n      intensity: 1.3,\n      taps: 37\n    )\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .adjust(saturation: 1.24, contrast: 0.61)\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Prismatic Fracture",
+    "tagline": "Light fracturing through low-poly feedback",
+    "tint": "#a78bfa",
+    "tags": [
+      "geometric"
+    ],
+    "category": "geometric",
+    "dsl": "search filter, synth, classicNoisedeck, render, points, mixer\n\nperlin(\n  scale: 100,\n  octaves: 6,\n  seed: 53\n)\n  .palette(\n    index: silvermane,\n    rotation: fwd,\n    offset: 82,\n    repeat: 4,\n    alpha: 0.798\n  )\n  .lowPoly(\n    scale: 97,\n    seed: 47,\n    mode: distance2,\n    edgeStrength: 0,\n    speed: 5\n  )\n  .motionBlur()\n  .refract(\n    blendMode: reflect,\n    mix: 14.12,\n    mode: reflect,\n    amount: 27.37\n  )\n  .lighting(\n    normalStrength: 2.62,\n    smoothing: 1.9,\n    specularIntensity: 1.51,\n    shininess: 204,\n    lightDirection: vec3(-0.539, 0.394, 0.744),\n    reflection: 51.4,\n    refraction: 72.5,\n    aberration: 27.2\n  )\n  .coalesce(\n    tex: read(o1),\n    blendMode: colorDodge,\n    mix: -1.05,\n    refractBAmt: 100,\n    refractBDir: -162.87\n  )\n  .subchain(name: \"feedback loop\", id: \"fk9v\") {\n    .loopBegin(alpha: 96.38, intensity: 68.35)\n    .feedback(\n      blendMode: lighten,\n      mix: 40.1,\n      refractBAmt: 2.33\n    )\n    .loopEnd()\n  }\n  .subchain(name: \"lens effects\", id: \"ym6e\") {\n    .temporalAberration()\n    .bloom(threshold: 0.9, taps: 15)\n    .lens(displacement: -0.74)\n    .vignette(brightness: 0.24, alpha: 0.65)\n  }\n  .fxaa()\n  .write(o0)\n\ncaustic(\n  noiseScale: 107.45,\n  speed: 33.78,\n  seed: 55,\n  hueRotation: 0,\n  hueRange: 17.2,\n  intensity: -49.55\n)\n  .write(o1)\n\nrender(o0)"
+  },
+  {
+    "title": "Shiny And Chrome",
+    "tagline": "Chrome cell noise with specular reflections",
+    "tint": "#a78bfa",
+    "tags": [
+      "geometric"
+    ],
+    "category": "geometric",
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.noise, min: 0.29, max: 0.83, seed: 6561)\n\ncell(\n  scale: 86.16,\n  cellScale: 85.53,\n  cellSmooth: 59.92,\n  variation: 59.58,\n  speed: 3\n)\n  .adjust(\n    mode: oklch,\n    rotation: osc1,\n    hueRange: 200,\n    saturation: 1.37,\n    brightness: 1.81,\n    contrast: 0.1\n  )\n  .adjust(\n    mode: oklab,\n    saturation: 0.24,\n    contrast: 0.77\n  )\n  .lighting(\n    normalStrength: 3.33,\n    smoothing: 5.3,\n    reflection: 34.9,\n    refraction: 38.9,\n    aberration: 39\n  )\n  .subchain(name: \"lens effects\", id: \"fbsb\") {\n    .chromaticAberration(aberration: 11.59)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.74, alpha: 0.4)\n  }\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Dark Evolution",
+    "tagline": "Flocking particles on dark gabor fields",
+    "tint": "#4ed99b",
+    "tags": [
+      "life"
+    ],
+    "category": "life",
+    "dsl": "search synth, filter, synth3d, render, points, mixer, classicNoisedeck\n\ngabor(\n  scale: 100,\n  orientation: -98.42,\n  bandwidth: 24.97,\n  isotropy: 100,\n  density: 4,\n  octaves: 2,\n  speed: 5\n)\n  .refract(blendMode: difference, amount: 24.8)\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(stateSize: x64, attrition: 3.63)\n    .flock(\n      separation: 1.7,\n      alignment: 1.9,\n      perceptionRadius: 69,\n      separationRadius: 37,\n      maxSpeed: 9.2,\n      maxForce: 0.72\n    )\n    .pointsBillboardRender(\n      depositOpacity: 2.97,\n      pointSize: 24.19,\n      sizeVariation: 100,\n      seed: 0,\n      density: 100,\n      intensity: 91.36,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 10, radiusY: 10)\n  .lighting(\n    normalStrength: 5,\n    diffuseColor: #b8b8b8,\n    specularIntensity: 0.44,\n    shininess: 199,\n    ambientColor: #1d2233,\n    lightDirection: vec3(-0.411, 0.333, 0.848),\n    reflection: 32.6,\n    refraction: 17.3,\n    aberration: 9.2\n  )\n  .adjust(\n    rotation: 147.04,\n    hueRange: 200,\n    brightness: 0.63,\n    contrast: 0.47\n  )\n  .subchain(name: \"lens effects\", id: \"hk9g\") {\n    .chromaticAberration(aberration: 34.84, passthru: 67.14)\n    .bloom(\n      threshold: 0.35,\n      intensity: 1.25,\n      taps: 15\n    )\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Dark Swimmers",
+    "tagline": "Living particles swimming through fluid",
+    "tint": "#4ed99b",
+    "tags": [
+      "life"
+    ],
+    "category": "life",
+    "dsl": "search synth, filter, render, points, mixer\n\nnoise(\n  type: hermite,\n  octaves: 4,\n  scaleX: 100,\n  scaleY: 100,\n  seed: 40,\n  speed: 30,\n  colorMode: mono\n)\n  .subchain(name: \"flow field particles\", id: \"lkjw\") {\n    .pointsEmit()\n    .flow(\n      behavior: unruly,\n      strideDeviation: 0.5,\n      kink: 10\n    )\n    .life(friction: 0.08)\n    .pointsRender(\n      density: 4.79,\n      intensity: 93.63,\n      inputIntensity: 59.72\n    )\n    .pointsBillboardRender(\n      shapeMode: soft,\n      depositOpacity: 19.7,\n      pointSize: 64,\n      sizeVariation: 100,\n      density: 1.3,\n      intensity: 0,\n      inputIntensity: 100\n    )\n  }\n  .blur()\n  .write(o0)\n\nnavierStokes(\n  tex: read(o0),\n  zoom: x4,\n  iterations: 40,\n  smoothing: bSpline4x4,\n  speed: 145,\n  dyeDecay: 97.52,\n  velocityDecay: 100,\n  inputForce: 1,\n  inputDye: 1,\n  inputIntensity: 3.9\n)\n  .palette(\n    index: grayscale,\n    offset: 58,\n    alpha: 0.25\n  )\n  .lighting(\n    normalStrength: 5,\n    smoothing: 2.1,\n    specularIntensity: 0.7,\n    shininess: 130,\n    reflection: 21.8,\n    refraction: 23,\n    aberration: 18.4\n  )\n  .subchain(name: \"lens effects\", id: \"esfj\") {\n    .chromaticAberration(aberration: 25)\n    .bloom(\n      threshold: 0.35,\n      intensity: 0.7,\n      radius: 33,\n      taps: 45,\n      tint: #00b2ff\n    )\n    .lens(displacement: -0.41)\n    .vignette(brightness: 0.12, alpha: 0.67)\n  }\n  .smoothstep(edge0: 0.01, edge1: 0.56)\n  .adjust(brightness: 2.49, contrast: 0.8)\n  .write(o1)\n\nrender(o1)"
+  },
+  {
+    "title": "Primordial",
+    "tagline": "Particles flowing through gabor noise terrain",
+    "tint": "#4ed99b",
+    "tags": [
+      "life"
+    ],
+    "category": "life",
+    "dsl": "search synth, filter, synth3d, render, points, mixer, classicNoisedeck\n\ngabor(\n  scale: 94.78,\n  orientation: -98.42,\n  bandwidth: 24.97,\n  isotropy: 100,\n  density: 4,\n  octaves: 2,\n  speed: 5\n)\n  .refract(blendMode: difference, amount: 1.96)\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(stateSize: x64, attrition: 1.66)\n    .flow(stride: 25, kink: 10)\n    .pointsBillboardRender(\n      depositOpacity: 7.26,\n      pointSize: 26.43,\n      sizeVariation: 100,\n      seed: 0,\n      density: 44.55,\n      intensity: 87.13,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 9, radiusY: 9)\n  .lighting(\n    normalStrength: 5,\n    diffuseColor: #b8b8b8,\n    ambientColor: #1d2233,\n    lightDirection: vec3(-0.411, 0.333, 0.848),\n    reflection: 33.3,\n    refraction: 36.5,\n    aberration: 9.2\n  )\n  .adjust(brightness: 1.53, contrast: 0.53)\n  .subchain(name: \"lens effects\", id: \"hk9g\") {\n    .chromaticAberration(aberration: 25, passthru: 67.14)\n    .bloom(\n      threshold: 0.35,\n      intensity: 1.25,\n      taps: 15\n    )\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Water Sample",
+    "tagline": "Hydraulic particles under a microscope lens",
+    "tint": "#4ed99b",
+    "tags": [
+      "life"
+    ],
+    "category": "life",
+    "dsl": "search synth, filter, synth3d, render, points, mixer\n\ngabor(\n  scale: 88.44,\n  orientation: -98.42,\n  bandwidth: 24.97,\n  isotropy: 100,\n  density: 4,\n  octaves: 2,\n  speed: 5\n)\n  .subchain(name: \"flow field particles\", id: \"df58\") {\n    .pointsEmit(attrition: 2.2)\n    .flow(\n      behavior: chaotic,\n      stride: 34,\n      kink: 10\n    )\n    .hydraulic(stride: 42)\n    .pointsBillboardRender(\n      depositOpacity: 10.99,\n      pointSize: 8.96,\n      sizeVariation: 100,\n      seed: 474,\n      density: 8.21,\n      intensity: 64.03,\n      inputIntensity: 100\n    )\n  }\n  .blur(radiusX: 9, radiusY: 9)\n  .lighting(\n    normalStrength: 2.45,\n    smoothing: 1.2,\n    reflection: 26.8,\n    refraction: 18.7,\n    aberration: 21.6\n  )\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Filaments",
+    "tagline": "Hydraulic particle threads across perlin terrain",
+    "tint": "#00d4ff",
+    "tags": [
+      "particles"
+    ],
+    "category": "particles",
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\n\nperlin(\n  scale: 87.06,\n  dimensions: 3,\n  seed: 5\n)\n  .seamless(repeat: 1)\n  .adjust(\n    rotation: osc1,\n    hueRange: 200,\n    contrast: 1\n  )\n  .subchain(name: \"flow field particles\", id: \"p0wu\") {\n    .pointsEmit(attrition: 2.5)\n    .hydraulic(stride: 83)\n    .pointsRender(\n      density: 100,\n      intensity: 49.68,\n      inputIntensity: 0\n    )\n  }\n  .adjust(\n    mode: hsv,\n    rotation: -43.49,\n    hueRange: 15.22\n  )\n  .subchain(name: \"lens effects\", id: \"dwdx\") {\n    .temporalAberration()\n    .bloom(softKnee: 0.16, taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .adjust(brightness: 2.03, contrast: 0.55)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Flowing Sparks",
+    "tagline": "Chaotic sparks billowing through noise",
+    "tint": "#00d4ff",
+    "tags": [
+      "particles"
+    ],
+    "category": "particles",
+    "dsl": "search points, synth, render, filter, mixer\n\nnoise(\n  type: catmullRom4x4,\n  scaleX: 100,\n  scaleY: 100,\n  loopScale: 100,\n  speed: 100\n)\n  .palette(\n    index: tropicalia,\n    rotation: fwd,\n    offset: 51,\n    alpha: 0.49\n  )\n  .pointsEmit(attrition: 2.45)\n  .flow(\n    behavior: chaotic,\n    stride: 24,\n    strideDeviation: 0,\n    kink: 2\n  )\n  .pointsBillboardRender(\n    shapeMode: soft,\n    depositOpacity: 34.67,\n    pointSize: 7.13,\n    sizeVariation: 100,\n    density: 35.03,\n    inputIntensity: 100\n  )\n  .pointsRender(\n    density: 31.25,\n    intensity: 31.59,\n    inputIntensity: 17.8\n  )\n  .subchain(name: \"lens effects\", id: \"jmjz\") {\n    .temporalAberration(greenDelay: 1.2, blueDelay: 3.2)\n    .bloom(\n      threshold: 0.35,\n      softKnee: 0.17,\n      intensity: 1.5,\n      taps: 15\n    )\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .adjust(\n    rotation: 27.34,\n    brightness: 2.08,\n    contrast: 0.89\n  )\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Particle Life",
+    "tagline": "Flocking particles with emergent behavior",
+    "tint": "#00d4ff",
+    "tags": [
+      "particles"
+    ],
+    "category": "particles",
+    "dsl": "search points, synth, render, filter, mixer\n\nnoise(scaleX: 100, scaleY: 100)\n  .adjust(\n    mode: hsv,\n    rotation: -142.79,\n    hueRange: 21.26,\n    brightness: 0.76\n  )\n  .pointsEmit()\n  .flock(\n    alignment: 0.4,\n    maxSpeed: 6.8,\n    maxForce: 0.28\n  )\n  .pointsRender(\n    density: 65.54,\n    intensity: 80.98,\n    inputIntensity: 0\n  )\n  .subchain(name: \"lens effects\", id: \"jmjz\") {\n    .temporalAberration(greenDelay: 1.2, blueDelay: 3.2)\n    .bloom(taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Twisted Flow",
+    "tagline": "Chaotic particle currents in twisted perlin",
+    "tint": "#00d4ff",
+    "tags": [
+      "particles"
+    ],
+    "category": "particles",
+    "dsl": "search synth, filter, render, points, mixer\n\nlet osc1 = osc(type: oscKind.sawInv)\n\nperlin(scale: 36.97, seed: 5)\n  .seamless(repeat: 1)\n  .adjust(\n    rotation: osc1,\n    hueRange: 200,\n    contrast: 1\n  )\n  .subchain(name: \"flow field particles\", id: \"p0wu\") {\n    .pointsEmit(attrition: 2.5)\n    .flow(\n      behavior: chaotic,\n      stride: 28,\n      kink: 10\n    )\n    .pointsRender(\n      density: 100,\n      intensity: 49.68,\n      inputIntensity: 0\n    )\n  }\n  .adjust(\n    mode: hsv,\n    rotation: -116.46,\n    hueRange: 16.95\n  )\n  .subchain(name: \"lens effects\", id: \"dwdx\") {\n    .temporalAberration()\n    .bloom(softKnee: 0.16, taps: 15)\n    .lens(displacement: -0.5)\n    .vignette()\n  }\n  .adjust(brightness: 2.03, contrast: 0.55)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
     "title": "Bass Bloom",
     "tagline": "Bass swirls the hue; sub flexes the scale",
     "tint": "#4ea8ff",

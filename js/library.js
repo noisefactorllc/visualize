@@ -23,23 +23,25 @@ const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
 // Section ordering for the grid. Each program is assigned a category
 // at load time via Library.categoryFor(); render() emits a <details>
 // section per non-empty category in this exact order.
-//
-// `user` leads — the operator's own imported portable effects are
-// what they care about most, so they sit at the very top of the list
-// above the engine defaults and curated entries.
 const CATEGORY_ORDER = Object.freeze([
     'user',
-    'default-particles',
-    'default-sim',
+    'abstract',
+    'attractor',
+    'geometric',
+    'life',
+    'particles',
     'built-in',
     'noiseblaster',
     'util',
 ])
 
 const CATEGORY_LABELS = Object.freeze({
-    'default-particles': 'particles',
-    'default-sim': 'sims',
     'user': 'user',
+    'abstract': 'abstract',
+    'attractor': 'attractor',
+    'geometric': 'geometric',
+    'life': 'life',
+    'particles': 'particles',
     'built-in': 'built-in',
     'noiseblaster': 'noiseblaster',
     'util': 'utility',
@@ -87,10 +89,6 @@ export class Library {
             : Promise.resolve([])
 
         const [curated, defs] = await Promise.all([fetched, defaults])
-        // Default-particles + default-sim go to the front so the
-        // sections render in the configured order regardless of
-        // search filter behaviour. Internal ordering still flows
-        // through Library.categoryFor() at render time.
         this.programs = [...defs, ...curated]
         return this.programs
     }
@@ -102,17 +100,10 @@ export class Library {
         return !!program?.tags?.includes('util')
     }
 
-    /**
-     * Group a program into one of the five top-level sections. The
-     * order of these checks matters: an engine-default entry that
-     * happened to be tagged "util" upstream should still land in its
-     * default-particles / default-sim section, not in utility.
-     */
     static categoryFor(program) {
+        if (program?.category) return program.category
         if (program?.source?.kind === 'engine-default') {
             if (program.source.namespace === 'user') return 'user'
-            if (program.source.namespace === 'points') return 'default-particles'
-            return 'default-sim'
         }
         if (Library.isUtil(program)) return 'util'
         if (program?.source?.feed === 'noiseblaster') return 'noiseblaster'
@@ -120,12 +111,11 @@ export class Library {
     }
 
     /**
-     * Rebuild only the engine-default entries (particles, sims, user)
-     * by re-running buildDefaultPrograms against the renderer. Used by
+     * Rebuild only the engine-default entries (user namespace) by
+     * re-running buildDefaultPrograms against the renderer. Used by
      * the user-effects manager's onChange path so installing or
      * deleting a portable effect updates the library without a full
-     * fetch of programs.json. Keeps non-default (curated) entries in
-     * place.
+     * fetch of programs.json.
      */
     async reloadDefaults(renderer) {
         if (!renderer) return
