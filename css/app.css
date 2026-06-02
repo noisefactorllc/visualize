@@ -1411,6 +1411,8 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
     gap: var(--hf-space-2);
     min-width: 0;
     width: 100%;
+    align-self: end;
+    margin-bottom: 1px;
 }
 
 .xfader-wrap {
