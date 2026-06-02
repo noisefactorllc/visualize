@@ -1296,53 +1296,56 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     text-align: right;
 }
 
-/* Range-input styling for OUR direct sliders (speed A/B, crossfader,
-   audio sensitivity). Scoped with :not(.slider) so the rules don't
-   leak into the handfish <slider-value> custom element's internal
-   input.slider — that one is owned by the handfish bundle's
-   injected CSS and we don't override its track / thumb metrics.
-   (Mixing our 22px / -8px-margin thumb with handfish's 14px track
-   was why the mixer-controls knobs floated above the slider line.) */
+/* Speed slider styling — exact copy of noisedeck mixer.css
+   .mixer-slider-container input[type="range"] rules. */
 input[type="range"]:not(.slider) {
+    -webkit-appearance: none;
     appearance: none;
-    background: transparent;
+    width: 100%;
+    height: 0.5rem;
+    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 15%, transparent 85%);
+    border-radius: var(--hf-radius-sm, 0.25rem);
     cursor: pointer;
+    transition: background 0.15s ease;
+    margin: 0;
 }
-
-input[type="range"]:not(.slider)::-webkit-slider-runnable-track {
-    height: 6px;
-    background: var(--hf-bg-base);
-    border-radius: 3px;
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
+input[type="range"]:not(.slider):focus-visible {
+    outline: var(--hf-focus-ring-width) solid var(--hf-focus-ring-color);
+    outline-offset: var(--hf-focus-ring-offset);
 }
-input[type="range"]:not(.slider)::-moz-range-track {
-    height: 6px;
-    background: var(--hf-bg-base);
-    border-radius: 3px;
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
+input[type="range"]:not(.slider):hover {
+    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 22%, transparent 78%);
 }
-
 input[type="range"]:not(.slider)::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 22px;
-    height: 22px;
-    border-radius: var(--hf-radius-full);
-    background: var(--hf-text-bright);
-    border: 2px solid var(--hf-bg-base);
-    margin-top: -8px;
-    cursor: grab;
-    transition: background 0.1s ease;
+    appearance: none;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 50%;
+    background: var(--hf-accent, #5a7fdd);
+    cursor: pointer;
+    border: 2px solid var(--hf-accent, #5a7fdd);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease;
+}
+input[type="range"]:not(.slider):hover::-webkit-slider-thumb {
+    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 85%, var(--hf-text-bright, #fff) 15%);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
 }
 input[type="range"]:not(.slider)::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
-    border-radius: var(--hf-radius-full);
-    background: var(--hf-text-bright);
-    border: 2px solid var(--hf-bg-base);
-    cursor: grab;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 50%;
+    background: var(--hf-accent, #5a7fdd);
+    cursor: pointer;
+    border: 2px solid var(--hf-accent, #5a7fdd);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease;
 }
-
-input[type="range"]:not(.slider):hover::-webkit-slider-thumb { background: var(--hf-accent); }
+input[type="range"]:not(.slider):hover::-moz-range-thumb {
+    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 85%, var(--hf-text-bright, #fff) 15%);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
 input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing; }
 
 .big-toggle {
@@ -1435,71 +1438,21 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
 
 .xfader {
     width: 100%;
-    height: 32px;
     margin: 0;
 }
-
-/* Midpoint tick: a thin yellow band sitting at 50% across the track
-   so the operator can see when the crossfader is parked on the
-   mixer-dominant centre. The yellow matches the logotype's middle
-   gradient stop + the mixer column's bottom border.
-
-   Selector specificity matters here — the generic
-   `input[type="range"]:not(.slider)::-webkit-slider-runnable-track`
-   rule above wins against a plain `.xfader::-...` rule (it has both
-   an element + attribute selector), so we have to lead with
-   `input.xfader[type="range"]` to keep the 24px height + tick
-   gradient from being overridden by the 6px generic track. */
-input.xfader[type="range"]::-webkit-slider-runnable-track {
-    height: 24px;
-    background-color: var(--hf-bg-base);
-    background-image: linear-gradient(
-        to right,
-        transparent calc(50% - 1.5px),
-        var(--hf-yellow) calc(50% - 1.5px),
-        var(--hf-yellow) calc(50% + 1.5px),
-        transparent calc(50% + 1.5px)
-    );
-    background-repeat: no-repeat;
-    background-size: 100% 70%;
-    background-position: center;
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-sm);
+.xfader-wrap {
+    position: relative;
 }
-input.xfader[type="range"]::-moz-range-track {
-    height: 24px;
-    background-color: var(--hf-bg-base);
-    background-image: linear-gradient(
-        to right,
-        transparent calc(50% - 1.5px),
-        var(--hf-yellow) calc(50% - 1.5px),
-        var(--hf-yellow) calc(50% + 1.5px),
-        transparent calc(50% + 1.5px)
-    );
-    background-repeat: no-repeat;
-    background-size: 100% 70%;
-    background-position: center;
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-sm);
-}
-
-.xfader::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--hf-radius-sm);
-    background: var(--hf-text-bright);
-    border: var(--hf-border-width) solid var(--hf-bg-base);
-    margin-top: -8px;
-    cursor: grab;
-}
-.xfader::-moz-range-thumb {
-    width: 36px;
-    height: 36px;
-    border-radius: var(--hf-radius-sm);
-    background: var(--hf-text-bright);
-    border: var(--hf-border-width) solid var(--hf-bg-base);
-    cursor: grab;
+.xfader-wrap::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 70%;
+    background: var(--hf-yellow);
+    pointer-events: none;
 }
 
 /* Three-column layout so the cut/auto-fade button trio stays
@@ -2200,36 +2153,20 @@ kbd {
     text-overflow: ellipsis;
 }
 
-/* Flatten slider-value's stacked children (slider track + value-
-   display) into a single horizontal row. min-height accommodates
-   the 22px thumb so the knob centers vertically without getting
-   clipped by the 14px-tall flex line height. */
-.mixer-control-row slider-value {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-1);
-    min-width: 0;
-    width: 100%;
-    min-height: 28px;
+.mixer-control-row:has(slider-value) {
+    grid-template-columns: 5.5em 1fr min-content;
 }
 .mixer-control-row slider-value .slider,
 .mixer-control-row slider-value input[type="range"] {
-    flex: 1 1 auto;
     min-width: 0;
+    width: 100%;
 }
-
-/* slider-value's input.slider uses handfish's own thumb + track
-   metrics straight from the injected handfish CSS — no override
-   needed here; the global `input[type="range"]:not(.slider)`
-   selector keeps our custom thumb styling out of slider-value. */
 .mixer-control-row slider-value .value-display {
-    flex: 0 0 auto;
     min-width: 3em;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);
     text-align: right;
-    line-height: 28px;
 }
 
 /* Select-dropdown gets a visibly distinct fill from the panel bg
@@ -2241,13 +2178,13 @@ kbd {
 .mixer-control-row select-dropdown {
     min-width: 0;
     width: 100%;
-    background: var(--hf-bg-base);
-    border-radius: var(--hf-radius-sm);
 }
-.mixer-control-row select-dropdown .inline-dropdown {
-    background: var(--hf-bg-elevated);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
-    border-radius: var(--hf-radius-sm);
+
+.main:has(select-dropdown.dropdown-open) {
+    overflow: visible;
+}
+.mixer-controls:has(select-dropdown.dropdown-open) {
+    z-index: 100;
 }
 
 .mixer-control-disabled {

@@ -146,9 +146,6 @@ export class MixerControls {
 
         select.addEventListener('change', () => {
             const raw = select.value
-            // Look up the choice key whose value matches the dropdown
-            // value, then store the *string key* in overrides so the
-            // generated DSL reads `mode: mix` rather than `mode: 8`.
             const matched = Object.entries(spec.choices).find(
                 ([k, v]) => stringifyChoice(v) === raw && !k.endsWith(':')
             )
