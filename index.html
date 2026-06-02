@@ -151,6 +151,25 @@
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+    <div id="mobile-guard" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--hf-surface,#111);color:var(--hf-on-surface,#eee);font-family:var(--hf-font-family,Nunito,sans-serif);flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;gap:1.5rem">
+        <img src="/img/visualize.png" alt="" style="width:64px;height:64px;border-radius:12px">
+        <p style="font-size:1.25rem;line-height:1.5;max-width:28ch">Sorry, Visualize is not intended for mobile devices.</p>
+        <p style="font-size:1rem;opacity:.75;line-height:1.5;max-width:32ch">Try <a href="https://noisedeck.app" style="color:var(--hf-primary,#7af)">Noisedeck.app</a>, our video synth that runs almost anywhere.</p>
+    </div>
+    <script>
+    (function(){
+        var guard = document.getElementById('mobile-guard');
+        var app;
+        function check(){
+            var mobile = /Mobile|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+            guard.style.display = mobile ? 'flex' : 'none';
+            if(!app) app = document.getElementById('app');
+            if(app) app.style.display = mobile ? 'none' : '';
+        }
+        check();
+        window.addEventListener('resize', check);
+    })();
+    </script>
     <div id="app">
 
         <header class="topbar">
