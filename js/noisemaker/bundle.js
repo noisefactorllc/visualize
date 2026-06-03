@@ -6,7 +6,7 @@
  */
 
 const SHADER_CDN = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? 'app://visualize/vendor/noisemaker/0.8.0'
+    ? 'app://visualize/vendor/noisemaker/1.0.60'
     : 'https://shaders.noisedeck.app/1'
 
 const isLocalDev = typeof window !== 'undefined' && (
