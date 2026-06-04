@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>app.visualize.desktop</id>
-  <name>Visualize</name>
+  <name>Noisedeck Visualize</name>
   <summary>Real-time audio visualizer</summary>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>LicenseRef-proprietary=https://noisefactor.io/terms</project_license>

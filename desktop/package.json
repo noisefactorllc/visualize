@@ -21,7 +21,7 @@
     },
     "build": {
         "appId": "app.visualize.desktop",
-        "productName": "Visualize",
+        "productName": "Noisedeck Visualize",
         "directories": {
             "output": "../dist-desktop",
             "buildResources": "build-resources"
