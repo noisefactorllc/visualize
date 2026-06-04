@@ -343,7 +343,7 @@ async function boot() {
     const bpmDividerEl = $('bpm-divider')
     const bpmLabelEl = $('bpm-label')
     const mainLoopDerivedEl = $('main-loop-derived')
-    const bpmBlockEl = document.querySelector('.bpm-block')
+    const bpmBlockEl = document.querySelector('.topbar-center')
     if (bpmDividerEl) bpmDividerEl.value = String(scheduler.divider)
 
     function applyLoopFromBpm() {
@@ -351,6 +351,8 @@ async function boot() {
         state.loopDuration = sec
         state.decks.A.setBaseLoopDuration(sec)
         state.decks.B.setBaseLoopDuration(sec)
+        state.decks.A.syncTimeOrigin(scheduler._lastBeatMs)
+        state.decks.B.syncTimeOrigin(scheduler._lastBeatMs)
         if (mainLoopDerivedEl) {
             mainLoopDerivedEl.textContent =
                 `${sec.toFixed(2)}s — ${scheduler.bpm.toFixed(1)} BPM ÷ ${scheduler.divider} (one bar = ${(60 / scheduler.bpm).toFixed(2)}s)`
@@ -1079,6 +1081,26 @@ async function boot() {
         setTimeout(() => tapBtn.classList.remove('flash'), 100)
     }
     tapBtn.addEventListener('click', doTap)
+
+    // Phase controls — scheduler is single source of truth for time;
+    // deck renderers derive their origin from it.
+    const phaseResetBtn = $('phase-reset')
+    const phaseSlider = $('phase-slider')
+    function syncDecksToScheduler() {
+        state.decks.A.syncTimeOrigin(scheduler._lastBeatMs)
+        state.decks.B.syncTimeOrigin(scheduler._lastBeatMs)
+    }
+    phaseResetBtn.addEventListener('mousedown', () => {
+        scheduler.resetPhase()
+        syncDecksToScheduler()
+        if (phaseSlider) phaseSlider.value = 0
+    })
+    if (phaseSlider) {
+        phaseSlider.addEventListener('input', () => {
+            scheduler.setPhaseOffset(Number(phaseSlider.value))
+            syncDecksToScheduler()
+        })
+    }
 
     // Beat dots
     const beatDots = [...document.querySelectorAll('.beat-dot')]

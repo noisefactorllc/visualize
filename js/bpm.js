@@ -152,6 +152,22 @@ export class BeatScheduler {
     resetPhase() {
         this._lastBeatMs = performance.now()
         this._beatIndex = 0
+        this._emit()
+        if (this._running) {
+            if (this._timeoutId) clearTimeout(this._timeoutId)
+            this._scheduleNext()
+        }
+    }
+
+    setPhaseOffset(fraction) {
+        const barMs = this.barSeconds() * 1000
+        this._lastBeatMs = performance.now() - (fraction * barMs)
+        this._beatIndex = Math.floor(fraction * 4 * this._divider)
+        this._emit()
+        if (this._running) {
+            if (this._timeoutId) clearTimeout(this._timeoutId)
+            this._scheduleNext()
+        }
     }
 
     /** Returns fractional beat position 0..1 within the current beat. */

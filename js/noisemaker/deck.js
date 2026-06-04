@@ -233,6 +233,10 @@ export class Deck {
         this.setSpeed(this._speed)
     }
 
+    syncTimeOrigin(originMs) {
+        this._renderer._loopStartTime = originMs
+    }
+
     /**
      * Ensure renderer has an audioState bag, returning it so the shared
      * audio manager can write FFT bands into it.

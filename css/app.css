@@ -157,16 +157,27 @@ select:focus-visible,
     margin-left: var(--hf-space-1);
 }
 
-.topbar-center { display: flex; justify-content: center; }
-
-.bpm-block {
+.topbar-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--hf-space-4);
+}
+.topbar-group {
     display: flex;
     align-items: center;
     gap: var(--hf-space-3);
-    padding: var(--hf-space-1) var(--hf-space-3);
-    background: var(--hf-bg-elevated);
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
-    border-radius: var(--hf-radius-md);
+}
+.topbar-center > .topbar-group + .topbar-group {
+    padding-left: var(--hf-space-4);
+    border-left: var(--vz-hairline);
+}
+.topbar-group-label {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    color: var(--hf-text-dim);
+    white-space: nowrap;
 }
 
 .tap-button {
@@ -192,12 +203,12 @@ select:focus-visible,
 .bpm-display { display: flex; align-items: baseline; gap: var(--hf-space-1); }
 
 #bpm-input {
-    width: 90px;
+    width: 4.5ch;
     background: transparent;
     border: none;
     color: var(--hf-text-bright);
     font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-lg);
+    font-size: var(--hf-size-sm);
     font-weight: var(--hf-weight-bold);
     text-align: right;
     outline: none;
@@ -223,8 +234,8 @@ select:focus-visible,
     margin: 0 var(--hf-space-1);
 }
 
-.bpm-block.midi-sync .bpm-label,
-.bpm-block.midi-sync #bpm-input { color: var(--hf-accent); }
+.topbar-center.midi-sync .bpm-label,
+.topbar-center.midi-sync #bpm-input { color: var(--hf-accent); }
 
 .beat-indicator { display: flex; gap: var(--hf-space-1); }
 
@@ -244,6 +255,15 @@ select:focus-visible,
 .beat-dot.downbeat.active {
     background: var(--hf-red);
     transform: scale(1.5);
+}
+
+.phase-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-1);
+    width: 110px;
+    flex: 0 0 110px;
+    min-height: 26px;
 }
 
 .topbar-right {
@@ -1018,6 +1038,13 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     padding: var(--hf-space-2) var(--hf-space-3);
     border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
     background: var(--hf-bg-surface);
+}
+.mixer-effect-label {
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    color: var(--hf-text-dim);
+    white-space: nowrap;
 }
 .main-toolbar #mixer-effect {
     flex: 0 1 auto;

@@ -178,11 +178,11 @@
                 <span class="brand-name">Visualize</span>
             </div>
             <div class="topbar-center">
-                <div class="bpm-block">
+                <div class="topbar-group">
                     <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">tap</button>
                     <div class="bpm-display" aria-live="polite" aria-atomic="true">
                         <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
-                        <select-dropdown id="bpm-divider" class="bpm-divider" value="4" title="animation length: BPM ÷ divider (longer = slower visuals)" aria-label="BPM divider">
+                        <select-dropdown id="bpm-divider" class="bpm-divider" value="4" aria-label="BPM divider">
                             <option value="1">/1</option>
                             <option value="2">/2</option>
                             <option value="4">/4</option>
@@ -197,6 +197,13 @@
                         <span class="beat-dot" data-beat="1"></span>
                         <span class="beat-dot" data-beat="2"></span>
                         <span class="beat-dot" data-beat="3"></span>
+                    </div>
+                </div>
+                <div class="topbar-group">
+                    <button id="phase-reset" class="tap-button" title="Reset animation phase to beat 1">phase reset</button>
+                    <span class="topbar-group-label">phase</span>
+                    <div class="phase-slider-wrap">
+                        <slider-value id="phase-slider" type="float" min="0" max="1" step="0.01" value="0" title="Nudge animation phase"></slider-value>
                     </div>
                 </div>
             </div>
@@ -239,7 +246,7 @@
                         <span class="density-value">100%</span>
                     </button>
                     <div class="deck-media" data-deck="A" id="deck-a-media" hidden>
-                        <select-dropdown class="deck-media-camera" id="deck-a-media-camera" data-deck="A" title="Camera source" hidden></select-dropdown>
+                        <select-dropdown class="deck-media-camera" id="deck-a-media-camera" data-deck="A" hidden></select-dropdown>
                         <button class="deck-media-file-btn" id="deck-a-media-file-btn" data-deck="A" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
                         <span class="deck-media-label" id="deck-a-media-label"></span>
                         <input type="file" class="deck-media-file-input" id="deck-a-media-file-input" data-deck="A" accept="image/*,video/*" hidden>
@@ -273,7 +280,8 @@
                     <span class="main-res" id="main-res">1280×720</span>
                 </div>
                 <div class="main-toolbar">
-                    <select-dropdown id="mixer-effect" class="mixer-select" title="Center mixer effect (noisemaker mixer/*)"></select-dropdown>
+                    <span class="mixer-effect-label">mixer effect:</span>
+                    <select-dropdown id="mixer-effect" class="mixer-select"></select-dropdown>
                     <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window"><span class="icon">display_external_input</span></button>
                 </div>
                 <div class="main-canvas-wrap">
@@ -312,7 +320,7 @@
                         <span class="density-value">100%</span>
                     </button>
                     <div class="deck-media" data-deck="B" id="deck-b-media" hidden>
-                        <select-dropdown class="deck-media-camera" id="deck-b-media-camera" data-deck="B" title="Camera source" hidden></select-dropdown>
+                        <select-dropdown class="deck-media-camera" id="deck-b-media-camera" data-deck="B" hidden></select-dropdown>
                         <button class="deck-media-file-btn" id="deck-b-media-file-btn" data-deck="B" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
                         <span class="deck-media-label" id="deck-b-media-label"></span>
                         <input type="file" class="deck-media-file-input" id="deck-b-media-file-input" data-deck="B" accept="image/*,video/*" hidden>
@@ -355,7 +363,7 @@
                     <div class="xfader-quick">
                         <div class="xfader-fade xfader-fade-left">
                             <span class="xfader-fade-label">fade</span>
-                            <select-dropdown id="automix-curve" class="xfader-fade-curve" value="dipped" title="Fade curve (used by auto-fade + auto-VJ)">
+                            <select-dropdown id="automix-curve" class="xfader-fade-curve" value="dipped">
                                 <option value="linear">linear</option>
                                 <option value="dipped">dipped</option>
                                 <option value="sharp">sharp</option>
