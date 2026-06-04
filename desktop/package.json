@@ -33,13 +33,38 @@
             "license-pub-v1.ed25519",
             "package.json",
             "node_modules/**",
-            { "from": "..", "to": "app", "filter": ["index.html", "deployment-meta.json", "css/**", "data/**", "js/**"] },
-            { "from": "../vendor", "to": "app/vendor", "filter": ["noisemaker/**"] }
+            {
+                "from": "..",
+                "to": "app",
+                "filter": [
+                    "index.html",
+                    "deployment-meta.json",
+                    "css/**",
+                    "data/**",
+                    "js/**"
+                ]
+            },
+            {
+                "from": "../vendor",
+                "to": "app/vendor",
+                "filter": [
+                    "noisemaker/**"
+                ]
+            }
         ],
         "asar": true,
-        "asarUnpack": ["**/@nf/desktop-shell/assets/**"],
+        "asarUnpack": [
+            "**/@nf/desktop-shell/assets/**"
+        ],
         "mac": {
-            "target": [{ "target": "dmg", "arch": ["arm64"] }],
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "arm64"
+                    ]
+                }
+            ],
             "category": "public.app-category.graphics-design",
             "hardenedRuntime": true,
             "gatekeeperAssess": false,
@@ -49,15 +74,31 @@
             "notarize": true
         },
         "win": {
-            "target": [{ "target": "nsis", "arch": ["x64"] }],
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
             "signAndEditExecutable": false
         },
         "linux": {
-            "target": [{ "target": "AppImage", "arch": ["x64"] }],
+            "target": [
+                {
+                    "target": "AppImage",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
             "category": "Graphics",
             "icon": "build-resources/icons",
             "desktop": {
-                "StartupWMClass": "visualize"
+                "entry": {
+                    "StartupWMClass": "visualize"
+                }
             }
         }
     }
