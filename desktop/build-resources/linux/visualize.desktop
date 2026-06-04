@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Visualize
+Comment=Real-time audio visualizer
+Exec=AppRun %U
+Icon=visualize
+Type=Application
+Categories=Graphics;AudioVideo;
+StartupWMClass=visualize
