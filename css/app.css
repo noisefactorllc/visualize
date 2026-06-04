@@ -730,7 +730,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     align-items: center;
     justify-content: flex-start;
     gap: var(--hf-space-2);
-    padding: 0 var(--hf-space-3) var(--hf-space-2);
+    padding: var(--hf-space-3) var(--hf-space-3) var(--hf-space-2);
     font-family: var(--hf-font-family-mono);
 }
 
@@ -2168,7 +2168,9 @@ kbd {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--hf-space-2) var(--hf-space-4);
-    background: var(--hf-bg-elevated);
+    background: color-mix(in srgb, var(--hf-bg-elevated) 75%, transparent);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
 .mixer-controls[hidden] { display: none; }
