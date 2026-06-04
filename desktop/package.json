@@ -33,7 +33,7 @@
             "license-pub-v1.ed25519",
             "package.json",
             "node_modules/**",
-            { "from": "..", "to": "app", "filter": ["index.html", "css/**", "data/**", "js/**"] },
+            { "from": "..", "to": "app", "filter": ["index.html", "deployment-meta.json", "css/**", "data/**", "js/**"] },
             { "from": "../vendor", "to": "app/vendor", "filter": ["noisemaker/**"] }
         ],
         "asar": true,
