@@ -1050,6 +1050,12 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     flex: 0 1 auto;
     min-width: 180px;
 }
+/* Keep the label flush against its dropdown: push only the output button
+   to the right edge. The auto margin absorbs the toolbar's free space
+   before justify-content can spread the picker apart from its label. */
+.main-toolbar .main-output-btn {
+    margin-left: auto;
+}
 .main-output-btn {
     appearance: none;
     background: transparent;
