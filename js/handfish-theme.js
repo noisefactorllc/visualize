@@ -11,9 +11,7 @@
  * dark + light variant, so multiple THEMES entries can share a `file`.
  */
 
-const CDN_BASE = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? '../../vendor/handfish.noisefactor.io/0/styles/themes'
-    : 'https://handfish.noisefactor.io/0/styles/themes'
+const CDN_BASE = 'https://handfish.noisefactor.io/0/styles/themes'
 const LINK_ID = 'hf-theme-link'
 
 export const THEMES = [
@@ -43,9 +41,7 @@ export const THEMES = [
 // fonts (Nunito or Noto Sans Mono) already preloaded by the inline head
 // script in index.html. Mirrored from index.html's THEME_BLANK map; keep
 // them in sync.
-const FONTS_CDN = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
-    ? '../../vendor/fonts.noisefactor.io'
-    : 'https://fonts.noisefactor.io'
+const FONTS_CDN = 'https://fonts.noisefactor.io'
 const THEME_BLANK = {
     'neutral-dark': null, 'neutral-light': null,
     'gray-dark': null, 'gray-light': null,
