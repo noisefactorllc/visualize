@@ -1,0 +1,29 @@
+search points, synth, render, filter, mixer
+
+noise(scaleX: 100, scaleY: 100)
+  .adjust(
+    mode: hsv,
+    rotation: -142.79,
+    hueRange: 21.26,
+    brightness: 0.76
+  )
+  .pointsEmit()
+  .flock(
+    alignment: 0.4,
+    maxSpeed: 6.8,
+    maxForce: 0.28
+  )
+  .pointsRender(
+    density: 65.54,
+    intensity: 80.98,
+    inputIntensity: 0
+  )
+  .subchain(name: "lens effects", id: "jmjz") {
+    .temporalAberration(greenDelay: 1.2, blueDelay: 3.2)
+    .bloom(taps: 15)
+    .lens(displacement: -0.5)
+    .vignette()
+  }
+  .write(o0)
+
+render(o0)

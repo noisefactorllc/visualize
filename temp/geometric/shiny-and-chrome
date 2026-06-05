@@ -1,0 +1,40 @@
+search synth, filter, render, points, mixer
+
+let osc1 = osc(type: oscKind.noise, min: 0.29, max: 0.83, seed: 6561)
+
+cell(
+  scale: 86.16,
+  cellScale: 85.53,
+  cellSmooth: 59.92,
+  variation: 59.58,
+  speed: 3
+)
+  .adjust(
+    mode: oklch,
+    rotation: osc1,
+    hueRange: 200,
+    saturation: 1.37,
+    brightness: 1.81,
+    contrast: 0.1
+  )
+  .adjust(
+    mode: oklab,
+    saturation: 0.24,
+    contrast: 0.77
+  )
+  .lighting(
+    normalStrength: 3.33,
+    smoothing: 5.3,
+    reflection: 34.9,
+    refraction: 38.9,
+    aberration: 39
+  )
+  .subchain(name: "lens effects", id: "fbsb") {
+    .chromaticAberration(aberration: 11.59)
+    .bloom(taps: 15)
+    .lens(displacement: -0.5)
+    .vignette(brightness: 0.74, alpha: 0.4)
+  }
+  .write(o0)
+
+render(o0)

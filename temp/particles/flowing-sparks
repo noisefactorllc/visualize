@@ -1,0 +1,54 @@
+search points, synth, render, filter, mixer
+
+noise(
+  type: catmullRom4x4,
+  scaleX: 100,
+  scaleY: 100,
+  loopScale: 100,
+  speed: 100
+)
+  .palette(
+    index: tropicalia,
+    rotation: fwd,
+    offset: 51,
+    alpha: 0.49
+  )
+  .pointsEmit(attrition: 2.45)
+  .flow(
+    behavior: chaotic,
+    stride: 24,
+    strideDeviation: 0,
+    kink: 2
+  )
+  .pointsBillboardRender(
+    shapeMode: soft,
+    depositOpacity: 34.67,
+    pointSize: 7.13,
+    sizeVariation: 100,
+    density: 35.03,
+    inputIntensity: 100
+  )
+  .pointsRender(
+    density: 31.25,
+    intensity: 31.59,
+    inputIntensity: 17.8
+  )
+  .subchain(name: "lens effects", id: "jmjz") {
+    .temporalAberration(greenDelay: 1.2, blueDelay: 3.2)
+    .bloom(
+      threshold: 0.35,
+      softKnee: 0.17,
+      intensity: 1.5,
+      taps: 15
+    )
+    .lens(displacement: -0.5)
+    .vignette()
+  }
+  .adjust(
+    rotation: 27.34,
+    brightness: 2.08,
+    contrast: 0.89
+  )
+  .write(o0)
+
+render(o0)

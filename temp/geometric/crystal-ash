@@ -1,0 +1,85 @@
+search filter, synth, classicNoisedeck, render, points, mixer
+
+perlin(
+  scale: 83.98,
+  octaves: 6,
+  seed: 53,
+  speed: 2
+)
+  .palette(
+    index: silvermane,
+    rotation: fwd,
+    offset: 86,
+    repeat: 6,
+    alpha: 0.798
+  )
+  .lowPoly(
+    scale: 97,
+    seed: 47,
+    mode: distance2,
+    edgeStrength: 0.09,
+    speed: 5
+  )
+  .motionBlur()
+  .refract(
+    blendMode: screen,
+    mix: 67.48,
+    mode: reflect,
+    amount: 41.39
+  )
+  .lighting(
+    normalStrength: 1.39,
+    smoothing: 1.9,
+    specularIntensity: 1.51,
+    shininess: 204,
+    lightDirection: vec3(-0.539, 0.394, 0.744),
+    reflection: 51.4,
+    refraction: 72.5,
+    aberration: 27.2
+  )
+  .coalesce(
+    tex: read(o1),
+    blendMode: darken,
+    mix: -22.4,
+    refractBAmt: 100,
+    refractBDir: -162.87
+  )
+  .seamless(blend: 0.15, repeat: 1)
+  .subchain(name: "flow field particles", id: "gq5w") {
+    .pointsEmit()
+    .flow(behavior: chaotic)
+    .physical(
+      gravity: -1.73,
+      wind: 0.68,
+      energy: 0.03,
+      drag: 0.02,
+      deviation: 0.45,
+      wander: 1
+    )
+    .pointsRender(
+      density: 100,
+      intensity: 68.42,
+      inputIntensity: 67.82
+    )
+  }
+  .subchain(name: "lens effects", id: "ym6e") {
+    .temporalAberration()
+    .bloom(threshold: 0.4, taps: 15)
+    .lens(displacement: -0.68)
+    .vignette(alpha: 0.65)
+  }
+  .fxaa()
+  .adjust(brightness: 1.31, contrast: 0.55)
+  .write(o0)
+
+caustic(
+  noiseScale: 146.71,
+  speed: 100,
+  seed: 49,
+  hueRotation: 60.59,
+  hueRange: 17.52,
+  intensity: -49.55
+)
+  .write(o1)
+
+render(o0)

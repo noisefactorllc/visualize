@@ -1,0 +1,39 @@
+search synth, filter, render, points, mixer
+
+let osc1 = osc(type: oscKind.sawInv)
+
+perlin(scale: 36.97, seed: 5)
+  .seamless(repeat: 1)
+  .adjust(
+    rotation: osc1,
+    hueRange: 200,
+    contrast: 1
+  )
+  .subchain(name: "flow field particles", id: "p0wu") {
+    .pointsEmit(attrition: 2.5)
+    .flow(
+      behavior: chaotic,
+      stride: 28,
+      kink: 10
+    )
+    .pointsRender(
+      density: 100,
+      intensity: 49.68,
+      inputIntensity: 0
+    )
+  }
+  .adjust(
+    mode: hsv,
+    rotation: -116.46,
+    hueRange: 16.95
+  )
+  .subchain(name: "lens effects", id: "dwdx") {
+    .temporalAberration()
+    .bloom(softKnee: 0.16, taps: 15)
+    .lens(displacement: -0.5)
+    .vignette()
+  }
+  .adjust(brightness: 2.03, contrast: 0.55)
+  .write(o0)
+
+render(o0)

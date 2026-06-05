@@ -1,0 +1,40 @@
+search synth, filter, synth3d, render, points, mixer
+
+gabor(
+  scale: 88.44,
+  orientation: -98.42,
+  bandwidth: 24.97,
+  isotropy: 100,
+  density: 4,
+  octaves: 2,
+  speed: 5
+)
+  .subchain(name: "flow field particles", id: "df58") {
+    .pointsEmit(attrition: 2.2)
+    .flow(
+      behavior: chaotic,
+      stride: 34,
+      kink: 10
+    )
+    .hydraulic(stride: 42)
+    .pointsBillboardRender(
+      depositOpacity: 10.99,
+      pointSize: 8.96,
+      sizeVariation: 100,
+      seed: 474,
+      density: 8.21,
+      intensity: 64.03,
+      inputIntensity: 100
+    )
+  }
+  .blur(radiusX: 9, radiusY: 9)
+  .lighting(
+    normalStrength: 2.45,
+    smoothing: 1.2,
+    reflection: 26.8,
+    refraction: 18.7,
+    aberration: 21.6
+  )
+  .write(o0)
+
+render(o0)

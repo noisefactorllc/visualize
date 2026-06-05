@@ -1,0 +1,54 @@
+search synth, filter, classicNoisedeck, render, points, mixer
+
+perlin(scale: 52.81)
+  .lowPoly(
+    scale: 96,
+    seed: 42,
+    mode: distance2,
+    edgeStrength: 0.82,
+    alpha: 0.7,
+    speed: 5
+  )
+  .adjust(
+    mode: hsv,
+    rotation: 120,
+    hueRange: 40
+  )
+  .lighting(
+    normalStrength: 5,
+    smoothing: 2.9,
+    specularIntensity: 2,
+    shininess: 156,
+    reflection: 21.3,
+    refraction: 45.4,
+    aberration: 36.1
+  )
+  .write(o0)
+
+caustic(
+  interp: catmullRom4x4,
+  noiseScale: 192.39,
+  speed: 57.27,
+  seed: 52
+)
+  .coalesce(
+    tex: read(o0),
+    blendMode: screen,
+    mix: 8.27,
+    refractAAmt: 63.56
+  )
+  .subchain(name: "lens effects", id: "zapp") {
+    .temporalAberration()
+    .bloom(
+      threshold: 0.95,
+      softKnee: 0.4,
+      intensity: 1.3,
+      taps: 37
+    )
+    .lens(displacement: -0.5)
+    .vignette()
+  }
+  .adjust(saturation: 1.24, contrast: 0.61)
+  .write(o1)
+
+render(o1)

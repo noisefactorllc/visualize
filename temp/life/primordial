@@ -1,0 +1,49 @@
+search synth, filter, synth3d, render, points, mixer, classicNoisedeck
+
+gabor(
+  scale: 94.78,
+  orientation: -98.42,
+  bandwidth: 24.97,
+  isotropy: 100,
+  density: 4,
+  octaves: 2,
+  speed: 5
+)
+  .refract(blendMode: difference, amount: 1.96)
+  .subchain(name: "flow field particles", id: "df58") {
+    .pointsEmit(stateSize: x64, attrition: 1.66)
+    .flow(stride: 25, kink: 10)
+    .pointsBillboardRender(
+      depositOpacity: 7.26,
+      pointSize: 26.43,
+      sizeVariation: 100,
+      seed: 0,
+      density: 44.55,
+      intensity: 87.13,
+      inputIntensity: 100
+    )
+  }
+  .blur(radiusX: 9, radiusY: 9)
+  .lighting(
+    normalStrength: 5,
+    diffuseColor: #b8b8b8,
+    ambientColor: #1d2233,
+    lightDirection: vec3(-0.411, 0.333, 0.848),
+    reflection: 33.3,
+    refraction: 36.5,
+    aberration: 9.2
+  )
+  .adjust(brightness: 1.53, contrast: 0.53)
+  .subchain(name: "lens effects", id: "hk9g") {
+    .chromaticAberration(aberration: 25, passthru: 67.14)
+    .bloom(
+      threshold: 0.35,
+      intensity: 1.25,
+      taps: 15
+    )
+    .lens(displacement: -0.5)
+    .vignette()
+  }
+  .write(o0)
+
+render(o0)

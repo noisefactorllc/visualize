@@ -1,0 +1,92 @@
+// chen attractor with navier-stokes fluid sim
+
+search synth, filter, render, points, mixer
+
+noise(
+  type: hermite,
+  octaves: 1,
+  scaleX: 100,
+  scaleY: 100,
+  seed: 12,
+  loopScale: 1,
+  speed: 37,
+  colorMode: mono
+)
+  .subchain(name: "flow field particles", id: "lkjw") {
+    .pointsEmit()
+    .attractor(attractor: chen, speed: 0.25)
+    .life(friction: 0.08, _skip: true)
+    .pointsRender(
+      density: 100,
+      intensity: 53.26,
+      inputIntensity: 70.4,
+      viewMode: ortho,
+      rotateX: 2,
+      viewScale: 2,
+      posX: 2,
+      posY: 15
+    )
+    .pointsBillboardRender(
+      shapeMode: soft,
+      depositOpacity: 31.48,
+      pointSize: 24.89,
+      sizeVariation: 100,
+      density: 7.26,
+      intensity: 0,
+      inputIntensity: 100,
+      viewMode: ortho,
+      rotateX: 2,
+      viewScale: 2,
+      posX: 2,
+      posY: 15
+    )
+  }
+  .invert()
+  .blur()
+  .write(o0)
+
+navierStokes(
+  tex: read(o0),
+  iterations: 40,
+  smoothing: bSpline4x4,
+  speed: 145,
+  dyeDecay: 98.98,
+  velocityDecay: 100,
+  inputForce: 1,
+  inputDye: 0.81,
+  inputIntensity: 4.44
+)
+  .palette(
+    index: grayscale,
+    offset: 52,
+    alpha: 0.44
+  )
+  .lighting(
+    normalStrength: 3.45,
+    specularIntensity: 1.1,
+    shininess: 97,
+    reflection: 21.8,
+    refraction: 19.6,
+    aberration: 18.4
+  )
+  .subchain(name: "lens effects", id: "esfj") {
+    .chromaticAberration(aberration: 31.44, passthru: 33.15)
+    .bloom(
+      threshold: 0.55,
+      intensity: 0.9,
+      radius: 33,
+      taps: 45,
+      tint: #00b2ff
+    )
+    .lens(displacement: -0.6)
+    .vignette(brightness: 0.12, alpha: 0.45)
+  }
+  .smoothstep(edge0: 0.05, edge1: 0.73)
+  .adjust(
+    saturation: 0.72,
+    brightness: 1.36,
+    contrast: 0.44
+  )
+  .write(o1)
+
+render(o1)

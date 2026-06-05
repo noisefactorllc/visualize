@@ -1,0 +1,74 @@
+search filter, synth, classicNoisedeck, render, points, mixer
+
+perlin(
+  scale: 100,
+  octaves: 6,
+  seed: 53
+)
+  .palette(
+    index: silvermane,
+    rotation: fwd,
+    offset: 82,
+    repeat: 4,
+    alpha: 0.798
+  )
+  .lowPoly(
+    scale: 97,
+    seed: 47,
+    mode: distance2,
+    edgeStrength: 0,
+    speed: 5
+  )
+  .motionBlur()
+  .refract(
+    blendMode: reflect,
+    mix: 14.12,
+    mode: reflect,
+    amount: 27.37
+  )
+  .lighting(
+    normalStrength: 2.62,
+    smoothing: 1.9,
+    specularIntensity: 1.51,
+    shininess: 204,
+    lightDirection: vec3(-0.539, 0.394, 0.744),
+    reflection: 51.4,
+    refraction: 72.5,
+    aberration: 27.2
+  )
+  .coalesce(
+    tex: read(o1),
+    blendMode: colorDodge,
+    mix: -1.05,
+    refractBAmt: 100,
+    refractBDir: -162.87
+  )
+  .subchain(name: "feedback loop", id: "fk9v") {
+    .loopBegin(alpha: 96.38, intensity: 68.35)
+    .feedback(
+      blendMode: lighten,
+      mix: 40.1,
+      refractBAmt: 2.33
+    )
+    .loopEnd()
+  }
+  .subchain(name: "lens effects", id: "ym6e") {
+    .temporalAberration()
+    .bloom(threshold: 0.9, taps: 15)
+    .lens(displacement: -0.74)
+    .vignette(brightness: 0.24, alpha: 0.65)
+  }
+  .fxaa()
+  .write(o0)
+
+caustic(
+  noiseScale: 107.45,
+  speed: 33.78,
+  seed: 55,
+  hueRotation: 0,
+  hueRange: 17.2,
+  intensity: -49.55
+)
+  .write(o1)
+
+render(o0)

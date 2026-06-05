@@ -1,0 +1,73 @@
+search synth, filter, classicNoisedeck, render, points, mixer
+
+from(classicNoisedeck, noise(
+  type: hermite,
+  xScale: 100,
+  yScale: 100,
+  ridges: true,
+  hueRotation: 210.01
+))
+  .kaleido(
+    sides: 13,
+    metric: square,
+    loopOffset: square,
+    loopScale: 20.11,
+    speed: 12.74,
+    direction: clockwise,
+    _skip: true
+  )
+  .subchain(name: "particle lenia", id: "1eyj") {
+    .pointsEmit(attrition: 3.38)
+    .lenia(
+      muK: 16.5,
+      sigmaK: 7.6,
+      searchRadius: 20,
+      depositAmount: 3.4
+    )
+    .flow(
+      behavior: chaotic,
+      stride: 73,
+      strideDeviation: 0,
+      kink: 5.8
+    )
+    .pointsRender(
+      density: 100,
+      intensity: 47.95,
+      inputIntensity: 31.32
+    )
+  }
+  .blur(radiusX: 10, radiusY: 10)
+  .adjust(
+    mode: hsv,
+    rotation: -73.03,
+    hueRange: 31.86
+  )
+  .subchain(name: "feedback loop with warp", id: "p9to") {
+    .loopBegin(alpha: 87.66)
+    .warp(strength: 4.56)
+    .feedback(
+      blendMode: lighten,
+      mix: 65.89,
+      refractBAmt: 1.96,
+      refractBDir: 199.73,
+      intensity: -28.75
+    )
+    .loopEnd()
+  }
+  .lighting(
+    normalStrength: 5,
+    smoothing: 3.6,
+    reflection: 16.9,
+    refraction: 13.9,
+    aberration: 17.7
+  )
+  .adjust(
+    hueRange: 200,
+    brightness: 1.62,
+    contrast: 0.69
+  )
+  .motionBlur()
+  .smooth()
+  .write(o0)
+
+render(o0)
