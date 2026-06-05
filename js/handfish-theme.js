@@ -11,7 +11,9 @@
  * dark + light variant, so multiple THEMES entries can share a `file`.
  */
 
-const CDN_BASE = 'https://handfish.noisefactor.io/0/styles/themes'
+const CDN_BASE = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? '../../vendor/handfish.noisefactor.io/0/styles/themes'
+    : 'https://handfish.noisefactor.io/0/styles/themes'
 const LINK_ID = 'hf-theme-link'
 
 export const THEMES = [
@@ -41,23 +43,26 @@ export const THEMES = [
 // fonts (Nunito or Noto Sans Mono) already preloaded by the inline head
 // script in index.html. Mirrored from index.html's THEME_BLANK map; keep
 // them in sync.
+const FONTS_CDN = (typeof window !== 'undefined' && window.electronAPI?.isElectron)
+    ? '../../vendor/fonts.noisefactor.io'
+    : 'https://fonts.noisefactor.io'
 const THEME_BLANK = {
     'neutral-dark': null, 'neutral-light': null,
     'gray-dark': null, 'gray-light': null,
     'brutalist': null, 'cyberpunk': null, 'terminal': null,
-    'corporate':           'https://fonts.noisefactor.io/fonts/inter/Inter-Blank.woff2',
-    'high-contrast-dark':  'https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2',
-    'high-contrast-light': 'https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2',
-    'newspaper':           'https://fonts.noisefactor.io/fonts/lora/Lora-Blank.woff2',
-    'gothic':              'https://fonts.noisefactor.io/fonts/crimson-pro/CrimsonPro-Blank.woff2',
-    'ocean':               'https://fonts.noisefactor.io/fonts/poppins/Poppins-Blank.woff2',
-    'dusk':                'https://fonts.noisefactor.io/fonts/cabin/Cabin-Blank.woff2',
-    'sunset':              'https://fonts.noisefactor.io/fonts/quicksand/Quicksand-Blank.woff2',
-    'earthy':              'https://fonts.noisefactor.io/fonts/roboto-slab/RobotoSlab-Blank.woff2',
+    'corporate':           `${FONTS_CDN}/fonts/inter/Inter-Blank.woff2`,
+    'high-contrast-dark':  `${FONTS_CDN}/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2`,
+    'high-contrast-light': `${FONTS_CDN}/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2`,
+    'newspaper':           `${FONTS_CDN}/fonts/lora/Lora-Blank.woff2`,
+    'gothic':              `${FONTS_CDN}/fonts/crimson-pro/CrimsonPro-Blank.woff2`,
+    'ocean':               `${FONTS_CDN}/fonts/poppins/Poppins-Blank.woff2`,
+    'dusk':                `${FONTS_CDN}/fonts/cabin/Cabin-Blank.woff2`,
+    'sunset':              `${FONTS_CDN}/fonts/quicksand/Quicksand-Blank.woff2`,
+    'earthy':              `${FONTS_CDN}/fonts/roboto-slab/RobotoSlab-Blank.woff2`,
     'organic':             null,
-    'synthwave':           'https://fonts.noisefactor.io/fonts/tomorrow/Tomorrow-Blank.woff2',
-    'rave':                'https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa-Blank.woff2',
-    'kawaii':              'https://fonts.noisefactor.io/fonts/baloo-2/Baloo2-Blank.woff2'
+    'synthwave':           `${FONTS_CDN}/fonts/tomorrow/Tomorrow-Blank.woff2`,
+    'rave':                `${FONTS_CDN}/fonts/comfortaa/Comfortaa-Blank.woff2`,
+    'kawaii':              `${FONTS_CDN}/fonts/baloo-2/Baloo2-Blank.woff2`
 }
 
 const _preloaded = new Set()
