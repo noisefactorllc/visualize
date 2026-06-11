@@ -20,6 +20,10 @@
         "electron-builder": "^26.8.1"
     },
     "build": {
+        "publish": {
+            "provider": "generic",
+            "url": "https://downloads.noisefactor.io/updates/visualize"
+        },
         "appId": "app.visualize.desktop",
         "productName": "Noisedeck Visualize",
         "directories": {
@@ -60,6 +64,12 @@
             "target": [
                 {
                     "target": "dmg",
+                    "arch": [
+                        "arm64"
+                    ]
+                },
+                {
+                    "target": "zip",
                     "arch": [
                         "arm64"
                     ]
