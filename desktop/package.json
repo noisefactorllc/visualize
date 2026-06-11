@@ -24,6 +24,9 @@
             "provider": "generic",
             "url": "https://downloads.noisefactor.io/updates/visualize"
         },
+        "dmg": {
+            "writeUpdateInfo": false
+        },
         "appId": "app.visualize.desktop",
         "productName": "Noisedeck Visualize",
         "directories": {
