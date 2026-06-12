@@ -40,6 +40,8 @@ class ThumbnailRenderer {
             width: THUMB_W,
             height: THUMB_H,
             loopDuration: 4,
+            // Always WebGL2: the user's renderer preference is a hint for
+            // the live decks, not this offscreen one-frame renderer.
             preferWebGPU: false,
             onError: () => {},      // swallow — caller handles null result
         })

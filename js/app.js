@@ -42,11 +42,31 @@ import { enhanceCodeEditor } from './ui/codeEditor.js'
 
 const $ = (id) => document.getElementById(id)
 
+const RENDERER_STORAGE_KEY = 'visualize.renderer.v1'
+
+function loadRendererPrefs() {
+    try {
+        const raw = localStorage.getItem(RENDERER_STORAGE_KEY)
+        const parsed = raw ? JSON.parse(raw) : {}
+        return { preferWebGPU: parsed?.preferWebGPU === true }
+    } catch {
+        return { preferWebGPU: false }
+    }
+}
+
+function persistRendererPrefs() {
+    try {
+        localStorage.setItem(RENDERER_STORAGE_KEY, JSON.stringify({
+            preferWebGPU: state.preferWebGPU === true
+        }))
+    } catch {}
+}
+
 const state = {
     decks: { A: null, B: null },
     mainRes: { width: 1280, height: 720 },
     loopDuration: 10,
-    preferWebGPU: false,
+    preferWebGPU: loadRendererPrefs().preferWebGPU,
     crossfade: 0,
     // Per-deck pixel density. `mode='auto'` lets loadProgram choose
     // (drops to 0.5 for compute-heavy DSLs); `mode='manual'` pins to
@@ -1413,6 +1433,15 @@ async function boot() {
         compositor.resize(w, h)
         $('main-res').textContent = `${w}×${h}`
         toast(`main: ${w}×${h}`)
+    })
+    const webgpuToggle = $('prefer-webgpu')
+    webgpuToggle.checked = state.preferWebGPU
+    webgpuToggle.addEventListener('change', (e) => {
+        state.preferWebGPU = e.target.checked === true
+        persistRendererPrefs()
+        toast(state.preferWebGPU
+            ? 'WebGPU preferred on next reload'
+            : 'WebGL2 preferred on next reload')
     })
     // FPS readout
     setInterval(() => {
