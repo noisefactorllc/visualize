@@ -213,6 +213,9 @@ export class SharedMidi {
         if (!this._enabled) return this.enable()
         this._detachInputs()
         this._enabled = false
+        // Abort any in-flight MIDI-learn so its pending commit timer can't
+        // fire a phantom assignment (and persist it) after MIDI is off.
+        if (this._learningControlId) this.cancelLearn()
         this._tickTimes = []
         this._smoothedBpm = null
         this._clearNoClockWatchdog()

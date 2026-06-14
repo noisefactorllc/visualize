@@ -25,6 +25,9 @@ export class SharedAudio {
         this._fftData = null
         this._timeDomainData = null
         this._rafId = null
+        // Bind the per-frame loop once so the rAF callback doesn't allocate
+        // a fresh closure every frame for the life of the session.
+        this._loopBound = () => this._loop()
         this._onStatus = null
         this._onMeters = null
 
@@ -223,7 +226,7 @@ export class SharedAudio {
         }
 
         if (this._onMeters) this._onMeters(this.meters)
-        this._rafId = requestAnimationFrame(() => this._loop())
+        this._rafId = requestAnimationFrame(this._loopBound)
     }
 
     _notify(msg) {

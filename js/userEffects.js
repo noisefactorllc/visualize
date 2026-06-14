@@ -37,6 +37,15 @@ const PIPELINE_INPUT_TOKENS = new Set([
     'o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7',
 ])
 
+// macOS Finder "Compress" adds an __MACOSX/ tree of AppleDouble sidecar
+// files (e.g. __MACOSX/effect/._definition.json) plus .DS_Store. Their
+// names share the same suffixes as real entries, so without this guard a
+// sidecar can hijack definition.json detection or be read in as a shader.
+function isJunkZipEntry(path) {
+    const base = path.slice(path.lastIndexOf('/') + 1)
+    return path.includes('__MACOSX/') || base.startsWith('._') || base === '.DS_Store'
+}
+
 class UserEffectsManager {
     constructor() {
         this._db = null
@@ -138,7 +147,10 @@ class UserEffectsManager {
         let definitionPath = null
         for (const path of Object.keys(zip.files)) {
             if (zip.files[path].dir) continue
-            if (path.endsWith('definition.json')) {
+            if (isJunkZipEntry(path)) continue
+            // Match at a path boundary so a stray "mydefinition.json" isn't
+            // mistaken for the real file.
+            if (path === 'definition.json' || path.endsWith('/definition.json')) {
                 definitionPath = path
                 basePath = path.replace(/definition\.json$/, '')
                 break
@@ -151,6 +163,7 @@ class UserEffectsManager {
         let hasGlsl = false
         for (const [path, entry] of Object.entries(zip.files)) {
             if (entry.dir) continue
+            if (isJunkZipEntry(path)) continue
             if (basePath && !path.startsWith(basePath)) continue
             const rel = basePath ? path.slice(basePath.length) : path
             const isShader = rel.startsWith('glsl/') || rel.startsWith('wgsl/')

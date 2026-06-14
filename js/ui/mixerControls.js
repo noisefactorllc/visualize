@@ -32,9 +32,12 @@ import { getEffect } from '../noisemaker/bundle.js'
 import { setTooltip } from '../tooltips.js'
 
 export class MixerControls {
-    constructor(rootEl, mixer) {
+    constructor(rootEl, mixer, onChange = null) {
         this.root = rootEl
         this.mixer = mixer
+        // Optional hook fired after the user changes any control, so the
+        // app can persist the new overrides (the mixer itself doesn't).
+        this._onChange = typeof onChange === 'function' ? onChange : null
         this._currentMixerId = null
         this._rows = []        // [{paramName, el, spec}]
     }
@@ -124,6 +127,7 @@ export class MixerControls {
             const numeric = isInt ? Math.round(Number(slider.value)) : Number(slider.value)
             this.mixer.setOverride(paramName, numeric)
             this._refreshDisabledStates()
+            this._onChange?.()
         })
 
         return {
@@ -140,9 +144,11 @@ export class MixerControls {
             options.push({ value: stringifyChoice(val), text: key })
         }
         select.setOptions(options)
-        // Choice values may be strings (enum names) or ints. Whatever
-        // got written into overrides is what we display.
-        select.value = stringifyChoice(value ?? spec.default)
+        // Overrides store the DSL choice *name* (the key, e.g. 'mix'), but
+        // option values are the stringified choice *value* (e.g. '0'). Map
+        // name→value so the widget shows the active selection — it otherwise
+        // displayed blank/first for every name-keyed enum (mode/shape/type).
+        select.value = choiceOptionValue(spec, value ?? spec.default)
 
         select.addEventListener('change', () => {
             const raw = select.value
@@ -152,11 +158,12 @@ export class MixerControls {
             const dslValue = matched ? matched[0] : raw
             this.mixer.setOverride(paramName, dslValue)
             this._refreshDisabledStates()
+            this._onChange?.()
         })
 
         return {
             element: select,
-            set: (v) => { select.value = stringifyChoice(v) }
+            set: (v) => { select.value = choiceOptionValue(spec, v) }
         }
     }
 
@@ -189,6 +196,21 @@ export class MixerControls {
 function stringifyChoice(value) {
     if (typeof value === 'number') return String(value)
     return String(value ?? '')
+}
+
+// Map a stored param value to the matching <option> value. Overrides hold
+// the DSL choice *name* (a key in spec.choices); option values are the
+// stringified choice *value*. When `value` is a known choice name, return
+// its value; otherwise stringify as-is (covers already-numeric values and
+// any non-enum free-form value, so an unrecognized shape is never made
+// worse than the previous behavior).
+function choiceOptionValue(spec, value) {
+    const choices = spec?.choices
+    if (choices && typeof choices === 'object' && value != null &&
+        Object.prototype.hasOwnProperty.call(choices, value)) {
+        return stringifyChoice(choices[value])
+    }
+    return stringifyChoice(value)
 }
 
 function looselyEqual(a, b) {

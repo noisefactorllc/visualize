@@ -20,7 +20,7 @@ npx playwright install   # first time only
 npm test
 ```
 
-`npm test` boots a local server and runs a headless Chromium smoke test that verifies the bundle loads, both decks compile shaders from the CDN, the crossfader actually mixes them, FX toggle, tap tempo registers, auto-VJ activates, and scenes persist + recall.
+`npm test` boots a local server and runs the Playwright suite (8 specs) against headless Chromium. The smoke spec verifies the bundle loads, both decks compile shaders from the CDN, the crossfader actually mixes them, FX toggle, tap tempo registers, auto-VJ activates, and scenes persist + recall; the remaining specs cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, scenes round-trip, the share-loader, library sections, and user-effect (.zip) import.
 
 ## Code Style
 
@@ -40,9 +40,12 @@ Programs are written in the [Polymorphic Shader Language (DSL)](https://polymorp
   "tagline": "Kicks pulse the rotation",
   "tint": "#4ea8ff",
   "tags": ["reactive", "bass"],
+  "category": "abstract",
   "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 0, max: 1)\nnoise(scale: bass).write(o0)\nrender(o0)"
 }
 ```
+
+`category` is optional and groups the program into a library section (`abstract`, `attractor`, `geometric`, `life`, `particles`); programs without one fall into the default section.
 
 For audio-reactive programs, declare `let name = audio(band: 0|1|2, min: ..., max: ...)` and use the binding name as a parameter value. Bands: `0` = bass, `1` = mid, `2` = treble. Test new programs by reloading the page and selecting them from the library panel.
 

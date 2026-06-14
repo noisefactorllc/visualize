@@ -1,6 +1,6 @@
 /**
- * Recorder — capture the main canvas to a downloadable webm via
- * MediaRecorder + canvas.captureStream().
+ * Recorder — capture the main canvas to a downloadable webm (or mp4 on
+ * Safari) via MediaRecorder + canvas.captureStream().
  *
  * Bitrate choice (8 Mbps) keeps quality high enough for VJ archives
  * without overwhelming the encoder during gnarly high-motion shaders.

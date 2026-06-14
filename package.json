@@ -26,7 +26,7 @@
   "scripts": {
     "dev": "npx http-server . -p 3007 -c-1",
     "test": "npx playwright test",
-    "lint": "node --check js/*.js js/noisemaker/*.js"
+    "lint": "node --check js/*.js js/ui/*.js js/noisemaker/*.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2"

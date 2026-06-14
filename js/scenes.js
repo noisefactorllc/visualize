@@ -88,7 +88,9 @@ export class Scenes {
             this._scenes[existing] = entry
         } else {
             if (this._scenes.length >= MAX_SCENES) {
-                // Drop the oldest non-pinned scene
+                // At capacity: drop the oldest scene (FIFO). Note this
+                // shifts every number-row hotkey (byIndex is positional),
+                // so slot ⇧1 becomes what was ⇧2, etc.
                 this._scenes.shift()
             }
             this._scenes.push(entry)

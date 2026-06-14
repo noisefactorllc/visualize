@@ -29,7 +29,15 @@ function openDb() {
             const db = req.result
             if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
         }
-        req.onsuccess = () => resolve(req.result)
+        req.onsuccess = () => {
+            const db = req.result
+            // One-shot prune of entries past their TTL. The read-path TTL
+            // only *hides* stale entries; without this nothing ever deletes
+            // them, so the store grows unbounded (rebind / auto-VJ mint a
+            // fresh DSL — and thus a fresh key — on every roll).
+            sweepExpired(db)
+            resolve(db)
+        }
         req.onerror = () => reject(req.error)
     }).catch(err => {
         // Browser private mode / disabled storage — disable the cache by
@@ -38,6 +46,31 @@ function openDb() {
         return null
     })
     return _dbPromise
+}
+
+/**
+ * Best-effort, fire-and-forget prune of entries older than the TTL. Runs
+ * once per session (openDb memoizes the connection). Deletes records whose
+ * `ts` is missing/non-numeric or past TTL — exactly the records the read
+ * path already treats as a miss — so it never removes a usable thumbnail.
+ */
+function sweepExpired(db) {
+    try {
+        const cutoff = Date.now() - TTL_MS
+        const tx = db.transaction(STORE, 'readwrite')
+        const req = tx.objectStore(STORE).openCursor()
+        req.onsuccess = () => {
+            const cursor = req.result
+            if (!cursor) return
+            const v = cursor.value
+            if (!v || typeof v.ts !== 'number' || v.ts < cutoff) cursor.delete()
+            cursor.continue()
+        }
+        // Best-effort: swallow cursor/transaction errors (quota, abort) so an
+        // unhandled IDBRequest error can't bubble to the connection.
+        req.onerror = () => {}
+        tx.onerror = () => {}
+    } catch { /* storage disabled / mid-teardown — ignore */ }
 }
 
 /** Short stable hash of a string. SHA-256 truncated to 16 hex chars. */
@@ -62,7 +95,12 @@ export async function getCachedThumb(key) {
                 const entry = req.result
                 if (!entry) return resolve(null)
                 if (Date.now() - entry.ts > TTL_MS) return resolve(null)
-                resolve(entry.blob || null)
+                // Guard against corrupt / old-shape records: a non-Blob would
+                // throw in createObjectURL at the call site (library.js
+                // _loadThumb), surviving only because that caller wraps the
+                // load in .catch — miss cleanly here and let the tile render.
+                if (!(entry.blob instanceof Blob)) return resolve(null)
+                resolve(entry.blob)
             }
             req.onerror = () => resolve(null)
         } catch {

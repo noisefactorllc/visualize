@@ -25,7 +25,7 @@ Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device**
 
 - **Two decks** with independent shader programs, speed control, and live preview.
 - **Crossfader** with four blend curves (linear / sharp / dipped equal-power / hard cut).
-- **35 curated programs** — 12 audio-reactive (use `audio(band: 0|1|2)` DSL automation), 23 base presets.
+- **117 curated programs** — 89 audio-reactive (use `audio(band: 0|1|2)` DSL automation), 28 base presets.
 - **Audio analyzer** maps low/mid/high FFT bands into each deck's `audioState` so DSL programs using `audio()` automation react to live mic/loopback input. Device picker + sensitivity slider.
 - **MIDI** with `requestMIDIAccess()` — assign any CC to crossfader, speed A/B, or main FX via a learn workflow. Persisted to localStorage. Optional MIDI clock follower drives BPM.
 - **Beat scheduler** with tap tempo, manual BPM input, and beat indicator. Synchronizes auto-mix and strobe.
@@ -35,12 +35,12 @@ Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device**
 - **Recording**: capture the main canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
 - **Output window**: dedicated popup that mirrors the main canvas for second-display / projector use.
 - **Fullscreen main** (F key).
-- **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), arrows (nudge xfade), Shift+S (scenes drawer), Shift+1…9 (recall scene), Esc (close drawer / exit fullscreen).
+- **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), S (settings drawer), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), E / Shift+E (rebind EQ deck A / B), M / Shift+M (rebind MIDI deck A / B), arrows (nudge xfade), Shift+S (scenes drawer), Shift+1…9 (recall scene), Esc (close drawer / exit fullscreen).
 
 ## Architecture
 
 ```
-js/
+js/ (core modules — abridged)
 ├── app.js              wiring + keyboard shortcuts
 ├── noisemaker/
 │   ├── bundle.js       ESM re-export of shader core from shaders.noisedeck.app
@@ -49,11 +49,21 @@ js/
 ├── midi.js             SharedMidi — CC routing, learn, clock-to-BPM
 ├── bpm.js              BeatScheduler — tap tempo + beat events
 ├── compositor.js       MainCompositor — 2D drawImage blend of decks + FX
+├── mixer.js            MixerRenderer — third pipeline that blends A+B via a mixer effect
+├── mixers.js           registry of mixer effects + DSL-arg builder
 ├── library.js          Library — load programs.json, render grid
 ├── automix.js          AutoMix — beat-driven scene-swap automation
+├── autoxfade.js        AutoXfade — oscillator / audio-driven crossfader automation
+├── rebind.js           rebind a program's params to audio / MIDI / oscillators
 ├── scenes.js           Scenes — named state snapshots (localStorage)
+├── userEffects.js      portable-effect (.zip) import + IndexedDB persistence
+├── deckMedia.js        per-deck camera / video / image input
 ├── recorder.js         Recorder — MediaRecorder of main canvas
-└── output.js           OutputWindow — popup mirror for projector
+├── output.js           OutputWindow — popup mirror for projector
+├── dslSourceBuilder.js, dslHelpers.js   DSL source synthesis helpers
+├── sharingLoader.js    load shared compositions via ?code=
+├── thumbnailRenderer.js, thumbnailCache.js   offscreen library-tile thumbs (IndexedDB)
+└── ui/                 codeEditor + mixerControls panels (plus tooltips, about-dialog, handfish-theme)
 ```
 
 Both decks render via their own `CanvasRenderer` to a hidden-ish offscreen-style canvas (technically visible in the deck preview pane). The main is a 2D context that samples both deck canvases each frame and blends with the active crossfade curve. This means the recorder, fullscreen, and output-window features can all hand around plain `HTMLCanvasElement` references — no `OffscreenCanvas` or `captureStream` chaining required.
@@ -68,12 +78,14 @@ Programs are written in the [Polymorphic Shader Language (DSL)](https://polymorp
   "tagline": "Kicks pulse the rotation",
   "tint": "#4ea8ff",
   "tags": ["reactive", "bass"],
+  "category": "abstract",
   "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 0, max: 1)\nnoise(scale: bass).write(o0)\nrender(o0)"
 }
 ```
 
 - `tint` — color of the card gradient in the library panel
 - `tags` — used by the search/filter box
+- `category` — optional; groups the program into a library section (`abstract`, `attractor`, `geometric`, `life`, `particles`). Programs without a category fall into the default section.
 - `dsl` — multi-line DSL (use `\n` for line breaks)
 
 For audio reactivity, declare `let name = audio(band: 0|1|2, min: ..., max: ...)` and use the name as a parameter value. Band 0 = bass, 1 = mid, 2 = treble.
@@ -87,7 +99,7 @@ npx playwright install   # first time only
 npm test
 ```
 
-The smoke test boots a local server and drives a headless Chromium through a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall. Catches regressions in any of the above before they hit production.
+`npm test` runs the Playwright suite (8 specs) against headless Chromium. The headline **smoke** spec drives a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall — and the rest cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, scenes round-trip, the share-loader, library sections, and user-effect (.zip) import. Catches regressions in any of the above before they hit production.
 
 ## Contributing
 

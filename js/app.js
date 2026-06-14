@@ -335,7 +335,7 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
-    window.__visualize = { audio, midi, decks: state.decks, rebind, state, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
+    window.__visualize = { audio, midi, decks: state.decks, rebind, state, mixer, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -922,6 +922,24 @@ async function boot() {
     }
     wireDeckMediaControls()
 
+    // Persist the active mixer effect + its overrides so a reload (and the
+    // boot-time restore near the top of boot()) reproduces the operator's
+    // tweaks. Both the dropdown AND the controls panel feed this; before the
+    // panel fed it, panel-set overrides were never written and the restore
+    // only ever saw an empty override map.
+    function persistMixer() {
+        const m = mixer.currentMixer
+        const payload = { id: m.id, overrides: { ...mixer._currentOverrides } }
+        try { localStorage.setItem('visualize.mixer.v1', JSON.stringify(payload)) } catch {}
+    }
+    // The controls panel fires on every slider `input` tick — debounce so a
+    // drag doesn't hammer synchronous localStorage writes.
+    let _mixerPersistTimer = null
+    function persistMixerDebounced() {
+        if (_mixerPersistTimer) clearTimeout(_mixerPersistTimer)
+        _mixerPersistTimer = setTimeout(persistMixer, 250)
+    }
+
     /**
      * Populate + wire the mixer-effect dropdown. Per-effect mode
      * (e.g. blend's blendMode param) is now exposed by the
@@ -938,16 +956,10 @@ async function boot() {
         sel.setOptions(MIXERS.map(m => ({ value: m.id, text: m.label })))
         sel.setAttribute('value', mixer.currentMixer.id)
 
-        function persist() {
-            const m = mixer.currentMixer
-            const payload = { id: m.id, overrides: { ...mixer._currentOverrides } }
-            try { localStorage.setItem('visualize.mixer.v1', JSON.stringify(payload)) } catch {}
-        }
-
         sel.addEventListener('change', async () => {
             await mixer.setMixerEffect(sel.value)
             mixerControlsPanel?.show(mixer.currentMixer.id)
-            persist()
+            persistMixer()
         })
     }
 
@@ -962,7 +974,9 @@ async function boot() {
     function wireMixerControls(mixer) {
         const root = $('mixer-controls')
         if (!root) return
-        mixerControlsPanel = new MixerControls(root, mixer)
+        // Pass a persist hook so panel-set overrides survive a reload (the
+        // dropdown's own persist only fires on effect switch).
+        mixerControlsPanel = new MixerControls(root, mixer, persistMixerDebounced)
         mixerControlsPanel.show(mixer.currentMixer.id)
     }
 

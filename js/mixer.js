@@ -59,6 +59,10 @@ export class MixerRenderer {
         this._deckBCanvas = null
         this._rafId = null
         this._loadedMixerIds = new Set()
+        // Gates the `ready` getter (with _initialized). Set here so a stray
+        // read before init() never sees `undefined` — it only works today
+        // because `_initialized && undefined` short-circuits to false.
+        this._uploadedAtLeastOnce = false
 
         // Step indices of the two synth/media effects in the compiled
         // pipeline + the mixer effect itself. `write()` calls bump step
@@ -91,8 +95,10 @@ export class MixerRenderer {
         await this.renderer.loadEffects(['synth/media', DEFAULT_MIXER_ID])
         this._loadedMixerIds.add(DEFAULT_MIXER_ID)
         await this._recompile()
-        this._initialized = true
+        // Reset the upload gate before flipping _initialized so `ready`
+        // never reports true on a stale frame from a prior init.
         this._uploadedAtLeastOnce = false
+        this._initialized = true
     }
 
     /** Hand off the two deck canvases that should feed the mixer. */
