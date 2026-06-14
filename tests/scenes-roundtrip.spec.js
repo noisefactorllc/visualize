@@ -278,3 +278,83 @@ test('scenes round-trip: mixer effect and pixel density survive', async ({ brows
     }
 })
 
+test('mixer enum control: shows the active choice + persists/restores it across reload', async ({ browser }) => {
+    // Two regressions in one path:
+    //  (1) enum dropdowns showed blank/first because the widget was set to
+    //      the choice *name* while option values are stringified *numbers*;
+    //  (2) controls-panel tweaks were never persisted (only the effect-
+    //      switch persisted, after clearing overrides), so a reload lost them.
+    const sel = '#mixer-controls .mixer-control-row[data-param-key="mode"] select-dropdown'
+    const { context, page } = await boot(browser)
+    try {
+        // Default mixer is blend; wait for its `mode` enum row to render.
+        await page.waitForFunction((q) => {
+            const el = document.querySelector(q)
+            return el && typeof el.getOptions === 'function' && el.getOptions().length > 1
+        }, sel, { timeout: 30_000 })
+
+        // (1) The dropdown must DISPLAY the active selection — its value
+        //     must be a real option value (not the bare name) and resolve
+        //     to the default 'mix'.
+        const initial = await page.evaluate((q) => {
+            const el = document.querySelector(q)
+            const opts = el.getOptions()
+            return {
+                value: el.value,
+                selectedText: opts.find(o => o.value === el.value)?.text ?? null,
+                optionValues: opts.map(o => o.value)
+            }
+        }, sel)
+        expect(initial.optionValues).toContain(initial.value)   // not the raw choice name
+        expect(initial.selectedText).toBe('mix')
+
+        // Change mode via the panel dropdown, like a user, then let the
+        // 250ms persist debounce fire.
+        const chosen = await page.evaluate((q) => {
+            const el = document.querySelector(q)
+            const opts = el.getOptions()
+            const target = opts.find(o => o.text === 'add') || opts.find(o => o.value !== el.value)
+            el.value = target.value
+            el.dispatchEvent(new Event('change'))
+            return target.text
+        }, sel)
+        // (2) The override is persisted as the choice NAME (existing schema).
+        //     The write is debounced (~250ms) and can be delayed further by
+        //     the concurrent mixer recompile, so poll rather than fixed-wait.
+        await page.waitForFunction((expected) => {
+            try {
+                const m = JSON.parse(localStorage.getItem('visualize.mixer.v1') || 'null')
+                return m?.overrides?.mode === expected
+            } catch { return false }
+        }, chosen, { timeout: 10_000 })
+        const persisted = await page.evaluate(() => {
+            try { return JSON.parse(localStorage.getItem('visualize.mixer.v1') || 'null') } catch { return null }
+        })
+        expect(persisted?.overrides?.mode).toBe(chosen)
+
+        // Reload → boot-restore must rebuild the panel showing the restored
+        // choice (exercises persistence + the name→value display mapping).
+        await page.reload()
+        await page.click('#boot-start')
+        await page.waitForFunction(() => !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 })
+        await page.waitForFunction((q) => {
+            const el = document.querySelector(q)
+            return el && typeof el.getOptions === 'function' && el.getOptions().length > 1
+        }, sel, { timeout: 30_000 })
+
+        const restored = await page.evaluate((q) => {
+            const el = document.querySelector(q)
+            const opts = el.getOptions()
+            return {
+                value: el.value,
+                selectedText: opts.find(o => o.value === el.value)?.text ?? null,
+                optionValues: opts.map(o => o.value)
+            }
+        }, sel)
+        expect(restored.optionValues).toContain(restored.value)
+        expect(restored.selectedText).toBe(chosen)
+    } finally {
+        await context.close()
+    }
+})
+

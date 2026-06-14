@@ -89,6 +89,43 @@ async function importFixture(page, fixture) {
     }, { defJson: JSON.stringify(fixture.definition), glsl: fixture.glsl })
 }
 
+/**
+ * Build a macOS-Finder-"Compress"-style zip: the real effect under a
+ * top-level folder, PLUS the __MACOSX/ AppleDouble sidecars and a
+ * .DS_Store that Finder adds. The junk `._definition.json` is written
+ * FIRST so it's the first entry whose name ends in "definition.json" —
+ * which is exactly the ordering that made the old `endsWith()` detector
+ * pick the sidecar (basePath "__MACOSX/<folder>/._") and fail the import.
+ */
+async function importMacZip(page, fixture, folder = 'macFx') {
+    await page.evaluate(async ({ defJson, glsl, folder }) => {
+        if (typeof window.JSZip === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script')
+                s.src = 'js/lib/jszip.min.js'
+                s.onload = resolve
+                s.onerror = reject
+                document.head.appendChild(s)
+            })
+        }
+        const zip = new window.JSZip()
+        // Junk first — the ordering that broke the old detector.
+        zip.file(`__MACOSX/${folder}/._definition.json`, 'AppleDouble-sidecar-not-json')
+        zip.file(`__MACOSX/${folder}/glsl/._main.glsl`, 'AppleDouble-sidecar')
+        zip.file(`${folder}/.DS_Store`, 'ds-store')
+        // Real effect under the top-level folder.
+        zip.file(`${folder}/definition.json`, defJson)
+        zip.file(`${folder}/glsl/main.glsl`, glsl)
+        const blob = await zip.generateAsync({ type: 'blob' })
+        const file = new File([blob], `${folder}.zip`, { type: 'application/zip' })
+        const input = document.getElementById('user-effect-file')
+        const dt = new DataTransfer()
+        dt.items.add(file)
+        input.files = dt.files
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+    }, { defJson: JSON.stringify(fixture.definition), glsl: fixture.glsl, folder })
+}
+
 test.describe('user effects', () => {
     test.beforeEach(async ({ page }) => {
         // Clear the user-effects IndexedDB between tests so each runs
@@ -130,6 +167,27 @@ test.describe('user effects', () => {
             els => els.map(el => el.dataset.title)
         )
         expect(userCards).toContain('My Test Fx')
+
+        expect(pageErrors, pageErrors.join('\n')).toEqual([])
+    })
+
+    test('import zip with macOS __MACOSX / AppleDouble sidecars still installs', async ({ page }) => {
+        const pageErrors = []
+        page.on('pageerror', (err) => pageErrors.push(err.message))
+
+        await page.goto('/')
+        await page.click('#boot-start')
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.click('#settings-toggle')
+
+        // The real <folder>/definition.json must win over the
+        // __MACOSX/<folder>/._definition.json sidecar (regression: the
+        // old detector matched the sidecar and threw on import).
+        await importMacZip(page, makeFixture('macFx'))
+
+        await expect(page.locator('#user-effect-status')).toContainText('installed user/macFx', { timeout: 15_000 })
+        await expect(page.locator('.user-effect-row[data-id="user/macFx"]')).toBeVisible()
+        await expect(page.locator('.lib-section[data-category="user"] .program-card[data-title="Mac Fx"]')).toBeVisible({ timeout: 10_000 })
 
         expect(pageErrors, pageErrors.join('\n')).toEqual([])
     })
