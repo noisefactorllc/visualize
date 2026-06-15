@@ -32,8 +32,6 @@ export class SharedAudio {
         this._onMeters = null
 
         this.meters = { sub: 0, low: 0, mid: 0, high: 0, vol: 0 }
-        this.spectrum = new Uint8Array(128)
-        this.waveform = new Uint8Array(256)
     }
 
     static isSupported() {
@@ -184,20 +182,7 @@ export class SharedAudio {
         this._analyser.getByteFrequencyData(this._fftData)
         this._analyser.getByteTimeDomainData(this._timeDomainData)
 
-        // Copy a downsampled spectrum for the UI meter
-        const spectrumOut = this.spectrum
         const fft = this._fftData
-        const ratio = fft.length / spectrumOut.length
-        for (let i = 0; i < spectrumOut.length; i++) {
-            spectrumOut[i] = fft[Math.floor(i * ratio)] || 0
-        }
-        const wave = this.waveform
-        const td = this._timeDomainData
-        const wr = td.length / wave.length
-        for (let i = 0; i < wave.length; i++) {
-            wave[i] = td[Math.floor(i * wr)] || 128
-        }
-
         const sens = this._sensitivity
         // sub: just the deepest FFT bin (~0-187Hz at our 48kHz/256
         // fftSize). Distinct from low (bins 0-3 avg) so the operator
