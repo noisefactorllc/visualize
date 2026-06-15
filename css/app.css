@@ -168,6 +168,7 @@ select:focus-visible,
    it an explicit compact footprint (≈4:1) that seats inside the 72px bar; the
    bezel mirrors the OLED-glass treatment used by the sibling rack apps. */
 .vz-led {
+    display: none; /* hidden for now */
     flex: none;
     width: 124px;
     height: 31px;
