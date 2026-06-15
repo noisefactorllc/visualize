@@ -214,6 +214,11 @@ export class Deck {
         }
     }
 
+    /** Current effective playback speed (the source of truth for MIDI takeover). */
+    get speed() {
+        return this._speed
+    }
+
     /**
      * Set effective playback speed by adjusting loop duration.
      * speed > 1 = faster (shorter loop), < 1 = slower.

@@ -27,7 +27,7 @@ Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device**
 - **Crossfader** with four blend curves (linear / sharp / dipped equal-power / hard cut).
 - **117 curated programs** — 89 audio-reactive (use `audio(band: 0|1|2)` DSL automation), 28 base presets.
 - **Audio analyzer** maps low/mid/high FFT bands into each deck's `audioState` so DSL programs using `audio()` automation react to live mic/loopback input. Device picker + sensitivity slider.
-- **MIDI** with `requestMIDIAccess()` — assign any CC to crossfader, speed A/B, or main FX via a learn workflow. Persisted to localStorage. Optional MIDI clock follower drives BPM.
+- **MIDI** with `requestMIDIAccess()` — learn any CC **or Note** to crossfader, speed A/B, or any of the 6 main FX. Faders use **soft-takeover** (no jumps after a scene/auto-mix move); FX toggles are edge-detected (momentary `flash`, latching others). Per-mapping range + invert editing, live value bars, and conflict warnings. Persisted to localStorage. Optional MIDI clock follower drives BPM.
 - **Beat scheduler** with tap tempo, manual BPM input, and beat indicator. Synchronizes auto-mix and strobe.
 - **Main FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the main canvas (cheap); strobe/flash/freeze are handled inside the compositor draw loop.
 - **Auto-VJ mode**: every N bars, picks a fresh random program, loads into the off-side deck, and fades to it over the chosen curve.

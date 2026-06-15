@@ -19,6 +19,7 @@
  */
 
 const STORAGE_KEY = 'visualize.midi.learn.v1'
+const PICKUP_EPS = 0.02   // soft-takeover catch tolerance (0..1)
 
 // MIDI System Real-Time. Public so unit tests can pin the constants.
 export const MIDI_TICKS_PER_BEAT = 24
@@ -47,6 +48,77 @@ export function bpmFromTickIntervals(timestamps) {
     return 60_000 / (avgInterval * MIDI_TICKS_PER_BEAT)
 }
 
+/**
+ * Normalize a raw 0..127 controller value into 0..1 across [min,max],
+ * with optional inversion. min===max is guarded (span >= 1) so a
+ * degenerate range never divides by zero. Result is clamped to 0..1.
+ */
+export function normalizeCcValue(raw, min = 0, max = 127, invert = false) {
+    const lo = Math.min(min, max)
+    const hi = Math.max(min, max)
+    const span = Math.max(1, hi - lo)
+    let v = (raw - lo) / span
+    v = Math.max(0, Math.min(1, v))
+    return invert ? 1 - v : v
+}
+
+/**
+ * Rising-edge detector for latch/momentary controls. `fire` is true only
+ * on the off→on transition, so a fader held above threshold (or jittering)
+ * toggles exactly once; crossing back below re-arms it.
+ */
+export function computeEdgeToggle(prevOn, on) {
+    return { fire: !!on && !prevOn, nextOn: !!on }
+}
+
+/**
+ * Soft-takeover (pickup). Decides whether an incoming continuous value
+ * may drive the control yet, so a physical fader whose position diverged
+ * from software (after a scene recall, auto-xfade, cut or nudge) does not
+ * jump. The control "catches" when the incoming value passes through (or
+ * lands within eps of) the current software value.
+ *   engaged  - already driving
+ *   armSide  - side of `current` recorded when armed (-1 | 1 | null)
+ *   incoming - normalized 0..1 from hardware
+ *   current  - control's current software value 0..1
+ *   eps      - catch tolerance
+ */
+export function computePickup({ engaged, armSide, incoming, current, eps = 0.02 }) {
+    if (engaged) return { engaged: true, apply: true, value: incoming, armSide: null }
+    if (Math.abs(incoming - current) <= eps) {
+        return { engaged: true, apply: true, value: incoming, armSide: null }
+    }
+    const side = incoming > current ? 1 : -1
+    if (armSide == null) return { engaged: false, apply: false, value: null, armSide: side }
+    if (side !== armSide) return { engaged: true, apply: true, value: incoming, armSide: null }
+    return { engaged: false, apply: false, value: null, armSide }
+}
+
+/**
+ * Detect CC/note collisions. Returns an object keyed by controlId for
+ * every control that shares its (kind, channel, cc|note) with at least
+ * one other control: { key, others: [controlId, ...] }. Dispatch still
+ * fires all matches; the UI uses this only to badge the rows.
+ */
+export function findConflicts(assignments) {
+    const byKey = new Map()
+    for (const [id, a] of Object.entries(assignments || {})) {
+        if (!a || a.ch == null) continue
+        const kind = a.kind || 'cc'
+        const num = kind === 'note' ? a.note : a.cc
+        if (num == null) continue
+        const key = `${kind}:${a.ch}:${num}`
+        if (!byKey.has(key)) byKey.set(key, [])
+        byKey.get(key).push(id)
+    }
+    const out = {}
+    for (const [key, ids] of byKey) {
+        if (ids.length < 2) continue
+        for (const id of ids) out[id] = { key, others: ids.filter(x => x !== id) }
+    }
+    return out
+}
+
 export class SharedMidi {
     constructor() {
         this._access = null
@@ -62,6 +134,10 @@ export class SharedMidi {
         // with limited travel, or unusual controllers map correctly.
         this._assignments = this._loadAssignments()
         this._controlHandlers = new Map() // controlId -> { handler(value01), label }
+        // controlId -> { prevOn, engaged, armSide, lastWritten } runtime
+        // state for edge detection (latch/momentary) and pickup (continuous).
+        this._controlRuntime = new Map()
+        this._onControlActivity = null
         this._learningControlId = null
         this._learningCapture = null // { ch, cc, min, max } once first CC arrives
         this._learnWindowMs = 2000   // observe range this long after first CC
@@ -140,13 +216,39 @@ export class SharedMidi {
     }
 
     /**
-     * Register a control the user can MIDI-learn.
-     *   controlId: stable string used as the storage key
-     *   label:     human label for the UI
-     *   handler:   called as (value01) when a bound CC fires
+     * Register a learnable control.
+     *   controlId: stable storage key
+     *   opts: { label, kind, handler, getValue }
+     *     kind 'continuous' → handler(value01); getValue()→0..1 enables takeover
+     *     kind 'latch'      → handler() once per rising edge (caller toggles)
+     *     kind 'momentary'  → handler() once per press
+     * Legacy (controlId, label, handler) is still accepted (continuous).
      */
-    registerControl(controlId, label, handler) {
-        this._controlHandlers.set(controlId, { handler, label })
+    registerControl(controlId, opts, legacyHandler) {
+        let info
+        if (typeof opts === 'string') {
+            info = { label: opts, kind: 'continuous', handler: legacyHandler, getValue: null }
+        } else {
+            info = {
+                label: opts.label,
+                kind: opts.kind || 'continuous',
+                handler: opts.handler,
+                getValue: typeof opts.getValue === 'function' ? opts.getValue : null,
+            }
+        }
+        this._controlHandlers.set(controlId, info)
+        this._controlRuntime.set(controlId, { prevOn: false, engaged: false, armSide: null, lastWritten: null })
+    }
+
+    /** Subscribe to per-control activity: cb(controlId, { value01, engaged, pickup }). */
+    onControlActivity(cb) { this._onControlActivity = cb }
+
+    _fireActivity(controlId, payload) {
+        if (this._onControlActivity) this._onControlActivity(controlId, payload)
+    }
+
+    _resetRuntime(controlId) {
+        this._controlRuntime.set(controlId, { prevOn: false, engaged: false, armSide: null, lastWritten: null })
     }
 
     /** Begin learning the next CC for the given control. */
@@ -216,6 +318,7 @@ export class SharedMidi {
         // Abort any in-flight MIDI-learn so its pending commit timer can't
         // fire a phantom assignment (and persist it) after MIDI is off.
         if (this._learningControlId) this.cancelLearn()
+        for (const id of this._controlRuntime.keys()) this._resetRuntime(id)
         this._tickTimes = []
         this._smoothedBpm = null
         this._clearNoClockWatchdog()
@@ -281,58 +384,93 @@ export class SharedMidi {
         if (status === 0xB0) {
             const cc = data[1]
             const value = data[2]
+            if (this._learningControlId) { this._captureCc(channel, cc, value); return }
 
-            // Learn capture — first CC seen locks ch+cc; we then keep
-            // tracking min/max for _learnWindowMs so the user can wiggle
-            // the control through its full range.
-            if (this._learningControlId) {
-                if (!this._learningCapture) {
-                    this._learningCapture = { ch: channel, cc, min: value, max: value }
-                    this._learnCommitTimer = setTimeout(() => this._commitLearn(), this._learnWindowMs)
-                } else if (this._learningCapture.ch === channel && this._learningCapture.cc === cc) {
-                    if (value < this._learningCapture.min) this._learningCapture.min = value
-                    if (value > this._learningCapture.max) this._learningCapture.max = value
-                }
-                // Don't dispatch while learning to avoid bound controls firing on
-                // the same CC we're capturing.
-                return
-            }
+            this._dispatch('cc', channel, cc, value, false)
 
-            // Dispatch to bound control(s), normalising into the
-            // assigned min/max range. Defaults to 0..127 for assignments
-            // saved before range-learn existed.
-            for (const [controlId, asg] of Object.entries(this._assignments)) {
-                if (asg.ch === channel && asg.cc === cc) {
-                    const min = asg.min ?? 0
-                    const max = asg.max ?? 127
-                    const span = Math.max(1, max - min)
-                    const value01 = Math.max(0, Math.min(1, (value - min) / span))
-                    const handler = this._controlHandlers.get(controlId)?.handler
-                    if (handler) handler(value01)
-                }
-            }
-
-            // Mirror into each deck's midiState (use raw 0..1 scaling
-            // here — the noisemaker midi() automation does its own
-            // mapping with min/max args)
+            // Mirror raw 0..1 into deck midiState (noisemaker midi() does
+            // its own min/max), and feed the Auto-Mix last-CC tracker.
             const raw01 = value / 127
             for (const state of this._midiStates.values()) {
                 this._writeCcIntoMidiState(state, channel, cc, raw01)
             }
-
-            // Track the latest CC value for the channel + fan out to
-            // subscribers (Auto-Mix watches this).
             this._lastCcByChannel.set(channel, raw01)
             for (const cb of this._lastCcListeners) cb(channel, raw01)
+            return
         }
 
-        // Note on/off — mirror into midiState
+        // Note on/off
         if (status === 0x90 || status === 0x80) {
             const note = data[1]
-            const velocity = (status === 0x90 ? data[2] : 0) / 127
+            const noteOn = status === 0x90 && data[2] > 0
+            const velocity = noteOn ? data[2] : 0
+            if (this._learningControlId && noteOn) { this._captureNote(channel, note); return }
+
+            this._dispatch('note', channel, note, velocity, noteOn)
+
             for (const state of this._midiStates.values()) {
-                this._writeNoteIntoMidiState(state, channel, note, velocity)
+                this._writeNoteIntoMidiState(state, channel, note, velocity / 127)
             }
+        }
+    }
+
+    /**
+     * Route one input event to every bound control. inputKind is 'cc' or
+     * 'note'; `num` is the cc or note number; `raw` is 0..127 (velocity for
+     * notes); `noteOn` matters only for note-driven latch/momentary edges.
+     */
+    _dispatch(inputKind, ch, num, raw, noteOn) {
+        for (const [controlId, asg] of Object.entries(this._assignments)) {
+            if ((asg.kind || 'cc') !== inputKind) continue
+            if (asg.ch !== ch) continue
+            const aNum = (asg.kind === 'note') ? asg.note : asg.cc
+            if (aNum !== num) continue
+
+            const info = this._controlHandlers.get(controlId)
+            if (!info) continue
+            const rt = this._controlRuntime.get(controlId)
+                || { prevOn: false, engaged: false, armSide: null, lastWritten: null }
+
+            const norm = normalizeCcValue(raw, asg.min ?? 0, asg.max ?? 127, !!asg.invert)
+
+            if (info.kind === 'continuous') {
+                let current
+                if (info.getValue) {
+                    try {
+                        current = Math.max(0, Math.min(1, info.getValue()))
+                    } catch {
+                        current = rt.lastWritten ?? norm
+                    }
+                } else {
+                    current = rt.lastWritten ?? norm
+                }
+                // Re-arm if software moved from a non-MIDI source since our last write.
+                if (rt.engaged && rt.lastWritten != null && Math.abs(current - rt.lastWritten) > PICKUP_EPS) {
+                    rt.engaged = false
+                    rt.armSide = null
+                }
+                const res = computePickup({
+                    engaged: rt.engaged, armSide: rt.armSide,
+                    incoming: norm, current, eps: PICKUP_EPS,
+                })
+                rt.engaged = res.engaged
+                rt.armSide = res.armSide
+                if (res.apply) {
+                    info.handler(res.value)
+                    rt.lastWritten = res.value
+                }
+                this._fireActivity(controlId, { value01: norm, engaged: rt.engaged, pickup: !rt.engaged, armSide: rt.armSide })
+            } else {
+                const on = (inputKind === 'note') ? !!noteOn : (norm >= 0.5)
+                const edge = computeEdgeToggle(rt.prevOn, on)
+                rt.prevOn = edge.nextOn
+                if (edge.fire) info.handler()
+                this._fireActivity(controlId, {
+                    value01: (inputKind === 'note') ? (noteOn ? 1 : 0) : norm,
+                    engaged: true, pickup: false,
+                })
+            }
+            this._controlRuntime.set(controlId, rt)
         }
     }
 
@@ -367,6 +505,29 @@ export class SharedMidi {
         }
     }
 
+    _captureCc(channel, cc, value) {
+        if (!this._learningCapture) {
+            this._learningCapture = { ch: channel, cc, min: value, max: value }
+            this._learnCommitTimer = setTimeout(() => this._commitLearn(), this._learnWindowMs)
+        } else if (this._learningCapture.ch === channel && this._learningCapture.cc === cc) {
+            if (value < this._learningCapture.min) this._learningCapture.min = value
+            if (value > this._learningCapture.max) this._learningCapture.max = value
+        }
+    }
+
+    _captureNote(channel, note) {
+        const id = this._learningControlId
+        if (!id) return
+        this._assignments[id] = { kind: 'note', ch: channel, note, min: 0, max: 127, invert: false }
+        this._learningControlId = null
+        this._learningCapture = null
+        if (this._learnCommitTimer) { clearTimeout(this._learnCommitTimer); this._learnCommitTimer = null }
+        this._saveAssignments()
+        this._resetRuntime(id)
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+        this._notify(`learned: ${id} ← note ${note} ch ${channel + 1}`)
+    }
+
     _commitLearn() {
         if (!this._learningControlId || !this._learningCapture) return
         const id = this._learningControlId
@@ -376,13 +537,14 @@ export class SharedMidi {
         // available later.
         const min = cap.min < cap.max ? cap.min : 0
         const max = cap.max > cap.min ? cap.max : 127
-        this._assignments[id] = { ch: cap.ch, cc: cap.cc, min, max }
+        this._assignments[id] = { kind: 'cc', ch: cap.ch, cc: cap.cc, min, max, invert: false }
         this._learningControlId = null
         this._learningCapture = null
         if (this._learnCommitTimer) {
             clearTimeout(this._learnCommitTimer)
             this._learnCommitTimer = null
         }
+        this._resetRuntime(id)
         this._saveAssignments()
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
         this._notify(`learned: ${id} ← CC ${cap.cc} ch ${cap.ch + 1} (${min}-${max})`)
@@ -451,19 +613,47 @@ export class SharedMidi {
         if (this._onClockStatusChange) this._onClockStatusChange(status)
     }
 
+    setRange(controlId, min, max) {
+        const a = this._assignments[controlId]
+        if (!a) return
+        const lo = Number(min), hi = Number(max)
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) return
+        a.min = Math.max(0, Math.min(127, Math.round(lo)))
+        a.max = Math.max(0, Math.min(127, Math.round(hi)))
+        this._saveAssignments()
+        this._resetRuntime(controlId)
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+    }
+
+    setInvert(controlId, on) {
+        const a = this._assignments[controlId]
+        if (!a) return
+        a.invert = !!on
+        this._saveAssignments()
+        this._resetRuntime(controlId)
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+    }
+
     getLearnView() {
+        const conflicts = findConflicts(this._assignments)
         const rows = []
         for (const [controlId, info] of this._controlHandlers.entries()) {
             const asg = this._assignments[controlId]
+            const conflict = conflicts[controlId] || null
             rows.push({
                 controlId,
                 label: info.label,
+                controlKind: info.kind,
+                kind: asg ? (asg.kind || 'cc') : undefined,
                 ch: asg?.ch,
                 cc: asg?.cc,
+                note: asg?.note,
                 min: asg?.min,
                 max: asg?.max,
+                invert: !!asg?.invert,
+                conflict,
                 learning: this._learningControlId === controlId,
-                capturing: this._learningControlId === controlId && !!this._learningCapture
+                capturing: this._learningControlId === controlId && !!this._learningCapture,
             })
         }
         return rows

@@ -335,7 +335,7 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
-    window.__visualize = { audio, midi, decks: state.decks, rebind, state, mixer, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
+    window.__visualize = { audio, midi, compositor, decks: state.decks, rebind, state, mixer, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -1417,25 +1417,66 @@ async function boot() {
             compositor.setCrossfade(v01)
             xfaderEl.value = String(v01)
         },
+        crossfaderValue: () => state.crossfade,
         speedA: (v01) => {
             const s = 0.1 + v01 * 3.9
             state.decks.A.setSpeed(s)
             $('speed-a').value = String(s)
             $('speed-a-val').textContent = `${s.toFixed(1)}×`
         },
+        speedAValue: () => (state.decks.A.speed - 0.1) / 3.9,
         speedB: (v01) => {
             const s = 0.1 + v01 * 3.9
             state.decks.B.setSpeed(s)
             $('speed-b').value = String(s)
             $('speed-b-val').textContent = `${s.toFixed(1)}×`
         },
-        fxStrobe: (v01) => { if (v01 > 0.5) toggleFx('strobe') },
-        fxInvert: (v01) => { if (v01 > 0.5) toggleFx('invert') },
-        fxFlash: (v01) => { if (v01 > 0.5) compositor.flash() },
-        fxFreeze: (v01) => { if (v01 > 0.5) toggleFx('freeze') }
+        speedBValue: () => (state.decks.B.speed - 0.1) / 3.9,
+        fxToggle: (name) => toggleFx(name),
+        fxFlash: () => compositor.flash(),
     })
     midi.onLearnUpdate((rows) => renderLearnRows(rows, midi))
     renderLearnRows(midi.getLearnView(), midi)
+
+    // Live value bars — engine fires per message; coalesce to one DOM
+    // update per frame to avoid thrash.
+    let _activityPending = null
+    midi.onControlActivity((controlId, payload) => {
+        if (!renderLearnRows._bars) return
+        const entry = renderLearnRows._bars.get(controlId)
+        if (!entry) return
+        _activityPending = _activityPending || new Map()
+        _activityPending.set(controlId, payload)
+        if (_activityPending._scheduled) return
+        _activityPending._scheduled = true
+        requestAnimationFrame(() => {
+            const batch = _activityPending; _activityPending = null
+            if (!batch || !renderLearnRows._bars) return
+            for (const [id, p] of batch) {
+                const e = renderLearnRows._bars.get(id)
+                if (!e) continue
+                e.fill.style.width = `${Math.round((p.value01 || 0) * 100)}%`
+                e.row.classList.toggle('pickup', !!p.pickup)
+                // Pickup direction arrow
+                if (p.pickup && p.armSide != null) {
+                    if (e.dir) e.dir.textContent = p.armSide > 0 ? '◂' : '▸'
+                } else {
+                    if (e.dir) e.dir.textContent = ''
+                }
+                // Engage pulse: transition from pickup→engaged
+                if (e.prevPickup && !p.pickup) {
+                    clearTimeout(e._flashTimer)
+                    e.row.classList.remove('ml-engaged-flash')
+                    // Force reflow so re-adding the class restarts the animation
+                    void e.row.offsetWidth
+                    e.row.classList.add('ml-engaged-flash')
+                    e._flashTimer = setTimeout(() => e.row.classList.remove('ml-engaged-flash'), 300)
+                }
+                e.prevPickup = !!p.pickup
+            }
+        })
+    })
+
     $('midi-learn-clear').addEventListener('click', () => midi.clearAllAssignments())
 
     // Main resolution / loop / WebGPU
@@ -1970,41 +2011,77 @@ function setupUserEffectsPanel(userEffects, renderer) {
 }
 
 function registerMidiControls(midi, controls) {
-    midi.registerControl('crossfader', 'crossfader',     controls.crossfader)
-    midi.registerControl('speedA',     'speed A',         controls.speedA)
-    midi.registerControl('speedB',     'speed B',         controls.speedB)
-    midi.registerControl('fxStrobe',   'fx · strobe',     controls.fxStrobe)
-    midi.registerControl('fxInvert',   'fx · invert',     controls.fxInvert)
-    midi.registerControl('fxFlash',    'fx · flash',      controls.fxFlash)
-    midi.registerControl('fxFreeze',   'fx · freeze',     controls.fxFreeze)
+    midi.registerControl('crossfader', { label: 'crossfader', kind: 'continuous', handler: controls.crossfader, getValue: controls.crossfaderValue })
+    midi.registerControl('speedA',     { label: 'speed A',    kind: 'continuous', handler: controls.speedA, getValue: controls.speedAValue })
+    midi.registerControl('speedB',     { label: 'speed B',    kind: 'continuous', handler: controls.speedB, getValue: controls.speedBValue })
+    midi.registerControl('fxStrobe',   { label: 'fx · strobe', kind: 'latch', handler: () => controls.fxToggle('strobe') })
+    midi.registerControl('fxInvert',   { label: 'fx · invert', kind: 'latch', handler: () => controls.fxToggle('invert') })
+    midi.registerControl('fxBW',       { label: 'fx · b&w',    kind: 'latch', handler: () => controls.fxToggle('bw') })
+    midi.registerControl('fxZoom',     { label: 'fx · zoom',   kind: 'latch', handler: () => controls.fxToggle('zoom') })
+    midi.registerControl('fxFreeze',   { label: 'fx · freeze', kind: 'latch', handler: () => controls.fxToggle('freeze') })
+    midi.registerControl('fxFlash',    { label: 'fx · flash',  kind: 'momentary', handler: () => controls.fxFlash() })
 }
 
 function renderLearnRows(rows, midi) {
     const container = $('midi-learn-rows')
     if (!container) return
     container.innerHTML = ''
+    renderLearnRows._bars = new Map()   // controlId -> { fill, row }
+
     for (const row of rows) {
         const div = document.createElement('div')
         div.className = 'midi-learn-row'
         if (row.learning) div.classList.add('learning')
-        let ccLabel
+        if (row.conflict) div.classList.add('conflict')
+
+        // Binding text
+        let bindingText
         if (row.capturing) {
-            ccLabel = `<span class="ml-cc">CC ${row.cc} · ch ${row.ch + 1} <span style="opacity:0.7">— wiggle through range…</span></span>`
-        } else if (row.cc != null) {
+            bindingText = `CC ${row.cc} · ch ${row.ch + 1} — wiggle through range…`
+        } else if (row.kind === 'note' && row.note != null) {
+            bindingText = `note ${row.note} · ch ${row.ch + 1}`
+        } else if (row.kind === 'cc' && row.cc != null) {
             const rangeText = (row.min != null && row.max != null && (row.min !== 0 || row.max !== 127))
-                ? ` (${row.min}-${row.max})`
-                : ''
-            ccLabel = `<span class="ml-cc">CC ${row.cc} · ch ${row.ch + 1}${rangeText}</span>`
+                ? ` (${row.min}-${row.max})` : ''
+            bindingText = `CC ${row.cc} · ch ${row.ch + 1}${rangeText}${row.invert ? ' ⇄' : ''}`
         } else {
-            ccLabel = `<span class="ml-cc" style="opacity:0.5">${row.learning ? 'move a knob…' : 'unassigned'}</span>`
+            bindingText = row.learning ? 'move a knob or pad…' : 'unassigned'
         }
-        div.innerHTML = `
-            <span class="ml-target">${row.label}</span>
-            ${ccLabel}
-            <span></span>
-        `
+
+        const target = document.createElement('span')
+        target.className = 'ml-target'
+        target.textContent = row.label
+
+        const binding = document.createElement('span')
+        binding.className = 'ml-cc'
+        binding.textContent = bindingText
+        if (row.cc == null && row.note == null) binding.style.opacity = '0.5'
+
+        // Live value bar
+        const barCell = document.createElement('span')
+        barCell.className = 'ml-bar-cell'
+        const bar = document.createElement('span')
+        bar.className = 'ml-bar'
+        const fill = document.createElement('span')
+        fill.className = 'ml-bar-fill'
+        const dir = document.createElement('span')
+        dir.className = 'ml-bar-dir'
+        bar.appendChild(fill)
+        barCell.appendChild(bar)
+        barCell.appendChild(dir)
+        renderLearnRows._bars.set(row.controlId, { fill, dir, row: div, prevPickup: false })
+
+        // Conflict badge
+        const badge = document.createElement('span')
+        badge.className = 'ml-conflict'
+        if (row.conflict) {
+            badge.textContent = '⚠'
+            setTooltip(badge, `shares ${row.conflict.key.replace('cc:', 'CC ').replace('note:', 'note ')} with ${row.conflict.others.join(', ')}`)
+        }
+
+        // Actions
         const actions = document.createElement('span')
-        actions.style.cssText = 'display:flex; gap:4px;'
+        actions.className = 'ml-actions'
         if (row.learning) {
             const cancel = document.createElement('button')
             cancel.textContent = '✕'
@@ -2013,11 +2090,19 @@ function renderLearnRows(rows, midi) {
             actions.appendChild(cancel)
         } else {
             const learn = document.createElement('button')
-            learn.textContent = row.cc != null ? '↻' : '◉'
-            setTooltip(learn, row.cc != null ? 'relearn' : 'learn')
+            learn.textContent = (row.cc != null || row.note != null) ? '↻' : '◉'
+            setTooltip(learn, (row.cc != null || row.note != null) ? 'relearn' : 'learn')
             learn.addEventListener('click', () => midi.startLearn(row.controlId))
             actions.appendChild(learn)
-            if (row.cc != null) {
+            if (row.cc != null || row.note != null) {
+                // Edit (range/invert) — only meaningful for CC bindings
+                if (row.kind === 'cc') {
+                    const edit = document.createElement('button')
+                    edit.textContent = '⋯'
+                    setTooltip(edit, 'edit range / invert')
+                    edit.addEventListener('click', () => div.classList.toggle('editing'))
+                    actions.appendChild(edit)
+                }
                 const clear = document.createElement('button')
                 clear.textContent = '✕'
                 setTooltip(clear, 'clear')
@@ -2025,7 +2110,38 @@ function renderLearnRows(rows, midi) {
                 actions.appendChild(clear)
             }
         }
-        div.appendChild(actions)
+
+        div.append(target, binding, barCell, badge, actions)
+
+        // Edit panel (range + invert), hidden until .editing
+        if (row.kind === 'cc' && (row.cc != null)) {
+            const panel = document.createElement('div')
+            panel.className = 'ml-edit-panel'
+            const mkNum = (label, val, on) => {
+                const wrap = document.createElement('label')
+                wrap.className = 'ml-edit-field'
+                const span = document.createElement('span')
+                span.textContent = label
+                const input = document.createElement('input')
+                input.type = 'number'; input.min = '0'; input.max = '127'
+                input.value = String(val ?? (label === 'min' ? 0 : 127))
+                input.addEventListener('change', on)
+                wrap.append(span, input)
+                return { wrap, input }
+            }
+            let minVal = row.min ?? 0, maxVal = row.max ?? 127
+            const minF = mkNum('min', minVal, () => { minVal = Number(minF.input.value); midi.setRange(row.controlId, minVal, maxVal) })
+            const maxF = mkNum('max', maxVal, () => { maxVal = Number(maxF.input.value); midi.setRange(row.controlId, minVal, maxVal) })
+            const inv = document.createElement('label')
+            inv.className = 'ml-edit-field'
+            const invSpan = document.createElement('span'); invSpan.textContent = 'invert'
+            const invBox = document.createElement('input'); invBox.type = 'checkbox'; invBox.checked = !!row.invert
+            invBox.addEventListener('change', () => midi.setInvert(row.controlId, invBox.checked))
+            inv.append(invSpan, invBox)
+            panel.append(minF.wrap, maxF.wrap, inv)
+            div.appendChild(panel)
+        }
+
         container.appendChild(div)
     }
 }

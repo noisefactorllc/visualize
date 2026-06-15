@@ -188,17 +188,21 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
         xf.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
+    // Takeover: crossfader starts at 0 (armed). A CC near 0 "catches"
+    // (engages pickup); a following CC of 100 then drives it.
     await page.evaluate(() => {
-        const input = window.__fakeMidi.input
-        const data = new Uint8Array([0xB0, 50, 100])  // CC ch0 cc50 val100
-        for (const { type, listener } of input._listeners) {
-            if (type === 'midimessage') listener({ data })
+        const send = (v) => {
+            const data = new Uint8Array([0xB0, 50, v])
+            for (const { type, listener } of window.__fakeMidi.input._listeners) {
+                if (type === 'midimessage') listener({ data })
+            }
         }
+        send(0)    // within eps of current 0 → engage
+        send(100)  // engaged → drives crossfader
     })
 
     const xfade = await page.evaluate(() =>
         parseFloat(document.getElementById('crossfader').value))
-    // 100/127 ≈ 0.787 — proves the bound control handler ran.
     expect(xfade).toBeGreaterThan(0.7)
     expect(xfade).toBeLessThan(0.85)
 
@@ -222,6 +226,83 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     })
     if (ccInDecks.A != null) expect(ccInDecks.A).toBeCloseTo(100 / 127, 2)
     if (ccInDecks.B != null) expect(ccInDecks.B).toBeCloseTo(100 / 127, 2)
+
+    // FX latch via Note-On: seed a note binding for invert, then a
+    // Note-On toggles it exactly once; Note-Off does not toggle back.
+    await page.evaluate(() => {
+        window.__visualize.midi._assignments.fxInvert = { kind: 'note', ch: 0, note: 36, min: 0, max: 127, invert: false }
+    })
+    const before = await page.evaluate(() => !!window.__visualize.compositor.invert)
+    await page.evaluate(() => {
+        const send = (status, d1, d2) => {
+            const data = new Uint8Array([status, d1, d2])
+            for (const { type, listener } of window.__fakeMidi.input._listeners) {
+                if (type === 'midimessage') listener({ data })
+            }
+        }
+        send(0x90, 36, 100) // Note-On  → toggle once
+        send(0x80, 36, 0)   // Note-Off → no toggle
+    })
+    const after = await page.evaluate(() => !!window.__visualize.compositor.invert)
+    expect(after).toBe(!before)
+
+    // Two controls on the same CC → getLearnView marks both conflicting.
+    const conflicts = await page.evaluate(() => {
+        const midi = window.__visualize.midi
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127, invert: false }
+        midi._assignments.speedA = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127, invert: false }
+        const view = midi.getLearnView()
+        const find = (id) => view.find(r => r.controlId === id)
+        return { xf: !!find('crossfader').conflict, spd: !!find('speedA').conflict }
+    })
+    expect(conflicts.xf).toBe(true)
+    expect(conflicts.spd).toBe(true)
+
+    // Live bar: sending a CC updates the ml-bar-fill width in the DOM.
+    // Re-establish a clean single crossfader assignment (no conflict), set
+    // crossfader to 0 so pickup arms, then send CC 0 to catch and CC 100
+    // to engage and drive. The learn row must reflect ~79 % width.
+    await page.evaluate(() => {
+        const midi = window.__visualize.midi
+        delete midi._assignments.speedA   // remove the conflict introduced above
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127, invert: false }
+        // Reset runtime so arm fires fresh
+        midi._controlRuntime?.delete?.('crossfader')
+        // Reset crossfader to 0 so pickup has to catch
+        const xf = document.getElementById('crossfader')
+        if (xf) {
+            xf.value = 0
+            xf.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+    })
+    await page.evaluate(() => {
+        const send = (d1, d2) => {
+            const data = new Uint8Array([0xB0, d1, d2])
+            for (const { type, listener } of window.__fakeMidi.input._listeners) {
+                if (type === 'midimessage') listener({ data })
+            }
+        }
+        send(50, 0)    // CC 50 value 0 → catch at bottom (engages pickup)
+        send(50, 100)  // CC 50 = 100 → engaged, drives crossfader to ~79 %
+    })
+    // Allow rAF to flush the DOM update
+    await page.waitForTimeout(100)
+    const barWidth = await page.evaluate(() => {
+        const row = document.querySelector('#midi-learn-rows .midi-learn-row')
+        if (!row) return null
+        // Walk rows to find the crossfader row by label text
+        const rows = document.querySelectorAll('#midi-learn-rows .midi-learn-row')
+        for (const r of rows) {
+            if (r.querySelector('.ml-target')?.textContent?.toLowerCase().includes('crossfader') ||
+                r.querySelector('.ml-target')?.textContent?.toLowerCase().includes('cross')) {
+                return r.querySelector('.ml-bar-fill')?.style?.width || null
+            }
+        }
+        // fallback: first row's fill
+        return rows[0]?.querySelector('.ml-bar-fill')?.style?.width || null
+    })
+    expect(barWidth).not.toBeNull()
+    expect(parseFloat(barWidth)).toBeGreaterThan(60)
 
     await context.close()
 })
