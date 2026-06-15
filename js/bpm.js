@@ -200,14 +200,11 @@ export class BeatScheduler {
         const bpm = 60000 / avgMs
         if (bpm > MIN_BPM && bpm < MAX_BPM) {
             this.bpm = bpm
+            // resetPhase() re-anchors the beat to now and reschedules the
+            // next tick (clearTimeout + _scheduleNext when running), so the
+            // user's tap pattern becomes the new phase with no stale
+            // long-interval timeout left queued. No extra reschedule here.
             this.resetPhase()
-            // Re-anchor the upcoming beat so the user's tap pattern
-            // becomes the new phase (otherwise the next beat could fire
-            // arbitrarily late if a long interval was already queued).
-            if (this._running && this._timeoutId) {
-                clearTimeout(this._timeoutId)
-                this._scheduleNext()
-            }
         }
         return this._bpm
     }
