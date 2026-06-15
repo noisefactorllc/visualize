@@ -24,7 +24,8 @@
          using class="icon" never hits a fallback. The active theme's
          blank (if it's not Nunito/Noto Sans Mono) is preloaded by the
          inline script below based on the saved theme. -->
-    <link rel="preload" href="https://fonts.noisefactor.io/fonts/nunito/Nunito-Blank.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Blank.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Regular.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono-Blank.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="https://fonts.noisefactor.io/fonts/material-symbols-outlined/material-symbols-outlined.woff2" as="font" type="font/woff2" crossorigin>
 
@@ -52,20 +53,28 @@
         @font-face { font-family: 'Tomorrow Blank';              src: url('https://fonts.noisefactor.io/fonts/tomorrow/Tomorrow-Blank.woff2') format('woff2');                                      font-weight: 100 900; font-display: block; }
         @font-face { font-family: 'Comfortaa Blank';             src: url('https://fonts.noisefactor.io/fonts/comfortaa/Comfortaa-Blank.woff2') format('woff2');                                    font-weight: 100 900; font-display: block; }
 
-        /* Real fonts: font-display: swap. Only Nunito and Noto Sans Mono
-           are declared here because they're the base fonts; theme-specific
-           real fonts (Inter, Cabin, …) are declared by the loaded theme
-           CSS at the moment that theme actually applies. */
+        /* Real fonts: font-display: swap. Atkinson Hyperlegible is the global
+           UI font (all four static styles, declared just below). Nunito stays
+           as a legacy base face and Noto Sans Mono is the mono base; both
+           remain for any code that still references them. */
         @font-face { font-family: Nunito;            src: url('https://fonts.noisefactor.io/fonts/nunito/Nunito[wght].woff2') format('woff2');                                font-weight: 100 900; font-display: swap; }
         @font-face { font-family: 'Noto Sans Mono';  src: url('https://fonts.noisefactor.io/fonts/noto-sans-mono/NotoSansMono[wdth,wght].woff2') format('woff2');             font-weight: 100 900; font-display: swap; }
 
-        /* Default fallback chain: real font → blank placeholder. No
-           generics. Themes override --hf-font-family in their own CSS;
-           the app.css per-theme rules ensure each override ends in a
-           matching Blank. */
-        html { font-family: Nunito, 'Nunito Blank'; }
+        /* Atkinson Hyperlegible — the project-wide typeface. All four static
+           styles so bold/italic are genuine, not synthesized. Paired with the
+           metric-matched 'Atkinson Hyperlegible Blank' (above) for zero CLS. */
+        @font-face { font-family: 'Atkinson Hyperlegible'; font-style: normal; font-weight: 400; font-display: swap; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Regular.woff2') format('woff2'); }
+        @font-face { font-family: 'Atkinson Hyperlegible'; font-style: normal; font-weight: 700; font-display: swap; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Bold.woff2') format('woff2'); }
+        @font-face { font-family: 'Atkinson Hyperlegible'; font-style: italic; font-weight: 400; font-display: swap; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Italic.woff2') format('woff2'); }
+        @font-face { font-family: 'Atkinson Hyperlegible'; font-style: italic; font-weight: 700; font-display: swap; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-BoldItalic.woff2') format('woff2'); }
+
+        /* Global font chain: real Atkinson → metric-matched Blank (zero CLS).
+           No generics. app.css forces this across every theme with !important
+           so the typeface is consistent app-wide. Mono stays Noto Sans Mono
+           (code editor, DSL, MIDI labels). */
+        html { font-family: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Blank'; }
         :root {
-            --hf-font-family: Nunito, 'Nunito Blank';
+            --hf-font-family: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Blank';
             --hf-font-family-mono: 'Noto Sans Mono', 'Noto Sans Mono Blank';
             --hf-font-family-icon: 'Material Symbols Outlined';
         }
