@@ -173,6 +173,15 @@ export class MainCompositor {
                 alphaB = t
             }
 
+            // alphaA/alphaB are GAIN coefficients, not stacked opacities:
+            // draw A over black (source-over), then ADD B ('lighter') so the
+            // result is exactly A*alphaA + B*alphaB. For the dipped curve
+            // that's the equal-power crossfade (alphaA^2 + alphaB^2 = 1) so
+            // combined brightness holds steady through the sweep; for the
+            // linear/sharp/cut curves alphaA + alphaB = 1. Compositing B with
+            // the default source-over would instead give A*alphaA*(1-alphaB) +
+            // B*alphaB — attenuating A and dipping mid-transition — so the
+            // additive blend is deliberate, not a missing "true" alpha xfade.
             if (alphaA > 0.001 && this.deckA?.canvas?.width > 0 && this.deckA.canvas.height > 0) {
                 ctx.globalAlpha = alphaA
                 ctx.drawImage(this.deckA.canvas, 0, 0, w, h)
