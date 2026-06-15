@@ -12,6 +12,15 @@
  */
 import { test, expect } from '@playwright/test'
 
+// Engine effect-registration completes over the shader CDN; on slow-CDN
+// days the install → "row visible" round-trip is borderline past 15s, so
+// every post-install effect-registration wait gets generous headroom —
+// zip import AND ?code= share-bundle install (whose preceding deck-title
+// wait gates on the composition rendering, NOT on the bundled effect
+// registering). Test-only: a genuinely broken install still fails, just
+// a bit later.
+const REGISTER_TIMEOUT = 30_000
+
 /**
  * Minimal valid portable effect: a starter (no inputs) that paints a
  * solid colour. The shader is intentionally trivial — we don't care
@@ -154,7 +163,7 @@ test.describe('user effects', () => {
         await importFixture(page, makeFixture('myTestFx'))
 
         // Status hint flips to ok; list row shows the new effect id.
-        await expect(page.locator('#user-effect-status')).toContainText('installed user/myTestFx', { timeout: 15_000 })
+        await expect(page.locator('#user-effect-status')).toContainText('installed user/myTestFx', { timeout: REGISTER_TIMEOUT })
         await expect(page.locator('.user-effect-row[data-id="user/myTestFx"]')).toBeVisible()
 
         // Library now has a "user" section with at least our effect.
@@ -185,7 +194,7 @@ test.describe('user effects', () => {
         // old detector matched the sidecar and threw on import).
         await importMacZip(page, makeFixture('macFx'))
 
-        await expect(page.locator('#user-effect-status')).toContainText('installed user/macFx', { timeout: 15_000 })
+        await expect(page.locator('#user-effect-status')).toContainText('installed user/macFx', { timeout: REGISTER_TIMEOUT })
         await expect(page.locator('.user-effect-row[data-id="user/macFx"]')).toBeVisible()
         await expect(page.locator('.lib-section[data-category="user"] .program-card[data-title="Mac Fx"]')).toBeVisible({ timeout: 10_000 })
 
@@ -199,7 +208,7 @@ test.describe('user effects', () => {
         await page.click('#settings-toggle')
 
         await importFixture(page, makeFixture('disposable'))
-        await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toBeVisible({ timeout: 15_000 })
+        await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toBeVisible({ timeout: REGISTER_TIMEOUT })
 
         // Accept the confirm() prompt automatically.
         page.once('dialog', d => d.accept())
@@ -218,13 +227,18 @@ test.describe('user effects', () => {
     })
 
     test('persistence: reload survives an imported effect', async ({ page }) => {
+        // Two full boots (import → reload → re-hydrate) push the total past
+        // the 120s budget on slow-CDN days; test.slow() triples it. The
+        // per-assertion REGISTER_TIMEOUT below covers the registration wait
+        // itself — test.slow() scales the overall timeout, not fixed waits.
+        test.slow()
         await page.goto('/')
         await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
         await page.click('#settings-toggle')
 
         await importFixture(page, makeFixture('persisty'))
-        await expect(page.locator('.user-effect-row[data-id="user/persisty"]')).toBeVisible({ timeout: 15_000 })
+        await expect(page.locator('.user-effect-row[data-id="user/persisty"]')).toBeVisible({ timeout: REGISTER_TIMEOUT })
 
         // Reload — boot hydration should re-register the effect.
         await page.reload()
@@ -283,7 +297,7 @@ test.describe('user effects', () => {
         )
 
         await page.click('#settings-toggle')
-        await expect(page.locator('.user-effect-row[data-id="user/sharedFx"]')).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('.user-effect-row[data-id="user/sharedFx"]')).toBeVisible({ timeout: REGISTER_TIMEOUT })
 
         // ?code= cleared from URL after the loader finished.
         expect(new URL(page.url()).searchParams.has('code')).toBe(false)

@@ -19,6 +19,13 @@ import { test, expect } from '@playwright/test'
 test.describe.configure({ mode: 'serial', retries: 1 })
 
 test('end-to-end smoke', async ({ page }) => {
+    // Heaviest spec: one test drives a full session (boot → CDN shader
+    // load → dual compile → crossfade → FX → tap → auto-VJ → scene save +
+    // recall). On slow-CDN days the cumulative wall-clock overruns the
+    // default 120s budget; test.slow() triples it. Orthogonal to the
+    // determinism fixes + retries:1 above — a retry can't rescue a timeout
+    // (it just times out again), so the budget needs its own headroom.
+    test.slow()
     const consoleMessages = []
     const pageErrors = []
     page.on('console', (msg) => {
