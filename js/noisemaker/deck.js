@@ -132,9 +132,34 @@ export class Deck {
     get currentFPS() { return this._renderer.currentFPS || 0 }
     get currentName() { return this._currentName }
     get currentDsl() { return this._currentDsl }
+    /**
+     * The REQUESTED backend, normalized to 'webgpu' / 'webgl2'. This only
+     * mirrors the renderer's preference flag — it does NOT prove WebGPU
+     * actually engaged. The engine silently falls back to WebGL2 when
+     * WebGPU is unavailable without clearing the flag, so this can read
+     * 'webgpu' while WebGL2 is really running. For what's actually in use,
+     * read `activeBackend`.
+     */
     get backend() {
         const b = this._renderer.backend
         return b === 'wgsl' ? 'webgpu' : (b || 'webgl2')
+    }
+
+    /**
+     * The backend ACTUALLY in use, read from the live pipeline's backend
+     * object (WebGPUBackend / WebGL2Backend expose getName()), normalized
+     * to 'webgpu' / 'webgl2'. The pipeline only exists after the first
+     * successful compile, so before then (and on any engine that predates
+     * getName()) we fall back to the requested preference. This is the
+     * honest signal the settings "active renderer" indicator shows, so an
+     * operator can tell when a WebGPU preference silently dropped to
+     * WebGL2 (unsupported browser, adapter request failure).
+     */
+    get activeBackend() {
+        const name = this._renderer.pipeline?.backend?.getName?.()
+        if (name === 'WebGPU') return 'webgpu'
+        if (name === 'WebGL2') return 'webgl2'
+        return this.backend
     }
 
     async init() {

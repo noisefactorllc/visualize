@@ -1290,9 +1290,28 @@ async function boot() {
 
     // Settings drawer
     const drawer = $('settings-drawer')
+    // Reflect the renderer ACTUALLY running (read from the deck's live
+    // pipeline via activeBackend), not just the saved preference: a
+    // WebGPU preference silently falls back to WebGL2 on browsers/GPUs
+    // without support, and the operator deserves to see that rather than
+    // a switch that looks honored when it wasn't.
+    function refreshActiveRenderer() {
+        const el = $('active-renderer')
+        if (!el) return
+        const deck = state.decks.A   // both decks share one preference
+        const active = deck.activeBackend
+        const label = active === 'webgpu' ? 'WebGPU' : 'WebGL2'
+        // `deck.preferWebGPU` is the preference applied at boot — the live
+        // toggle/`state` may have changed since, but that only takes
+        // effect on reload. Flag a genuine fallback only: asked for WebGPU
+        // this session yet WebGL2 is what's running.
+        const fellBack = deck.preferWebGPU && active !== 'webgpu'
+        el.textContent = fellBack ? `active: ${label} (WebGPU unavailable)` : `active: ${label}`
+    }
     function openSettings() {
         drawer.setAttribute('aria-hidden', 'false')
         refreshAudioDevices()
+        refreshActiveRenderer()
     }
     function closeSettings() { drawer.setAttribute('aria-hidden', 'true') }
     $('settings-toggle').addEventListener('click', () => {
@@ -1497,6 +1516,10 @@ async function boot() {
         toast(state.preferWebGPU
             ? 'WebGPU preferred on next reload'
             : 'WebGL2 preferred on next reload')
+        // The change only lands on reload, so the active backend is
+        // unchanged for now — repaint anyway so the indicator stays
+        // truthful if the operator toggles with the drawer open.
+        refreshActiveRenderer()
     })
     // FPS readout
     setInterval(() => {
