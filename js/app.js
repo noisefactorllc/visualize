@@ -360,6 +360,9 @@ async function boot() {
     // hand-tuning a "loop duration" number (mirrors polymorphic).
     const scheduler = new BeatScheduler(120)
     scheduler.start()
+    // Attach to the test hook now that it exists (built above at boot).
+    // Tests drive deterministic tap-tempo via scheduler.tap(timestamp).
+    window.__visualize.scheduler = scheduler
     const bpmDividerEl = $('bpm-divider')
     const bpmLabelEl = $('bpm-label')
     const mainLoopDerivedEl = $('main-loop-derived')

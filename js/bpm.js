@@ -182,9 +182,13 @@ export class BeatScheduler {
 
     /**
      * Record a tap; returns the inferred BPM (0 until enough taps).
+     *
+     * `now` defaults to performance.now(). Callers may pass an explicit
+     * timestamp so inter-tap intervals are exact — used by tests to drive a
+     * deterministic tempo instead of relying on real-time spacing, which
+     * jitters badly under headless-GPU/full-suite load.
      */
-    tap() {
-        const now = performance.now()
+    tap(now = performance.now()) {
         if (this._tapTimes.length > 0 && now - this._tapTimes[this._tapTimes.length - 1] > this._tapResetMs) {
             this._tapTimes = []
         }
