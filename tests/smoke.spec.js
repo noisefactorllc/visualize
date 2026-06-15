@@ -11,12 +11,17 @@
  * numbers, which would be flaky.
  */
 import { test, expect } from '@playwright/test'
+import { installHandfishLocal } from './handfishLocal.js'
 
 // One retry as defense-in-depth: this spec boots a real GPU pipeline and
 // runs ~20 real-time interactions against random programs, so isolated GPU
 // jitter shouldn't red CI. The two historically-flaky assertions below
 // (crossfader mixing, tap tempo) are made deterministic, not retry-masked.
 test.describe.configure({ mode: 'serial', retries: 1 })
+
+// Serve the local handfish build (with <tempo-bar> + industrial.css) when
+// HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
+installHandfishLocal(test)
 
 test('end-to-end smoke', async ({ page }) => {
     // Heaviest spec: one test drives a full session (boot → CDN shader
@@ -46,6 +51,21 @@ test('end-to-end smoke', async ({ page }) => {
     // Library populated
     const libCount = await page.textContent('#library-count')
     expect(libCount).toMatch(/\d+ programs?/)
+
+    // ── Industrial chrome (handfish adoption) ────────────────────────────
+    // Document opts into the industrial typeface language.
+    await expect(page.locator('html')).toHaveAttribute('data-language', 'industrial')
+    // Colored logotype wordmark, ALL CAPS.
+    await expect(page.locator('.hf-logotype .hf-logotype-text')).toHaveText('VISUALIZE')
+    // Top-bar icon cluster: three .hf-icon-btn affordances (settings/fullscreen/about).
+    await expect(page.locator('.hf-topbar-cluster .hf-icon-btn')).toHaveCount(3)
+    // The <tempo-bar> component replaced the inline tempo DOM and bound its
+    // scheduler to the app's test hook.
+    await expect(page.locator('tempo-bar .tempo-bar__bpm')).toBeVisible()
+    await expect(page.locator('tempo-bar .tempo-bar__beat')).toHaveCount(4)
+    const tempoWired = await page.evaluate(() =>
+        !!window.__visualize.scheduler && window.__visualize.scheduler === window.__visualize.tempoBar.scheduler)
+    expect(tempoWired).toBe(true)
 
     // Give the compositor a few frames so main canvas accumulates content
     await page.waitForTimeout(800)
@@ -164,9 +184,10 @@ test('end-to-end smoke', async ({ page }) => {
         return s.bpm
     })
     expect(bpm).toBeCloseTo(150, 0)
-    // The BPM input field reflects the tapped tempo (onChange → DOM wiring).
+    // The <tempo-bar> BPM field reflects the tapped tempo (scheduler.onChange →
+    // the component mirrors it into its own .tempo-bar__bpm input).
     const bpmShown = await page.evaluate(() =>
-        parseFloat(document.getElementById('bpm-input').value))
+        parseFloat(document.querySelector('tempo-bar .tempo-bar__bpm').value))
     expect(bpmShown).toBeCloseTo(150, 0)
 
     // Auto-VJ toggle

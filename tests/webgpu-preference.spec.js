@@ -5,8 +5,13 @@
  * settings switch looks active but every deck still boots WebGL2-only.
  */
 import { test, expect } from '@playwright/test'
+import { installHandfishLocal } from './handfishLocal.js'
 
 const RENDERER_STORAGE_KEY = 'visualize.renderer.v1'
+
+// Serve the local handfish build (with <tempo-bar> + industrial.css) when
+// HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
+installHandfishLocal(test)
 
 async function bootApp(page) {
     await page.click('#boot-start')

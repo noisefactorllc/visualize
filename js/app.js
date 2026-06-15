@@ -15,7 +15,6 @@
 import { Deck, isHeavyDsl } from './noisemaker/deck.js'
 import { SharedAudio } from './audio.js'
 import { SharedMidi } from './midi.js'
-import { BeatScheduler } from './bpm.js'
 import { MainCompositor } from './compositor.js'
 import { MixerRenderer, MIXERS, DEFAULT_MIXER_ID } from './mixer.js'
 import { MixerControls } from './ui/mixerControls.js'
@@ -346,28 +345,49 @@ async function boot() {
     }
     const xfaderEl = $('crossfader')
     const fpsEl = $('fps-value')
-    const bpmInputEl = $('bpm-input')
     const flashOverlayEl = $('main-fx-overlay')
+
+    // Shared handfish <led-matrix> micro-OLED status readout. Created via the
+    // CDN-registered custom element (no local component) and seated in the
+    // top-bar cluster, just left of the settings/info icons. It mirrors the
+    // live deck: which deck is on-air (LIVE A / LIVE B) + that deck's program.
+    const led = document.createElement('led-matrix')
+    led.className = 'vz-led'
+    document.querySelector('.hf-topbar-cluster')?.prepend(led)
+
+    // Read the on-air deck (crossfade < 0.5 ⇒ A live, matching the live
+    // indicator above) and show its program; fall back to the idle default
+    // before any program has loaded (deck.currentName starts empty).
+    function updateLed() {
+        const aLive = state.crossfade < 0.5
+        const deckId = aLive ? 'A' : 'B'
+        const name = state.decks[deckId]?.currentName
+        if (name) led.show({ label: `LIVE ${deckId}`, value: name })
+        else led.show({ label: 'VISUALIZE', value: 'READY' })
+    }
+    updateLed()
 
     function updateLiveIndicator() {
         const aLive = state.crossfade < 0.5
         deckEls.A.classList.toggle('live', aLive)
         deckEls.B.classList.toggle('live', !aLive)
+        updateLed()
     }
 
-    // BPM / scheduler. Divider × BPM drives both decks' base loop
-    // duration so animations stay sized to the music without users
-    // hand-tuning a "loop duration" number (mirrors polymorphic).
-    const scheduler = new BeatScheduler(120)
-    scheduler.start()
+    // BPM / scheduler. The <tempo-bar> handfish component owns the tap / BPM /
+    // divider / beat-dots / phase UI and bundles the BeatScheduler that was
+    // originally extracted from this app's js/bpm.js. We drive deck loop timing
+    // off that same scheduler: Divider × BPM sets both decks' base loop duration
+    // so animations stay sized to the music (mirrors polymorphic). The element
+    // auto-started its scheduler on connect; start() is idempotent.
+    const tempoBar = document.getElementById('tempo')
+    const scheduler = tempoBar.scheduler
     // Attach to the test hook now that it exists (built above at boot).
     // Tests drive deterministic tap-tempo via scheduler.tap(timestamp).
     window.__visualize.scheduler = scheduler
-    const bpmDividerEl = $('bpm-divider')
-    const bpmLabelEl = $('bpm-label')
+    window.__visualize.tempoBar = tempoBar
+    const bpmLabelEl = tempoBar.querySelector('.tempo-bar__label')
     const mainLoopDerivedEl = $('main-loop-derived')
-    const bpmBlockEl = document.querySelector('.topbar-center')
-    if (bpmDividerEl) bpmDividerEl.value = String(scheduler.divider)
 
     function applyLoopFromBpm() {
         const sec = scheduler.barSeconds()
@@ -382,16 +402,16 @@ async function boot() {
         }
     }
     applyLoopFromBpm()
+    // tempo-bar mirrors bpm/divider into its own DOM + fires change/dividerchange;
+    // we only need the deck-loop side effect (the component handles the inputs).
     scheduler.onChange(() => applyLoopFromBpm())
-    scheduler.onDividerChange((d) => {
-        if (bpmDividerEl && bpmDividerEl.value !== String(d)) bpmDividerEl.value = String(d)
-        applyLoopFromBpm()
-    })
+    scheduler.onDividerChange(() => applyLoopFromBpm())
 
     midi.onBpm((bpm) => {
         if (!midi.followClock) return
-        scheduler.bpm = bpm
-        bpmInputEl.value = bpm.toFixed(1)
+        // Routed through the component so its BPM field + change listeners
+        // (incl. applyLoopFromBpm) stay the single source of truth.
+        tempoBar.bpm = bpm
     })
     // MIDI transport: start/continue resume the scheduler; stop pauses
     // it so beat-driven FX freeze instead of free-running.
@@ -405,11 +425,11 @@ async function boot() {
         }
     })
     midi.onClockStatus((status) => {
-        // Reflect MIDI-clock status in the bpm label so users can see
-        // why the BPM stopped updating without opening DevTools.
+        // Reflect MIDI-clock status in the tempo-bar's bpm label so users can
+        // see why the BPM stopped updating without opening DevTools.
         const showStatus = midi.followClock && status !== 'synced'
-        if (bpmLabelEl) bpmLabelEl.textContent = showStatus ? `midi: ${status}` : 'BPM'
-        if (bpmBlockEl) bpmBlockEl.classList.toggle('midi-sync', midi.followClock && status === 'synced')
+        if (bpmLabelEl) bpmLabelEl.textContent = showStatus ? `midi: ${status}` : 'bpm'
+        tempoBar.classList.toggle('midi-sync', midi.followClock && status === 'synced')
     })
 
     // Auto-mix
@@ -433,6 +453,7 @@ async function boot() {
                 labels.name.textContent = program.title
                 labels.tag.textContent = program.tagline || ''
             }
+            updateLed()
             refreshDeckMediaUi(deckId)
         }
     })
@@ -624,6 +645,8 @@ async function boot() {
             labels.name.textContent = program.title
             labels.tag.textContent = program.tagline || ''
         }
+        // Keep the OLED readout in step with the live deck's program.
+        updateLed()
         // If the editor is open for this deck, sync its content to the
         // newly loaded program — otherwise the editor would still show
         // the previous program's DSL.
@@ -1038,6 +1061,7 @@ async function boot() {
                         labels.name.textContent = '(custom)'
                         labels.tag.textContent = ''
                     }
+                    updateLed()
                 } finally {
                     inFlight = false
                 }
@@ -1094,61 +1118,36 @@ async function boot() {
         })
     })
 
-    // BPM controls
-    bpmInputEl.addEventListener('change', (e) => {
-        scheduler.bpm = parseFloat(e.target.value)
-        scheduler.resetPhase()
-    })
-    if (bpmDividerEl) {
-        bpmDividerEl.addEventListener('change', (e) => {
-            scheduler.divider = parseInt(e.target.value, 10)
-        })
-    }
-    // Mirror bpm changes (e.g. tap, MIDI) back into the input.
-    scheduler.onChange((bpm) => {
-        if (document.activeElement !== bpmInputEl) {
-            bpmInputEl.value = bpm.toFixed(1)
-        }
-    })
-    const tapBtn = $('tap-tempo')
-    function doTap() {
-        const bpm = scheduler.tap()
-        if (bpm) bpmInputEl.value = bpm.toFixed(1)
-        tapBtn.classList.add('flash')
-        setTimeout(() => tapBtn.classList.remove('flash'), 100)
-    }
-    tapBtn.addEventListener('click', doTap)
+    // BPM / tap / divider / phase controls all live inside <tempo-bar>: the
+    // component wires its own BPM field (input/change → scheduler.bpm), divider
+    // (→ scheduler.divider), tap button (→ scheduler.tap()), reset button
+    // (→ resetPhase) and phase slider (→ setPhaseOffset), and mirrors bpm/divider
+    // back into its own DOM. We only layer on the app-specific side effects.
 
-    // Phase controls — scheduler is single source of truth for time;
-    // deck renderers derive their origin from it.
-    const phaseResetBtn = $('phase-reset')
-    const phaseSlider = $('phase-slider')
+    // The 'T' keyboard shortcut taps through the component so its tap-button
+    // flash + scheduler.tap() (→ onChange → applyLoopFromBpm) all fire.
+    function doTap() { tempoBar.tap() }
+
+    // Phase controls — scheduler is the single source of truth for time; deck
+    // renderers derive their origin from it. The component's reset button and
+    // phase slider mutate scheduler phase (_lastBeatMs); these listeners run
+    // AFTER the component's own (registered later, during boot) and re-anchor
+    // both decks to the new origin. Same two events the inline controls used.
     function syncDecksToScheduler() {
         state.decks.A.syncTimeOrigin(scheduler._lastBeatMs)
         state.decks.B.syncTimeOrigin(scheduler._lastBeatMs)
     }
-    phaseResetBtn.addEventListener('mousedown', () => {
-        scheduler.resetPhase()
-        syncDecksToScheduler()
-        if (phaseSlider) phaseSlider.value = 0
-    })
-    if (phaseSlider) {
-        phaseSlider.addEventListener('input', () => {
-            scheduler.setPhaseOffset(Number(phaseSlider.value))
-            syncDecksToScheduler()
-        })
-    }
+    const phaseResetBtn = tempoBar.querySelector('.tempo-bar__reset')
+    const phaseSlider = tempoBar.querySelector('.tempo-bar__phase-slider')
+    if (phaseResetBtn) phaseResetBtn.addEventListener('click', syncDecksToScheduler)
+    if (phaseSlider) phaseSlider.addEventListener('input', syncDecksToScheduler)
 
-    // Beat dots
-    const beatDots = [...document.querySelectorAll('.beat-dot')]
-    beatDots.forEach((d, i) => d.classList.toggle('downbeat', i === 0))
-    // Cache deck elements for the per-beat pulse glow.
+    // Per-beat side effects (the beat dots are now internal to <tempo-bar>):
+    // beat-driven strobe + the live deck's quarter-note pulse glow. Driven by
+    // the component's 'beat' event, whose detail is the BeatScheduler payload.
     const deckPanelA = document.querySelector('.deck.deck-a')
     const deckPanelB = document.querySelector('.deck.deck-b')
-    scheduler.onBeat((b) => {
-        beatDots.forEach((d, i) => {
-            d.classList.toggle('active', i === b.beatInBar)
-        })
+    tempoBar.addEventListener('beat', () => {
         // Beat-driven strobe
         if (compositor.strobe) compositor.strobeBlink()
         // Pulse the live deck's glow on each quarter note. The pulse

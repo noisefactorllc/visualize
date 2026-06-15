@@ -4,13 +4,13 @@
    This file owns only the bespoke grid for the deck/main/library workspace.
    ========================================================================== */
 
-/* GLOBAL TYPEFACE — Atkinson Hyperlegible across EVERY theme.
-   Handfish themes each ship their own --hf-font-family; we override them all
-   with !important so the whole app speaks in one highly-legible voice. The
-   real (Regular/Bold/Italic/BoldItalic) + metric-matched Blank faces are
-   declared inline in index.html for zero-layout-shift loading. Mono
-   (--hf-font-family-mono) is intentionally left as Noto Sans Mono. */
-:root { --hf-font-family: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Blank' !important; }
+/* GLOBAL TYPEFACE — Atkinson Hyperlegible across EVERY theme, supplied by
+   handfish's industrial language layer. <html data-language="industrial">
+   makes industrial.css's :root[data-language="industrial"] --hf-font-family
+   (specificity 0,2,0) outrank every palette theme's :root (0,1,0) with no
+   !important needed. The real + metric-matched Blank faces are declared by
+   industrial.css (and the Blank @font-faces inline in index.html for the
+   theme-blank preloader). Mono (--hf-font-family-mono) stays Noto Sans Mono. */
 
 :root {
     /* Layout */
@@ -36,10 +36,6 @@
        rings, slider rims, manual-mode hint on density button). */
     --hf-border-width: 0;
 
-    /* Near-invisible accent-tinted hairline for section dividers
-       *inside* a panel (e.g. deck head / panel-head bottom rules).
-       Panel-to-panel boundaries rely on bg contrast instead. */
-    --vz-hairline: 1px solid color-mix(in srgb, var(--hf-text-bright) 8%, transparent);
 }
 
 html, body {
@@ -97,170 +93,89 @@ select:focus-visible,
 }
 
 /* ─────────────── topbar ─────────────── */
+/* .hf-topbar (industrial.css) supplies the flex row, gap + padding; this rule
+   only carries the app-specific chrome (grid placement, surface, border) and
+   leaves the layout to handfish. The three children — .hf-logotype (left),
+   <tempo-bar> (auto-centered), .hf-topbar-cluster (margin-left:auto, right) —
+   self-arrange. */
 .topbar {
     grid-area: top;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: center;
-    padding: 0 var(--hf-space-4);
     background: var(--hf-bg-surface);
     border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
     z-index: 10;
+    /* Roomier than the industrial default to seat the tempo-bar comfortably
+       at music-desk distance; the row is --topbar-h (72px) tall. */
+    padding: 0 var(--hf-space-4);
+    gap: var(--hf-space-4);
 }
 
-.brand {
-    display: flex;
+/* Logotype: the colored "V" logomark + the VISUALIZE wordmark sit together
+   upper-left. .hf-logotype (industrial.css) styles the wordmark; .brand keeps
+   the mark + text on one baseline. */
+.hf-logotype.brand {
+    display: inline-flex;
     align-items: center;
     gap: var(--hf-space-2);
 }
 
 .brand-logo {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     object-fit: contain;
-    border-radius: 6px;
     display: block;
+    flex: none;
+    /* The logomark tracks the same crossfader hue as the wordmark. */
+    color: var(--hf-yellow);
 }
 
-.brand-name {
-    font-size: var(--hf-size-md);
-    font-weight: var(--hf-weight-bold);
-    letter-spacing: var(--hf-tracking-wide);
+/* Colored wordmark — VISUALIZE is the one colored logotype in the family.
+   The industrial .hf-logotype paints --hf-logotype-fill (default text-bright);
+   .is-color sets that to transparent and clips an animated blue→yellow→red
+   gradient to the glyphs. Background position tracks the crossfader: 0% =
+   blue-dominant (deck A live), 100% = red-dominant (deck B live), 50% = pure
+   yellow (mixer-effect dominant). app.js writes --brand-mix on every crossfade
+   change; default to the midpoint so a fresh boot reads "mixer-live". */
+.hf-logotype.is-color {
+    --hf-logotype-fill: transparent;
+}
+.hf-logotype.is-color .hf-logotype-text {
     background: linear-gradient(90deg, var(--hf-blue), var(--hf-yellow), var(--hf-red));
     background-size: 200% 200%;
+    background-position: var(--brand-mix, 50%) 50%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
-    /* Background position tracks the crossfader: 0% = blue-dominant
-       (deck A live), 100% = red-dominant (deck B live), 50% = pure
-       yellow (mixer effect dominant). app.js writes --brand-mix as a
-       percentage every time the crossfade changes; default to the
-       midpoint so a fresh boot reads as "mixer-live". */
-    background-position: var(--brand-mix, 50%) 50%;
     transition: background-position 80ms linear;
 }
 
-.brand-tag {
-    font-size: var(--hf-size-xs);
-    letter-spacing: var(--hf-tracking-wide);
-    color: var(--hf-text-dim);
-    margin-left: var(--hf-space-1);
+/* Tempo bar — handfish <tempo-bar>, auto-centered between logotype and
+   cluster. The component lays out its own internals; we just center it and
+   give the BPM/phase a comfortable reading size. */
+.vz-tempo {
+    margin: 0 auto;
 }
+.vz-tempo .tempo-bar__bpm { font-size: var(--hf-size-sm); }
+.vz-tempo .tempo-bar__label { font-size: var(--hf-size-xs); }
 
-.topbar-center {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--hf-space-4);
-}
-.topbar-group {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-3);
-}
-.topbar-center > .topbar-group + .topbar-group {
-    padding-left: var(--hf-space-4);
-    border-left: var(--vz-hairline);
-}
-.topbar-group-label {
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    letter-spacing: var(--hf-tracking-wide);
-    color: var(--hf-text-dim);
-    white-space: nowrap;
-}
+/* MIDI-clock sync tint: when following incoming MIDI clock the BPM field +
+   bpm label glow accent (app.js toggles .midi-sync on the tempo-bar). */
+.vz-tempo.midi-sync .tempo-bar__bpm,
+.vz-tempo.midi-sync .tempo-bar__label { color: var(--hf-accent); }
 
-.tap-button {
-    appearance: none;
-    background: var(--hf-bg-base);
-    color: var(--hf-text-normal);
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
+/* Shared handfish <led-matrix> status readout, seated in the top-bar cluster
+   just left of the icon buttons (app.js prepends it). The element renders its
+   128×32 canvas to its own bounding box and has no intrinsic size, so we give
+   it an explicit compact footprint (≈4:1) that seats inside the 72px bar; the
+   bezel mirrors the OLED-glass treatment used by the sibling rack apps. */
+.vz-led {
+    flex: none;
+    width: 124px;
+    height: 31px;
+    padding: 2px;
     border-radius: var(--hf-radius-sm);
-    padding: var(--hf-space-1) var(--hf-space-3);
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-xs);
-    letter-spacing: var(--hf-tracking-wide);
-    cursor: pointer;
-    transition: var(--hf-transition-color), var(--hf-transition-bg), var(--hf-transition-border);
-}
-.tap-button:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
-.tap-button:active, .tap-button.flash {
-    background: var(--hf-accent);
-    color: var(--hf-bg-base);
-    border-color: var(--hf-accent);
-}
-
-.bpm-display { display: flex; align-items: baseline; gap: var(--hf-space-1); }
-
-#bpm-input {
-    width: 4.5ch;
-    background: transparent;
-    border: none;
-    color: var(--hf-text-bright);
-    font-family: var(--hf-font-family-mono);
-    font-size: var(--hf-size-sm);
-    font-weight: var(--hf-weight-bold);
-    text-align: right;
-    outline: none;
-    appearance: textfield;
-    -moz-appearance: textfield;
-}
-#bpm-input::-webkit-outer-spin-button,
-#bpm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-
-.bpm-label {
-    font-size: var(--hf-size-xs);
-    color: var(--hf-text-dim);
-    letter-spacing: var(--hf-tracking-wide);
-    white-space: nowrap;
-}
-
-/* BPM divider is a handfish <select-dropdown>. The custom element
-   renders its own button/chevron/border; we just supply sizing +
-   spacing. Same fix the xfader-fade-curve got (commit 2b45ca8) —
-   without stripping the native-select chrome you get a faux outer
-   dropdown wrapping the real one (double border, double chevron). */
-.bpm-divider {
-    margin: 0 var(--hf-space-1);
-}
-
-.topbar-center.midi-sync .bpm-label,
-.topbar-center.midi-sync #bpm-input { color: var(--hf-accent); }
-
-.beat-indicator { display: flex; gap: var(--hf-space-1); }
-
-.beat-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: var(--hf-radius-full);
-    background: var(--hf-bg-muted);
-    transition: background 0.04s linear, transform 0.04s linear;
-}
-
-.beat-dot.active {
-    background: var(--hf-accent);
-    transform: scale(1.3);
-}
-
-.beat-dot.downbeat.active {
-    background: var(--hf-red);
-    transform: scale(1.5);
-}
-
-.phase-slider-wrap {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-1);
-    width: 110px;
-    flex: 0 0 110px;
-    min-height: 26px;
-}
-
-.topbar-right {
-    display: flex;
-    align-items: center;
-    gap: var(--hf-space-2);
-    justify-content: flex-end;
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    background: #03060a;
+    box-shadow: inset 0 0 0 1px #000, inset 0 1px 8px rgba(0, 0, 0, 0.8);
 }
 
 .status-pill {
@@ -2350,7 +2265,6 @@ kbd {
 /* Hover bg-fills for interactive surfaces. Each rule lifts the
    element a step toward the accent so the hover reads even without
    a stroke. color-mix keeps the tint consistent across themes. */
-.tap-button:hover,
 .icon-button:hover,
 button.status-pill:hover,
 .deck-edit-toggle:hover,

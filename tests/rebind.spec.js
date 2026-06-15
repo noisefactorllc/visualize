@@ -11,12 +11,14 @@
  *   - With bandpass OFF, repeated rolls span more than one band
  */
 import { test, expect } from '@playwright/test'
+import { routeHandfishLocal } from './handfishLocal.js'
 
 test.describe.configure({ timeout: 120_000, retries: 1 })
 
 async function bootAndLoad(browser, programTitle) {
     const context = await browser.newContext()
     const page = await context.newPage()
+    await routeHandfishLocal(page)
     await page.goto('/')
     await page.click('#boot-start')
     // Boot loads random programs into BOTH decks late in startup

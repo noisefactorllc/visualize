@@ -11,6 +11,13 @@
  * step.
  */
 import { test, expect } from '@playwright/test'
+import { installHandfishLocal } from './handfishLocal.js'
+
+// Serve the local handfish build (with <tempo-bar> + industrial.css) when
+// HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
+// Top-level beforeEach → runs for every test in this file, including the
+// describe-nested ones (their own beforeEach runs after this).
+installHandfishLocal(test)
 
 // Engine effect-registration completes over the shader CDN; on slow-CDN
 // days the install → "row visible" round-trip is borderline past 15s, so

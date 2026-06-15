@@ -6,20 +6,24 @@
  * handfish change silently overriding the global font. Verifies:
  *
  *   1. The default chain resolves to 'Atkinson Hyperlegible' → its Blank.
- *   2. The !important global override beats a theme's own --hf-font-family
- *      (inject a Cabin rule like 'dusk' ships; Atkinson must still win).
+ *   2. The industrial language layer (:root[data-language="industrial"] in
+ *      handfish's industrial.css, specificity 0,2,0) beats a theme's own
+ *      --hf-font-family :root rule (0,1,0) — inject a Cabin rule like 'dusk'
+ *      ships; Atkinson must still win, with no !important needed.
  *   3. All four real Atkinson faces (Regular/Bold/Italic/BoldItalic) are
  *      declared, and the Regular face actually loads from the CDN.
  *   4. Mono is untouched (Noto Sans Mono) so the code editor / DSL stay
  *      monospace.
  */
 import { test, expect } from '@playwright/test'
+import { routeHandfishLocal } from './handfishLocal.js'
 
 test.describe.configure({ timeout: 120_000, retries: 1 })
 
 test('global font: Atkinson Hyperlegible wins across themes, zero-CLS chain', async ({ browser }) => {
     const context = await browser.newContext()
     const page = await context.newPage()
+    await routeHandfishLocal(page)
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize, null, { timeout: 30_000 })
@@ -35,7 +39,7 @@ test('global font: Atkinson Hyperlegible wins across themes, zero-CLS chain', as
     expect(monoVar).toMatch(/Noto Sans Mono/)
 
     // 2. Inject a competing theme rule (as handfish 'dusk' would) and confirm
-    //    the !important global override still wins.
+    //    the industrial language layer (higher specificity) still wins.
     await page.evaluate(() => {
         const s = document.createElement('style')
         s.textContent = `[data-theme="dusk"]{--hf-font-family:'Cabin','Cabin Blank';}`

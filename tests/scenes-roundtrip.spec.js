@@ -12,12 +12,14 @@
  * assert specific values until we know which field is wrong.
  */
 import { test, expect } from '@playwright/test'
+import { routeHandfishLocal } from './handfishLocal.js'
 
 test.describe.configure({ timeout: 120_000, retries: 0 })
 
 async function boot(browser) {
     const context = await browser.newContext()
     const page = await context.newPage()
+    await routeHandfishLocal(page)
     page.on('console', msg => {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })

@@ -5,6 +5,11 @@
  * toggles work.
  */
 import { test, expect } from '@playwright/test'
+import { installHandfishLocal } from './handfishLocal.js'
+
+// Serve the local handfish build (with <tempo-bar> + industrial.css) when
+// HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
+installHandfishLocal(test)
 
 const EXPECTED_ORDER = [
     'user', 'abstract', 'attractor', 'geometric', 'life', 'particles',

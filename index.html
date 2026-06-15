@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-language="industrial">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -68,13 +68,13 @@
         @font-face { font-family: 'Atkinson Hyperlegible'; font-style: italic; font-weight: 400; font-display: swap; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-Italic.woff2') format('woff2'); }
         @font-face { font-family: 'Atkinson Hyperlegible'; font-style: italic; font-weight: 700; font-display: swap; src: url('https://fonts.noisefactor.io/fonts/atkinson-hyperlegible/AtkinsonHyperlegible-BoldItalic.woff2') format('woff2'); }
 
-        /* Global font chain: real Atkinson → metric-matched Blank (zero CLS).
-           No generics. app.css forces this across every theme with !important
-           so the typeface is consistent app-wide. Mono stays Noto Sans Mono
-           (code editor, DSL, MIDI labels). */
-        html { font-family: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Blank'; }
+        /* Global font chain: Atkinson Hyperlegible is supplied by handfish's
+           industrial language layer (data-language="industrial" on <html>,
+           industrial.css below), with the metric-matched Blank for zero CLS.
+           No generics. Mono stays Noto Sans Mono (code editor, DSL, MIDI
+           labels) and the icon font is Material Symbols — neither is owned by
+           the industrial layer, so they're declared here. */
         :root {
-            --hf-font-family: 'Atkinson Hyperlegible', 'Atkinson Hyperlegible Blank';
             --hf-font-family-mono: 'Noto Sans Mono', 'Noto Sans Mono Blank';
             --hf-font-family-icon: 'Material Symbols Outlined';
         }
@@ -92,6 +92,10 @@
 
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/tokens.css">
     <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/dialogs.css">
+    <!-- forms.css (.hf-number) + menus-and-toolbars.css (.hf-icon-btn / .hf-icon)
+         back the <tempo-bar> BPM field and the top-bar icon cluster. -->
+    <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/forms.css">
+    <link rel="stylesheet" href="https://handfish.noisefactor.io/0/styles/menus-and-toolbars.css">
 
     <!-- Apply the saved handfish theme synchronously and preload that
          theme's Blank metric placeholder so the page never falls back to a
@@ -153,6 +157,15 @@
         link.rel = 'stylesheet'
         link.href = 'https://handfish.noisefactor.io/0/styles/themes/' + FILES[theme] + '.css'
         document.head.appendChild(link)
+
+        // Industrial language layer (typeface token override + .hf-logotype /
+        // .hf-topbar chrome). Loaded AFTER the palette theme so its
+        // :root[data-language="industrial"] --hf-font-family wins, and so the
+        // wordmark/cluster styles sit last in the cascade.
+        var industrial = document.createElement('link')
+        industrial.rel = 'stylesheet'
+        industrial.href = 'https://handfish.noisefactor.io/0/styles/industrial.css'
+        document.head.appendChild(industrial)
     })()
     </script>
 
@@ -181,45 +194,23 @@
     </script>
     <div id="app">
 
-        <header class="topbar">
-            <div class="brand">
+        <header class="topbar hf-topbar">
+            <div class="hf-logotype is-color brand" aria-label="Visualize">
                 <svg class="brand-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" fill="currentColor" aria-hidden="true"><g transform="translate(0,600) scale(0.1,-0.1)"><path d="M1020 4339 l0 -272 212 -326 c256 -396 714 -1101 1098 -1696 l285 -440 380 -2 380 -3 211 328 c189 292 851 1313 1055 1627 43 66 101 156 129 200 28 44 85 132 126 195 l74 115 0 273 0 272 -238 0 -239 0 -313 -497 c-904 -1435 -1183 -1874 -1187 -1870 -2 3 -339 535 -747 1183 l-744 1179 -241 3 -241 2 0 -271z"/><path d="M1710 4472 l0 -138 361 -524 c390 -567 381 -553 703 -1023 179 -260 221 -316 232 -305 7 7 297 427 646 933 l633 920 2 138 3 137 -239 0 -239 0 -29 -39 c-15 -22 -199 -299 -407 -616 l-379 -576 -270 408 c-148 224 -330 501 -405 615 l-137 208 -237 0 -238 0 0 -138z"/></g></svg>
-                <span class="brand-name">Visualize</span>
+                <span class="hf-logotype-text">VISUALIZE</span>
             </div>
-            <div class="topbar-center">
-                <div class="topbar-group">
-                    <button id="tap-tempo" class="tap-button" title="Tap to set BPM (T)">tap</button>
-                    <div class="bpm-display" aria-live="polite" aria-atomic="true">
-                        <input id="bpm-input" type="number" min="40" max="300" step="0.1" value="120" aria-label="Beats per minute">
-                        <select-dropdown id="bpm-divider" class="bpm-divider" value="4" aria-label="BPM divider">
-                            <option value="1">/1</option>
-                            <option value="2">/2</option>
-                            <option value="4">/4</option>
-                            <option value="8">/8</option>
-                            <option value="16">/16</option>
-                            <option value="32">/32</option>
-                        </select-dropdown>
-                        <span class="bpm-label" id="bpm-label">bpm</span>
-                    </div>
-                    <div class="beat-indicator" id="beat-indicator">
-                        <span class="beat-dot" data-beat="0"></span>
-                        <span class="beat-dot" data-beat="1"></span>
-                        <span class="beat-dot" data-beat="2"></span>
-                        <span class="beat-dot" data-beat="3"></span>
-                    </div>
-                </div>
-                <div class="topbar-group">
-                    <button id="phase-reset" class="tap-button" title="Reset animation phase to beat 1">phase reset</button>
-                    <span class="topbar-group-label">phase</span>
-                    <div class="phase-slider-wrap">
-                        <slider-value id="phase-slider" type="float" min="0" max="1" step="0.01" value="0" title="Nudge animation phase"></slider-value>
-                    </div>
-                </div>
-            </div>
-            <div class="topbar-right">
-                <button class="icon-button" id="settings-toggle" title="Settings (S)" aria-label="Open settings"><span class="icon">settings</span></button>
-                <button class="icon-button" id="fullscreen-toggle" title="Fullscreen main (F)" aria-label="Toggle fullscreen"><span class="icon">fullscreen</span></button>
-                <button class="icon-button" id="about-btn" title="About Visualize" aria-label="About Visualize"><span class="icon">info</span></button>
+
+            <!-- Tempo bar (handfish component). Bundles the BeatScheduler that
+                 was extracted from this app's js/bpm.js + this DOM: tap,
+                 BPM field, divider, beat dots, phase reset + phase slider.
+                 storage-key preserves the existing divider persistence key;
+                 divider=4 keeps the historical default. -->
+            <tempo-bar id="tempo" class="vz-tempo" storage-key="visualize.bpm.divider" bpm="120" divider="4"></tempo-bar>
+
+            <div class="hf-topbar-cluster">
+                <button class="hf-icon-btn tooltip" id="settings-toggle" data-title="Settings (S)" aria-label="Open settings"><span class="hf-icon">settings</span></button>
+                <button class="hf-icon-btn tooltip" id="fullscreen-toggle" data-title="Fullscreen main (F)" aria-label="Toggle fullscreen"><span class="hf-icon">fullscreen</span></button>
+                <button class="hf-icon-btn tooltip" id="about-btn" data-title="About Visualize" aria-label="About Visualize"><span class="hf-icon">info</span></button>
             </div>
         </header>
 

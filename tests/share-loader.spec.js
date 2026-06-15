@@ -6,6 +6,11 @@
  * into that deck and strips ?code= from the URL.
  */
 import { test, expect } from '@playwright/test'
+import { installHandfishLocal } from './handfishLocal.js'
+
+// Serve the local handfish build (with <tempo-bar> + industrial.css) when
+// HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
+installHandfishLocal(test)
 
 const SAMPLE_DSL = 'search synth, render\n\nnoise(seed: 7, ridges: true)\n  .write(o0)\n\nrender(o0)'
 const SAMPLE_TITLE = 'sample share program'

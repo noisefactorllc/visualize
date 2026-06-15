@@ -22,6 +22,7 @@
  * race. One boot keeps the suite under 90s.
  */
 import { test, expect } from '@playwright/test'
+import { routeHandfishLocal } from './handfishLocal.js'
 
 test.describe.configure({ timeout: 120_000, retries: 1 })
 
@@ -62,6 +63,7 @@ async function bootWithFakeMidi(browser) {
     })
 
     const page = await context.newPage()
+    await routeHandfishLocal(page)
     await page.goto('/')
     await page.click('#boot-start')
     // Audio/MIDI is wired up before the initial library random-load

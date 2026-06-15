@@ -7,12 +7,14 @@
  *   - mutual exclusion with Auto-VJ (enabling one disables the other)
  */
 import { test, expect } from '@playwright/test'
+import { routeHandfishLocal } from './handfishLocal.js'
 
 test.describe.configure({ timeout: 120_000, retries: 1 })
 
 async function boot(browser) {
     const context = await browser.newContext()
     const page = await context.newPage()
+    await routeHandfishLocal(page)
     page.on('console', msg => {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
