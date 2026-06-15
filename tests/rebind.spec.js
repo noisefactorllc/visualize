@@ -19,9 +19,19 @@ async function bootAndLoad(browser, programTitle) {
     const page = await context.newPage()
     await page.goto('/')
     await page.click('#boot-start')
-    await page.waitForFunction(() =>
-        !!window.__visualize?.decks?.A && !!window.__visualize?.rebind,
-        null, { timeout: 30_000 })
+    // Boot loads random programs into BOTH decks late in startup
+    // (app.js loadProgram A/B), well AFTER window.__visualize exists. If we
+    // load our target program as soon as decks.A exists, boot's own load
+    // races with and clobbers it — flaky _currentDsl (and, downstream, a
+    // mismatched pipeline/surfaces). Wait for boot's population to settle:
+    // loadProgram sets each deck's name only after deck.load() resolves, so
+    // both names being non-placeholder means boot is done touching the decks.
+    await page.waitForFunction(() => {
+        const a = document.getElementById('deck-a-name')?.textContent
+        const b = document.getElementById('deck-b-name')?.textContent
+        return !!window.__visualize?.decks?.A && !!window.__visualize?.rebind
+            && a && a !== '—' && b && b !== '—'
+    }, null, { timeout: 30_000 })
     // Load the target program into deck A by fetching the manifest
     // directly so we don't depend on the library UI having rendered.
     await page.evaluate(async (title) => {
@@ -237,6 +247,29 @@ test('rebind: shuffle wipes o0..oN surfaces (stateful effect reset)', async ({ b
                 expect(cleared.has(s)).toBe(true)
             }
         }
+    } finally {
+        await context.close()
+    }
+})
+
+test('rebind: compile-time #define params are never rebindable', async ({ browser }) => {
+    // Regression: synth.perlin's `dimensions` global compiles to a
+    // `#define DIMENSIONS n`. If rebind picks it, the override becomes an
+    // automation object and the DSL recompiles to `#define DIMENSIONS
+    // [object Object]` → GLSL failure → the shuffle silently no-ops (deck
+    // keeps its old program). multires reaction-diffusion uses perlin, so
+    // its rebindable set must exclude every param carrying a `define` field.
+    const { context, page } = await bootAndLoad(browser, 'multires reaction-diffusion')
+    try {
+        const offenders = await page.evaluate(() => {
+            const deck = window.__visualize.decks.A
+            const params = window.__visualize.rebind.collectRebindableParams(
+                deck.rebind.originalDsl)
+            return params
+                .filter(p => p.spec && p.spec.define)
+                .map(p => `${p.effectKey}.${p.paramName}`)
+        })
+        expect(offenders).toEqual([])
     } finally {
         await context.close()
     }

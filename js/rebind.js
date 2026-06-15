@@ -71,6 +71,12 @@ export function collectRebindableParams(originalDsl) {
             if (!spec) continue
             if (spec.type !== 'float' && spec.type !== 'int') continue
             if (spec.ui && spec.ui.control === false) continue
+            // Compile-time #define globals (e.g. synth.perlin `dimensions` →
+            // `#define DIMENSIONS n`) are baked into the shader at compile
+            // time. They can't carry a runtime automation — assigning one
+            // emits `#define DIMENSIONS [object Object]`, which fails to
+            // compile and silently no-ops the shuffle. Never rebind them.
+            if (spec.define) continue
             if (spec.min === undefined || spec.max === undefined) continue
             if (paramName.startsWith('_')) continue
             out.push({
