@@ -66,7 +66,7 @@ js/ (core modules — abridged)
 └── ui/                 codeEditor + mixerControls panels (plus tooltips, about-dialog, handfish-theme)
 ```
 
-Both decks render via their own `CanvasRenderer` to a hidden-ish offscreen-style canvas (technically visible in the deck preview pane). The main is a 2D context that samples both deck canvases each frame and blends with the active crossfade curve. This means the recorder, fullscreen, and output-window features can all hand around plain `HTMLCanvasElement` references — no `OffscreenCanvas` or `captureStream` chaining required.
+Both decks render via their own `CanvasRenderer` to a hidden-ish offscreen-style canvas (technically visible in the deck preview pane). A third `CanvasRenderer`, owned by the `MixerRenderer`, blends the two deck canvases through the selected mixer effect; once it's online the main is a 2D context that simply blits that pre-blended frame. During boot (before the mixer has compiled) and as a safety net if the mixer pipeline fails, the main falls back to sampling both deck canvases directly and blending with the active crossfade curve. Either way the main stays a plain 2D context, so the recorder, fullscreen, and output-window features can all hand around plain `HTMLCanvasElement` references — no `OffscreenCanvas` or `captureStream` chaining required.
 
 ## Adding programs
 
@@ -99,7 +99,7 @@ npx playwright install   # first time only
 npm test
 ```
 
-`npm test` runs the Playwright suite (8 specs) against headless Chromium. The headline **smoke** spec drives a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall — and the rest cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, scenes round-trip, the share-loader, library sections, and user-effect (.zip) import. Catches regressions in any of the above before they hit production.
+`npm test` runs the Playwright suite (9 specs) against headless Chromium. The headline **smoke** spec drives a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall — and the rest cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, scenes round-trip, the share-loader, library sections, user-effect (.zip) import, and the WebGPU renderer preference (persist + restore across reload). Catches regressions in any of the above before they hit production.
 
 ## Contributing
 
