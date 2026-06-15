@@ -603,7 +603,7 @@ async function boot() {
         // density choices stick across loads.
         const density = state.deckDensity[deckId]
         if (density.mode === 'auto') {
-            const heavy = isHeavyDsl(program.dsl, deck._renderer.manifest)
+            const heavy = isHeavyDsl(program.dsl, deck.inner.manifest)
             density.value = heavy ? 0.5 : 1.0
         }
         deck.setPixelDensity(density.value)
@@ -662,7 +662,7 @@ async function boot() {
                 if (next.mode === 'auto') {
                     const dsl = state.decks[deckId].rebind.originalDsl
                         || state.decks[deckId]._currentDsl
-                    const heavy = dsl && isHeavyDsl(dsl, state.decks[deckId]._renderer.manifest)
+                    const heavy = dsl && isHeavyDsl(dsl, state.decks[deckId].inner.manifest)
                     next.value = heavy ? 0.5 : 1.0
                 }
                 state.decks[deckId].setPixelDensity(next.value)
