@@ -298,6 +298,11 @@ export class SharedMidi {
         }
         this._attachInputs()
         this._access.onstatechange = () => {
+            // Ignore hot-plug churn while disabled — toggle()'s disable path
+            // leaves this handler installed (access stays open), and
+            // re-attaching here would resurrect MIDI processing behind a UI
+            // that still reads "off".
+            if (!this._enabled) return
             this._attachInputs()
             this._notify(`MIDI: ${this._inputs.length} input(s)`)
         }
@@ -364,6 +369,11 @@ export class SharedMidi {
     }
 
     _onMessage(msg) {
+        // Disabled means disabled. A device hot-plug can re-fire
+        // onstatechange and re-attach listeners after toggle() detached
+        // them, so guard at the single chokepoint every MIDI message flows
+        // through rather than relying on listeners being perfectly removed.
+        if (!this._enabled) return
         const data = msg.data
         if (!data || data.length < 1) return
         const status = data[0] & 0xF0
