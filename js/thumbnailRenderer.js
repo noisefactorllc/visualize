@@ -91,6 +91,13 @@ class ThumbnailRenderer {
             job.resolve(null)
         } finally {
             this._busy = false
+            // Stop the offscreen deck's render loop between jobs. Deck.load()
+            // starts a persistent rAF loop that nothing else stops, so without
+            // this the thumb deck keeps re-rendering the last program forever
+            // into a hidden canvas no one reads. The next job's load() restarts
+            // it; capture already happens after SETTLE_MS, so thumbs are
+            // unchanged. try/catch is generic belt-and-suspenders.
+            try { this.deck.stop() } catch { /* ignore */ }
             // Yield then drain next so we don't starve other tasks.
             setTimeout(() => this._drain(), 0)
         }
