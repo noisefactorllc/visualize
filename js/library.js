@@ -336,7 +336,7 @@ export class Library {
 
     _matches(p) {
         if (!this._filter) return true
-        const sourceText = p.source ? `${p.source.username} ${p.source.app}` : ''
+        const sourceText = p.source?.username ? `${p.source.username} ${p.source.app || ''}` : ''
         const hay = (p.title + ' ' + (p.tagline || '') + ' ' + (p.tags || []).join(' ') + ' ' + sourceText).toLowerCase()
         return hay.includes(this._filter)
     }
