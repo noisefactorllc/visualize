@@ -20,7 +20,7 @@ npx playwright install   # first time only
 npm test
 ```
 
-`npm test` boots a local server and runs the Playwright suite (9 specs) against headless Chromium. The smoke spec verifies the bundle loads, both decks compile shaders from the CDN, the crossfader actually mixes them, FX toggle, tap tempo registers, auto-VJ activates, and scenes persist + recall; the remaining specs cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, scenes round-trip, the share-loader, library sections, user-effect (.zip) import, and the WebGPU renderer preference.
+`npm test` boots a local server and runs the Playwright suite (11 specs) against headless Chromium. The smoke spec verifies the bundle loads, both decks compile shaders from the CDN, the crossfader actually mixes them, FX toggle, tap tempo registers, auto-VJ activates, and scenes persist + recall; the remaining specs cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, MIDI-learn value mapping (soft-takeover + conflict detection), scenes round-trip, the share-loader, library sections, user-effect (.zip) import, the global typeface, and the WebGPU renderer preference.
 
 ## Code Style
 

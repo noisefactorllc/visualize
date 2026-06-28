@@ -7,7 +7,7 @@
  * swap its href when the active theme changes; the attribute then
  * selects which selector block inside that file takes effect.
  *
- * Two files (neutral.css, gray.css, high-contrast.css) each define a
+ * Three files (neutral.css, gray.css, high-contrast.css) each define a
  * dark + light variant, so multiple THEMES entries can share a `file`.
  */
 

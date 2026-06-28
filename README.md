@@ -99,7 +99,7 @@ npx playwright install   # first time only
 npm test
 ```
 
-`npm test` runs the Playwright suite (9 specs) against headless Chromium. The headline **smoke** spec drives a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall — and the rest cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, scenes round-trip, the share-loader, library sections, user-effect (.zip) import, and the WebGPU renderer preference (persist + restore across reload). Catches regressions in any of the above before they hit production.
+`npm test` runs the Playwright suite (11 specs) against headless Chromium. The headline **smoke** spec drives a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall — and the rest cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, MIDI-learn value mapping (soft-takeover + conflict detection), scenes round-trip, the share-loader, library sections, user-effect (.zip) import, the global typeface, and the WebGPU renderer preference (persist + restore across reload). Catches regressions in any of the above before they hit production.
 
 ## Contributing
 
