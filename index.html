@@ -689,11 +689,23 @@
                 bootDefault.hidden = true
                 bootShare.hidden = false
                 window.__visualizeShareCode = code
+                // Time-box the fetch so a hung/slow sharing CDN can't leave
+                // the overlay stuck on disabled buttons forever — on timeout
+                // the rejection flows to prepareShareDialog, which re-reveals
+                // the "start set" fallback.
+                var shareCtrl = new AbortController()
+                var shareTimer = setTimeout(function () { shareCtrl.abort() }, 10000)
+                var clearShareTimer = function () { clearTimeout(shareTimer) }
                 window.__visualizeSharePromise = fetch(
-                    'https://sharing.noisedeck.app/api/composition/' + encodeURIComponent(code)
+                    'https://sharing.noisedeck.app/api/composition/' + encodeURIComponent(code),
+                    { signal: shareCtrl.signal }
                 ).then(function (r) {
+                    clearShareTimer()
                     if (!r.ok) throw new Error('http ' + r.status)
                     return r.json()
+                }, function (err) {
+                    clearShareTimer()
+                    throw (err && err.name === 'AbortError') ? new Error('timed out') : err
                 })
 
                 var wireDeckPick = function (btnId, deckId) {

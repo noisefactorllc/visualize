@@ -141,6 +141,14 @@ async function prepareShareDialog() {
     } catch (err) {
         if (prompt) prompt.textContent = `couldn't load shared program (${code})`
         if (hint) hint.textContent = String(err.message || err)
+        // Graceful fallback (see this function's doc): the boot overlay is
+        // only dismissed by a boot button, and the share A/B buttons stay
+        // disabled on failure. Without this, a bad/expired code or CDN hiccup
+        // traps the user behind the full-viewport overlay with no clickable
+        // control. Re-reveal the default "start set" path so the app stays
+        // reachable. (The share buttons stay disabled — no half-loaded state.)
+        const bootDefault = $('boot-default')
+        if (bootDefault) bootDefault.hidden = false
         return null
     }
 
@@ -1506,6 +1514,7 @@ async function boot() {
         state.mainRes = { width: w, height: h }
         state.decks.A.resize(w, h)
         state.decks.B.resize(w, h)
+        mixer.resize(w, h)
         compositor.resize(w, h)
         $('main-res').textContent = `${w}×${h}`
         toast(`main: ${w}×${h}`)
