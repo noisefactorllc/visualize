@@ -228,6 +228,12 @@ class UserEffectsManager {
             defaultProgram: definition.defaultProgram,
         })
         instance.shaders = shaders
+        // The engine's Effect constructor doesn't copy defaultProgram onto the
+        // instance (it's passed above but ignored), so set it explicitly.
+        // buildDslSource() prefers an author-curated demo program over a
+        // synthesized one — without this the stored field is dropped and every
+        // user effect falls back to synthesized DSL in the library.
+        if (definition.defaultProgram) instance.defaultProgram = definition.defaultProgram
         return instance
     }
 
@@ -378,6 +384,12 @@ class UserEffectsManager {
             tags: payload.tags || ['user'],
             globals: payload.globals || {},
             passes: payload.passes || [],
+            // Preserve textures: the zip path keeps them (raw definition.json)
+            // and _buildInstance forwards them to the runtime. Dropping them
+            // here installs a broken instance — particle/points effects key
+            // their channels off textures — and persists it to IndexedDB, so
+            // the same effect imported via ?code= would diverge from the zip.
+            ...(payload.textures ? { textures: payload.textures } : {}),
             ...(payload.uniformLayout ? { uniformLayout: payload.uniformLayout } : {}),
             ...(payload.uniformLayouts ? { uniformLayouts: payload.uniformLayouts } : {}),
             ...(payload.defaultProgram ? { defaultProgram: payload.defaultProgram } : {}),
