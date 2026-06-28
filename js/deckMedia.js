@@ -33,6 +33,7 @@ export class DeckMedia {
         this._video = null          // <video>
         this._img = null            // <img>
         this._stream = null         // MediaStream
+        this._objectUrl = null      // active blob: URL for a file source
         this._mediaStepIndex = null // discovered from compiled pipeline
     }
 
@@ -74,6 +75,7 @@ export class DeckMedia {
 
     async setCamera(deviceId = '') {
         this._stopStream()
+        this._revokeUrl()           // release any file source we're leaving
         const constraints = {
             video: deviceId ? { deviceId: { exact: deviceId } } : true,
             audio: false
@@ -101,10 +103,17 @@ export class DeckMedia {
     async setFile(file) {
         if (!file) return
         this._stopStream()
+        this._revokeUrl()           // release the previous file's blob URL
         const url = URL.createObjectURL(file)
+        this._objectUrl = url
         this._label = file.name
         if (file.type.startsWith('video/')) {
             this._ensureVideo()
+            // Clear any leftover state from a prior camera or video file. An
+            // assigned srcObject takes precedence over src per spec, so a
+            // camera→video-file switch would otherwise keep showing the dead
+            // stream instead of the file.
+            this._stopVideoEl()
             this._video.src = url
             this._video.loop = true
             await this._video.play().catch(() => {})
@@ -112,7 +121,11 @@ export class DeckMedia {
         } else {
             this._ensureImg()
             this._img.src = url
-            this._video = null
+            // Don't null this._video — that orphans a DOM-attached, still
+            // looping/decoding <video> and makes _ensureVideo() append a
+            // second element on the next video/camera load. Stop it but
+            // keep the single reused element.
+            this._stopVideoEl()
         }
         this._source = 'file'
     }
@@ -120,8 +133,9 @@ export class DeckMedia {
     /** Stop the camera stream + clear any video src. Idempotent. */
     stop() {
         this._stopStream()
-        if (this._video) this._video.src = ''
+        this._stopVideoEl()
         if (this._img) this._img.src = ''
+        this._revokeUrl()
         this._source = null
         this._label = ''
         this._cameraDeviceId = ''
@@ -170,6 +184,24 @@ export class DeckMedia {
             }
             this._stream = null
         }
+    }
+
+    /** Revoke the active file blob URL, if any. */
+    _revokeUrl() {
+        if (this._objectUrl) {
+            try { URL.revokeObjectURL(this._objectUrl) } catch { /* ignore */ }
+            this._objectUrl = null
+        }
+    }
+
+    /** Halt and clear the reused <video> without removing it from the DOM,
+     *  so it stops decoding but stays available for the next video/camera. */
+    _stopVideoEl() {
+        if (!this._video) return
+        try { this._video.pause() } catch { /* ignore */ }
+        this._video.removeAttribute('src')
+        this._video.srcObject = null
+        try { this._video.load() } catch { /* ignore */ }
     }
 
     _ensureVideo() {
