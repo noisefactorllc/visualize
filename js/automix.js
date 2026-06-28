@@ -101,6 +101,13 @@ export class AutoMix {
     _onBeat(b) {
         if (!this._enabled) return
         if (!b.isDownbeat) return
+        // The beat counter can reset to ~0 mid-set — tap tempo, a BPM change,
+        // a phase nudge, and MIDI-clock START all call BeatScheduler
+        // resetPhase()/setPhaseOffset(). Without this, beatsSinceSwitch would
+        // go negative and auto-VJ would freeze on the current scene until
+        // beatIndex climbed back past the now-stale _lastSwitchBeat. Treat a
+        // reset as the start of a fresh interval.
+        if (b.beatIndex < this._lastSwitchBeat) this._lastSwitchBeat = b.beatIndex
         const beatsSinceSwitch = b.beatIndex - this._lastSwitchBeat
         const barsSinceSwitch = beatsSinceSwitch / 4
         if (barsSinceSwitch >= this._barsPerScene) {
@@ -185,6 +192,13 @@ export class AutoMix {
             console.error('[AutoMix] load error', err)
             return
         }
+
+        // State can change during the async load: the operator may have
+        // switched auto-VJ off or grabbed the crossfader. Loading the program
+        // into the off-deck is harmless, but moving the fader now would fire a
+        // swap after "off", or fight the operator by re-arming the fade from a
+        // crossfade value captured before the await. Leave the fader put.
+        if (!this._enabled || this._isUserOverriding()) return
 
         // Cut-mode: snap immediately
         if (this._curve === 'cut' || this._fadeDurSec <= 0) {
