@@ -34,10 +34,8 @@ import { getUserEffectsManager } from './userEffects.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer.
 import { dslTokenizer } from 'handfish'
-// Injects the polymorphic/noisedeck editor styles (transparent overlay
-// with per-segment darkening + syntax colors) and exports the
-// enhanceCodeEditor helper for the Cmd/Ctrl+Shift+Enter binding.
-import { enhanceCodeEditor } from './ui/codeEditor.js'
+// Injects Visualize's code-editor skin. Editor behavior comes from Handfish.
+import './ui/codeEditor.js'
 
 const $ = (id) => document.getElementById(id)
 
@@ -1024,7 +1022,6 @@ async function boot() {
             const toggleBtn = deckEl.querySelector('.deck-edit-toggle')
 
             editor.setTokenizer?.(dslTokenizer)
-            enhanceCodeEditor(editor)
 
             function showError(msg) {
                 errorEl.innerHTML = ''

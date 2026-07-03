@@ -1,14 +1,10 @@
 /**
- * Code Editor Styling and Polymorphic Enhancements
+ * Visualize Code Editor Styling
  *
  * The <code-editor> custom element itself is registered by the handfish
- * bundle (imported in embed.js). This module:
- *  - Injects polymorphic-specific CSS (transparent code background, gutter
- *    colors, .hl-* fallbacks, eval-flash animation)
- *  - Exports enhanceCodeEditor(el) which adds polymorphic-only behavior
- *    on top of handfish's element: a flashLines() method and a
- *    Cmd/Ctrl+Shift+Enter / Alt+Enter → 'forceevalblock' keybinding
- *    that handfish does not provide.
+ * bundle (imported in app.js). This module only injects Visualize-specific
+ * CSS; editor behavior such as flashLines() and forcerecompile comes from
+ * Handfish's public editor API.
  */
 
 const CODE_EDITOR_STYLES_ID = 'code-editor-styles'
@@ -199,89 +195,6 @@ if (!document.getElementById(CODE_EDITOR_STYLES_ID)) {
             overflow: hidden;
         }
 
-        /* Eval flash overlay (briefly highlights the evaluated lines) */
-        code-editor .code-editor-flash {
-            position: absolute;
-            left: var(--code-editor-gutter-width, 3em);
-            right: 0;
-            pointer-events: none;
-            z-index: 4;
-            background: linear-gradient(
-                90deg,
-                color-mix(in srgb, var(--flash-color, #a5b8ff) 35%, transparent) 0%,
-                color-mix(in srgb, var(--flash-color, #a5b8ff) 12%, transparent) 100%
-            );
-            border-left: 2px solid var(--flash-color, #a5b8ff);
-            border-radius: 1px;
-            opacity: 0;
-            animation: code-editor-flash 0.55s ease-out forwards;
-        }
-        code-editor .code-editor-flash.error {
-            --flash-color: #ff7b72;
-        }
-        @keyframes code-editor-flash {
-            0% { opacity: 0; transform: translateX(-4px); }
-            12% { opacity: 1; transform: translateX(0); }
-            100% { opacity: 0; }
-        }
     `
     document.head.appendChild(styleEl)
-}
-
-/**
- * Add polymorphic-specific behavior to a handfish <code-editor> element:
- * a flashLines() method and a 'forceevalblock' event on
- * Cmd/Ctrl+Shift+Enter or Alt+Enter (handfish handles plain Cmd/Ctrl+Enter
- * → 'forcerecompile' on its own).
- *
- * Idempotent: safe to call multiple times on the same element.
- *
- * @param {HTMLElement} el - the <code-editor> element
- */
-export function enhanceCodeEditor(el) {
-    if (!el || el._polymorphicEnhanced) return
-    el._polymorphicEnhanced = true
-
-    el.flashLines = function flashLines(startLine, endLine, options = {}) {
-        const display = this.querySelector('.code-editor-display')
-        if (!display) return
-        const codeLines = display.querySelectorAll('.code-line')
-        if (codeLines.length === 0) return
-        const a = Math.max(0, startLine - 1)
-        const b = Math.min(codeLines.length - 1, endLine - 1)
-        if (a > b) return
-        const top = codeLines[a].offsetTop
-        const bottom = codeLines[b].offsetTop + codeLines[b].offsetHeight
-
-        const flash = document.createElement('div')
-        flash.className = 'code-editor-flash' + (options.error ? ' error' : '')
-        flash.style.top = `${top}px`
-        flash.style.height = `${bottom - top}px`
-        const ta = typeof this.getTextarea === 'function' ? this.getTextarea() : null
-        const scrollTop = ta?.scrollTop ?? 0
-        flash.style.transform = `translateY(${-scrollTop}px)`
-        this.appendChild(flash)
-        flash.addEventListener('animationend', () => flash.remove(), { once: true })
-        setTimeout(() => flash.remove(), 1000)
-    }
-
-    // Cmd/Ctrl+Shift+Enter or Alt+Enter → 'forceevalblock'.
-    // Capture phase + stopImmediatePropagation so handfish's bubble-phase
-    // handler on the same textarea doesn't ALSO fire 'forcerecompile' for
-    // the Cmd/Ctrl+Shift+Enter case (handfish's check matches any
-    // Cmd/Ctrl+Enter regardless of Shift).
-    const textarea = typeof el.getTextarea === 'function' ? el.getTextarea() : null
-    if (textarea) {
-        textarea.addEventListener('keydown', (e) => {
-            const mod = e.ctrlKey || e.metaKey
-            if (e.key === 'Enter' && ((mod && e.shiftKey) || (e.altKey && !mod))) {
-                e.preventDefault()
-                e.stopImmediatePropagation()
-                el.dispatchEvent(new CustomEvent('forceevalblock', {
-                    bubbles: true,
-                    composed: true
-                }))
-            }
-        }, true)
-    }
 }
