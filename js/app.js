@@ -119,6 +119,19 @@ function isFeatureEnabled(name) {
 }
 
 function setOnlineCollaborationUiVisible(visible) {
+    // The whole bar (and its 44px grid row) must vanish when the flag is
+    // off — flag-off layout has to match the pre-collaboration app.
+    const section = document.querySelector('.online-collab')
+    if (section) section.hidden = !visible
+    const app = document.getElementById('app')
+    if (app) app.classList.toggle('online-collab-enabled', visible)
+    if (visible && !document.querySelector('link[rel="preconnect"][href="https://seance.noisefactor.io"]')) {
+        const link = document.createElement('link')
+        link.rel = 'preconnect'
+        link.href = 'https://seance.noisefactor.io'
+        link.crossOrigin = ''
+        document.head.append(link)
+    }
     for (const id of ['online-take', 'online-join', 'online-session-status', 'online-join-dialog']) {
         const el = $(id)
         if (!el) continue

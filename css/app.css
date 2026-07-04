@@ -15,7 +15,10 @@
 :root {
     /* Layout */
     --topbar-h: 72px;
-    --online-h: 44px;
+    /* Collapsed unless the onlineCollaboration feature flag enables the
+       bar (js sets .online-collab-enabled on #app) — the flag-off grid
+       must be identical to the pre-collaboration layout. */
+    --online-h: 0px;
     --controls-h: 168px;       /* two rows now */
     --library-w: 190px;        /* single-column card list */
 
@@ -64,6 +67,14 @@ html, body {
     height: 100vh;
     width: 100vw;
     gap: 0;
+}
+
+#app.online-collab-enabled {
+    --online-h: 44px;
+}
+
+.online-collab[hidden] {
+    display: none;
 }
 
 button:focus-visible,
