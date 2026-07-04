@@ -31,11 +31,15 @@ import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
 import { getUserEffectsManager } from './userEffects.js'
+import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
-// plus the DSL syntax tokenizer.
-import { dslTokenizer } from 'handfish'
+// plus the DSL syntax tokenizer and shared Seance affordance components.
+import { JoinSessionDialog, SessionStatus, dslTokenizer } from 'handfish'
 // Injects Visualize's code-editor skin. Editor behavior comes from Handfish.
 import './ui/codeEditor.js'
+
+void JoinSessionDialog
+void SessionStatus
 
 const $ = (id) => document.getElementById(id)
 
@@ -341,6 +345,7 @@ async function boot() {
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
     window.__visualize = { audio, midi, compositor, decks: state.decks, rebind, state, mixer, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
+    let online = null
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -461,6 +466,7 @@ async function boot() {
             }
             updateLed()
             refreshDeckMediaUi(deckId)
+            publishDeckDsl(deckId, `automix:${program.title || deckId}`)
         }
     })
     // Drive the AutoMix fade per-frame for smooth interpolation
@@ -622,6 +628,38 @@ async function boot() {
         B: { name: $('deck-b-name'), tag: $('deck-b-tagline') }
     }
 
+    function publishDeckDsl(deckId, source) {
+        const docId = DECK_DOC_IDS[deckId]
+        const dsl = state.decks[deckId]?.currentDsl || ''
+        if (!docId || !dsl) return
+        online?.updateLocalText(docId, dsl, { source })
+    }
+
+    function publishAllDecks(source) {
+        publishDeckDsl('A', source)
+        publishDeckDsl('B', source)
+    }
+
+    async function applyOnlineDsl(deckId, dsl, context = {}) {
+        const deck = state.decks[deckId]
+        if (!deck || !String(dsl || '').trim()) return
+        const res = await deck.load(dsl, '(online)')
+        if (!res.success) {
+            toast(`${deckId}: ${res.error.slice(0, 60)}`, 4200)
+            return
+        }
+        audio.refreshDeckStates()
+        const labels = deckLabels[deckId]
+        if (labels) {
+            labels.name.textContent = '(online)'
+            labels.tag.textContent = context?.source === 'snapshot'
+                ? 'loaded from Seance session'
+                : 'updated from Seance session'
+        }
+        updateLed()
+        refreshDeckMediaUi(deckId)
+    }
+
     async function loadProgram(deckId, program) {
         if (!program) return
         const deck = state.decks[deckId]
@@ -651,6 +689,7 @@ async function boot() {
             labels.name.textContent = program.title
             labels.tag.textContent = program.tagline || ''
         }
+        publishDeckDsl(deckId, `load:${program.title || deckId}`)
         // Keep the OLED readout in step with the live deck's program.
         updateLed()
         // If the editor is open for this deck, sync its content to the
@@ -795,6 +834,7 @@ async function boot() {
                 if (ok) {
                     flashRebindBtn(eqBtn)
                     audio.refreshDeckStates()
+                    publishDeckDsl(deckId, 'rebind:eq')
                     syncDeckEditor(deckId)
                 } else {
                     toast(`${deckId}: no rebindable params`)
@@ -804,6 +844,7 @@ async function boot() {
                 const ok = await rebind.rebindMidi(state.decks[deckId])
                 if (ok) {
                     flashRebindBtn(midiBtn)
+                    publishDeckDsl(deckId, 'rebind:midi')
                     syncDeckEditor(deckId)
                 } else {
                     toast(`${deckId}: no rebindable params`)
@@ -1066,6 +1107,7 @@ async function boot() {
                         labels.name.textContent = '(custom)'
                         labels.tag.textContent = ''
                     }
+                    publishDeckDsl(deckId, 'editor-compile')
                     updateLed()
                 } finally {
                     inFlight = false
@@ -1662,6 +1704,7 @@ async function boot() {
                 syncDeckEditor('B')
                 refreshDeckMediaUi('A')
                 refreshDeckMediaUi('B')
+                publishAllDecks('scene-recall')
             }
         }
     }
@@ -1876,6 +1919,34 @@ async function boot() {
     setStatusPill('audio-status', 'audio off', 'off')
     setStatusPill('midi-status', 'midi off', 'off')
 
+    try {
+        online = await createVisualizeOnlineCollaboration({
+            decks: state.decks,
+            editorForDeck: (deckId) => document.querySelector(`.deck[data-deck="${deckId}"] code-editor`),
+            getDeckText: (deckId) => state.decks[deckId]?.currentDsl || '',
+            applyRemoteText: applyOnlineDsl,
+            statusEl: $('online-session-status'),
+            takeOnlineButton: $('online-take'),
+            joinButton: $('online-join'),
+            joinDialog: $('online-join-dialog'),
+            toast,
+            location: window.location,
+            history: window.history,
+            clipboard: navigator.clipboard,
+        })
+        window.__visualize.online = online
+    } catch (err) {
+        console.warn('[seance] SDK unavailable', err?.message || err)
+        toast('online collaboration unavailable', 4200)
+        window.__visualize.online = {
+            ready: false,
+            getStatus: () => 'offline',
+            getSessionId: () => null,
+            getShareUrl: () => null,
+            updateLocalText: () => null,
+        }
+    }
+
     // App is now fully running behind the boot overlay (decks rendering,
     // compositor compositing). Wait for the user to click START SET (or,
     // on the share-loader path, A Deck / B Deck).
@@ -1926,6 +1997,12 @@ async function boot() {
         // share dialog — the operator already made their choice.
         clearCodeFromUrl()
     }
+
+    // `?seance=` joins after the boot choice. If a legacy `?code=` share
+    // loader is also present, the user's deck choice and load complete first;
+    // joining a Seance session then adopts the server documents as the single
+    // source of truth, matching the SDK contract.
+    await online?.joinFromUrlIfPresent?.()
 
     // Live decks are up and stable; defer library thumbnails to an idle
     // window so the offscreen renderer doesn't compete for GPU during

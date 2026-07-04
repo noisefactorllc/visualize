@@ -13,6 +13,7 @@
     <link rel="preconnect" href="https://fonts.noisefactor.io" crossorigin>
     <link rel="preconnect" href="https://shaders.noisedeck.app" crossorigin>
     <link rel="preconnect" href="https://handfish.noisefactor.io" crossorigin>
+    <link rel="preconnect" href="https://seance.noisefactor.io" crossorigin>
 
     <!-- Resolve `import ... from 'handfish'` in app.js to the CDN bundle.
          Used for the <code-editor> custom element + dslTokenizer. -->
@@ -213,6 +214,26 @@
                 <button class="hf-icon-btn tooltip" id="about-btn" data-title="About Visualize" aria-label="About Visualize"><span class="hf-icon">info</span></button>
             </div>
         </header>
+
+        <section class="online-collab" aria-label="Online collaboration">
+            <div class="online-actions">
+                <button id="online-take" class="ghost-button tooltip" data-title="Take Online">
+                    <span class="icon">cloud_upload</span>
+                    Take Online
+                </button>
+                <button id="online-join" class="ghost-button tooltip" data-title="Join Session by ID">
+                    <span class="icon">link</span>
+                    Join Session by ID
+                </button>
+            </div>
+            <session-status id="online-session-status" state="offline" copy-label="Copy URL" offline-label="Go Offline"></session-status>
+            <join-session-dialog
+                id="online-join-dialog"
+                title="Join Session by ID"
+                copy="Enter the six-character Seance session id for this composition."
+                join-label="Join Session"
+                cancel-label="Cancel"></join-session-dialog>
+        </section>
 
         <aside class="library" id="library-panel">
             <div class="panel-head">
