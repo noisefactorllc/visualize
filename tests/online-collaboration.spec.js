@@ -10,6 +10,7 @@ const DSL_A2 = 'search synth, render\n\nnoise(seed: 202, ridges: false)\n  .writ
 const DSL_B1 = 'search synth, render\n\nnoise(seed: 303, speed: 0.18)\n  .write(o0)\n\nrender(o0)'
 const DSL_B2 = 'search synth, render\n\nnoise(seed: 404, speed: 0.32)\n  .write(o0)\n\nrender(o0)'
 const INVALID_DSL = 'this is not valid noisemaker dsl'
+const ONLINE_FEATURE = 'onlineCollaboration'
 
 const LIGHT_PROGRAMS = [
     { title: 'Online A1', tagline: 'test program', tint: '#4ea8ff', tags: ['abstract'], category: 'abstract', dsl: DSL_A1 },
@@ -18,7 +19,13 @@ const LIGHT_PROGRAMS = [
     { title: 'Online B2', tagline: 'test program', tint: '#ffd24e', tags: ['abstract'], category: 'abstract', dsl: DSL_B2 },
 ]
 
-async function newOnlinePage(context, server, path = '/') {
+function withOnlineFeature(path = '/') {
+    const url = new URL(path, 'http://localhost:3070')
+    url.searchParams.set('features', ONLINE_FEATURE)
+    return `${url.pathname}${url.search}`
+}
+
+async function newOnlinePage(context, server, path = '/', { online = true } = {}) {
     const page = await context.newPage()
     await routeHandfishLocal(page)
     await routeSeanceSdkLocal(page)
@@ -33,13 +40,17 @@ async function newOnlinePage(context, server, path = '/') {
     page.on('console', msg => {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
-    await page.goto(path)
+    await page.goto(online ? withOnlineFeature(path) : path)
     await page.click('#boot-start')
-    await page.waitForFunction(() =>
-        !!window.__visualize?.online?.ready,
-        null,
-        { timeout: 45_000 }
-    )
+    if (online) {
+        await page.waitForFunction(() =>
+            !!window.__visualize?.online?.ready,
+            null,
+            { timeout: 45_000 }
+        )
+    } else {
+        await page.waitForFunction(() => !!window.__visualize?.decks?.A?.currentDsl, null, { timeout: 45_000 })
+    }
     return page
 }
 
@@ -106,6 +117,22 @@ test('deck A and deck B sync independently in one Seance session', async ({ brow
     }
 })
 
+test('online collaboration controls are hidden and ?seance= is inert without the feature flag', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        const page = await newOnlinePage(context, server, '/?seance=JOIN42', { online: false })
+
+        await expect(page.locator('#online-take')).toBeHidden()
+        await expect(page.locator('#online-join')).toBeHidden()
+        await expect(page.locator('#online-session-status')).toBeHidden()
+        expect(await page.evaluate(() => window.__visualize.online?.ready)).toBe(false)
+        expect(server.sockets.size).toBe(0)
+    } finally {
+        await context.close()
+    }
+})
+
 test('printed Seance URL restores both deck documents', async ({ browser }) => {
     const server = new FakeSeanceServer()
     const context = await browser.newContext()
@@ -117,6 +144,7 @@ test('printed Seance URL restores both deck documents', async ({ browser }) => {
 
         const shareUrl = await host.evaluate(() => window.__visualize.online.getShareUrl())
         expect(shareUrl).toContain('seance=')
+        expect(shareUrl).toContain(`features=${ONLINE_FEATURE}`)
         const restorePath = new URL(shareUrl).pathname + new URL(shareUrl).search
 
         const restored = await newOnlinePage(context, server, restorePath)

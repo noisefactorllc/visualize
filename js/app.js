@@ -41,6 +41,7 @@ import './ui/codeEditor.js'
 void JoinSessionDialog
 void SessionStatus
 
+const ONLINE_COLLABORATION_FEATURE = 'onlineCollaboration'
 const $ = (id) => document.getElementById(id)
 
 const RENDERER_STORAGE_KEY = 'visualize.renderer.v1'
@@ -104,6 +105,38 @@ function toast(msg, timeoutMs = 2200) {
     el.classList.add('show')
     clearTimeout(toast._t)
     toast._t = setTimeout(() => el.classList.remove('show'), timeoutMs)
+}
+
+function isFeatureEnabled(name) {
+    const params = new URLSearchParams(window.location.search)
+    const fromUrl = (params.get('features') || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (fromUrl.includes(name)) return true
+    try {
+        return localStorage.getItem(`feature.${name}`) === 'true'
+    } catch {
+        return false
+    }
+}
+
+function setOnlineCollaborationUiVisible(visible) {
+    for (const id of ['online-take', 'online-join', 'online-session-status', 'online-join-dialog']) {
+        const el = $(id)
+        if (!el) continue
+        el.hidden = !visible
+        el.style.display = visible ? '' : 'none'
+    }
+}
+
+function disabledOnlineCollaboration() {
+    return {
+        ready: false,
+        getStatus: () => 'offline',
+        getSessionId: () => null,
+        getShareUrl: () => null,
+        updateLocalText: () => null,
+        joinFromUrlIfPresent: async () => null,
+        goOffline: () => {},
+    }
 }
 
 function setStatusPill(id, text, state) {
@@ -346,6 +379,8 @@ async function boot() {
     // are attached below once they're constructed.
     window.__visualize = { audio, midi, compositor, decks: state.decks, rebind, state, mixer, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
     let online = null
+    const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
+    setOnlineCollaborationUiVisible(onlineCollaborationEnabled)
 
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
@@ -1963,32 +1998,30 @@ async function boot() {
     setStatusPill('audio-status', 'audio off', 'off')
     setStatusPill('midi-status', 'midi off', 'off')
 
-    try {
-        online = await createVisualizeOnlineCollaboration({
-            decks: state.decks,
-            editorForDeck: (deckId) => document.querySelector(`.deck[data-deck="${deckId}"] code-editor`),
-            getDeckText: (deckId) => collaborativeDeckText(deckId),
-            applyRemoteText: applyOnlineDsl,
-            statusEl: $('online-session-status'),
-            takeOnlineButton: $('online-take'),
-            joinButton: $('online-join'),
-            joinDialog: $('online-join-dialog'),
-            toast,
-            location: window.location,
-            history: window.history,
-            clipboard: navigator.clipboard,
-        })
-        window.__visualize.online = online
-    } catch (err) {
-        console.warn('[seance] SDK unavailable', err?.message || err)
-        toast('online collaboration unavailable', 4200)
-        window.__visualize.online = {
-            ready: false,
-            getStatus: () => 'offline',
-            getSessionId: () => null,
-            getShareUrl: () => null,
-            updateLocalText: () => null,
+    if (onlineCollaborationEnabled) {
+        try {
+            online = await createVisualizeOnlineCollaboration({
+                decks: state.decks,
+                editorForDeck: (deckId) => document.querySelector(`.deck[data-deck="${deckId}"] code-editor`),
+                getDeckText: (deckId) => collaborativeDeckText(deckId),
+                applyRemoteText: applyOnlineDsl,
+                statusEl: $('online-session-status'),
+                takeOnlineButton: $('online-take'),
+                joinButton: $('online-join'),
+                joinDialog: $('online-join-dialog'),
+                toast,
+                location: window.location,
+                history: window.history,
+                clipboard: navigator.clipboard,
+            })
+            window.__visualize.online = online
+        } catch (err) {
+            console.warn('[seance] SDK unavailable', err?.message || err)
+            toast('online collaboration unavailable', 4200)
+            window.__visualize.online = disabledOnlineCollaboration()
         }
+    } else {
+        window.__visualize.online = disabledOnlineCollaboration()
     }
 
     // App is now fully running behind the boot overlay (decks rendering,
@@ -2046,7 +2079,7 @@ async function boot() {
     // loader is also present, the user's deck choice and load complete first;
     // joining a Seance session then adopts the server documents as the single
     // source of truth, matching the SDK contract.
-    await online?.joinFromUrlIfPresent?.()
+    if (onlineCollaborationEnabled) await online?.joinFromUrlIfPresent?.()
 
     // Live decks are up and stable; defer library thumbnails to an idle
     // window so the offscreen renderer doesn't compete for GPU during
