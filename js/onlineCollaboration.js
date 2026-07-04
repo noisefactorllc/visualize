@@ -263,6 +263,7 @@ class VisualizeOnlineController {
 
     _writeSessionToUrlString(sessionId) {
         const url = urlFrom(this.location)
+        url.searchParams.delete('code')
         if (sessionId) {
             url.searchParams.set('seance', sessionId)
         } else {

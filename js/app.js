@@ -458,6 +458,8 @@ async function boot() {
         // swaps a program in. Otherwise the topbar label stays stuck on
         // whatever was loaded manually before AutoMix took over.
         onLoad: (deckId, program) => {
+            setCollaborativeDeckText(deckId, program.dsl, { syncOpen: false })
+            clearDeckEditorError(deckId)
             audio.refreshDeckStates()
             const labels = deckLabels[deckId]
             if (labels) {
@@ -627,6 +629,49 @@ async function boot() {
         A: { name: $('deck-a-name'), tag: $('deck-a-tagline') },
         B: { name: $('deck-b-name'), tag: $('deck-b-tagline') }
     }
+    const deckEditorText = { A: null, B: null }
+
+    function deckEditorElements(deckId) {
+        const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
+        return {
+            deckEl,
+            panel: deckEl?.querySelector('.deck-editor'),
+            editor: deckEl?.querySelector('code-editor'),
+            errorEl: deckEl?.querySelector('.deck-editor-error')
+        }
+    }
+
+    function collaborativeDeckText(deckId) {
+        return deckEditorText[deckId] ?? state.decks[deckId]?._currentDsl ?? state.decks[deckId]?.currentDsl ?? ''
+    }
+
+    function setCollaborativeDeckText(deckId, text, { syncOpen = true } = {}) {
+        deckEditorText[deckId] = String(text ?? '')
+        if (!syncOpen) return
+        const { panel, editor } = deckEditorElements(deckId)
+        if (panel && !panel.hidden && editor) editor.value = deckEditorText[deckId]
+    }
+
+    function resetCollaborativeDeckText(deckId, { syncOpen = true } = {}) {
+        setCollaborativeDeckText(deckId, state.decks[deckId]?._currentDsl || '', { syncOpen })
+    }
+
+    function showDeckEditorError(deckId, msg) {
+        const { errorEl } = deckEditorElements(deckId)
+        if (!errorEl) return
+        errorEl.innerHTML = ''
+        const span = document.createElement('span')
+        span.textContent = msg
+        errorEl.appendChild(span)
+        errorEl.hidden = false
+    }
+
+    function clearDeckEditorError(deckId) {
+        const { errorEl } = deckEditorElements(deckId)
+        if (!errorEl) return
+        errorEl.hidden = true
+        errorEl.innerHTML = ''
+    }
 
     function publishDeckDsl(deckId, source) {
         const docId = DECK_DOC_IDS[deckId]
@@ -643,11 +688,14 @@ async function boot() {
     async function applyOnlineDsl(deckId, dsl, context = {}) {
         const deck = state.decks[deckId]
         if (!deck || !String(dsl || '').trim()) return
+        setCollaborativeDeckText(deckId, dsl)
         const res = await deck.load(dsl, '(online)')
         if (!res.success) {
+            showDeckEditorError(deckId, res.error || 'compile failed')
             toast(`${deckId}: ${res.error.slice(0, 60)}`, 4200)
             return
         }
+        clearDeckEditorError(deckId)
         audio.refreshDeckStates()
         const labels = deckLabels[deckId]
         if (labels) {
@@ -682,6 +730,8 @@ async function boot() {
             toast(`${deckId}: ${res.error.slice(0, 60)}`)
             return
         }
+        setCollaborativeDeckText(deckId, program.dsl, { syncOpen: false })
+        clearDeckEditorError(deckId)
         // Refresh audio routing in case renderer recreated audioState
         audio.refreshDeckStates()
         const labels = deckLabels[deckId]
@@ -834,6 +884,8 @@ async function boot() {
                 if (ok) {
                     flashRebindBtn(eqBtn)
                     audio.refreshDeckStates()
+                    resetCollaborativeDeckText(deckId, { syncOpen: false })
+                    clearDeckEditorError(deckId)
                     publishDeckDsl(deckId, 'rebind:eq')
                     syncDeckEditor(deckId)
                 } else {
@@ -844,6 +896,8 @@ async function boot() {
                 const ok = await rebind.rebindMidi(state.decks[deckId])
                 if (ok) {
                     flashRebindBtn(midiBtn)
+                    resetCollaborativeDeckText(deckId, { syncOpen: false })
+                    clearDeckEditorError(deckId)
                     publishDeckDsl(deckId, 'rebind:midi')
                     syncDeckEditor(deckId)
                 } else {
@@ -1059,30 +1113,16 @@ async function boot() {
             const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
             const panel = deckEl.querySelector('.deck-editor')
             const editor = deckEl.querySelector('code-editor')
-            const errorEl = deckEl.querySelector('.deck-editor-error')
             const toggleBtn = deckEl.querySelector('.deck-edit-toggle')
 
             editor.setTokenizer?.(dslTokenizer)
-
-            function showError(msg) {
-                errorEl.innerHTML = ''
-                const span = document.createElement('span')
-                span.textContent = msg
-                errorEl.appendChild(span)
-                errorEl.hidden = false
-            }
-            function clearError() {
-                errorEl.hidden = true
-                errorEl.innerHTML = ''
-            }
 
             toggleBtn.addEventListener('click', () => {
                 const opening = panel.hidden
                 panel.hidden = !opening
                 toggleBtn.classList.toggle('active', opening)
                 if (opening) {
-                    editor.value = state.decks[deckId]._currentDsl || ''
-                    clearError()
+                    editor.value = collaborativeDeckText(deckId)
                     requestAnimationFrame(() => editor.focus?.())
                 }
             })
@@ -1093,14 +1133,15 @@ async function boot() {
                 if (inFlight) return
                 const dsl = editor.value
                 if (!dsl.trim()) return
+                setCollaborativeDeckText(deckId, dsl, { syncOpen: false })
                 inFlight = true
                 try {
                     const res = await state.decks[deckId].load(dsl, '(custom)')
                     if (!res.success) {
-                        showError(res.error || 'compile failed')
+                        showDeckEditorError(deckId, res.error || 'compile failed')
                         return
                     }
-                    clearError()
+                    clearDeckEditorError(deckId)
                     audio.refreshDeckStates()
                     const labels = deckLabels[deckId]
                     if (labels) {
@@ -1117,6 +1158,7 @@ async function boot() {
             // Hot reload — recompile 500ms after the user stops typing.
             // Mirrors polymorphic's behavior; no compile button needed.
             editor.addEventListener('input', () => {
+                setCollaborativeDeckText(deckId, editor.value, { syncOpen: false })
                 if (hotReloadTimer) clearTimeout(hotReloadTimer)
                 hotReloadTimer = setTimeout(() => {
                     hotReloadTimer = null
@@ -1139,11 +1181,9 @@ async function boot() {
      *  of truth (this covers post-load, post-rebind, and post-scene-
      *  recall all in one path). */
     function syncDeckEditor(deckId) {
-        const deckEl = document.querySelector(`.deck[data-deck="${deckId}"]`)
-        const panel = deckEl.querySelector('.deck-editor')
-        if (panel.hidden) return
-        const editor = deckEl.querySelector('code-editor')
-        editor.value = state.decks[deckId]._currentDsl || ''
+        const { panel, editor } = deckEditorElements(deckId)
+        if (!panel || !editor || panel.hidden) return
+        editor.value = collaborativeDeckText(deckId)
     }
 
     wireDeckEditors()
@@ -1700,6 +1740,10 @@ async function boot() {
                 updateOscCountBtn('B')
                 updateDensityButton('A')
                 updateDensityButton('B')
+                resetCollaborativeDeckText('A', { syncOpen: false })
+                resetCollaborativeDeckText('B', { syncOpen: false })
+                clearDeckEditorError('A')
+                clearDeckEditorError('B')
                 syncDeckEditor('A')
                 syncDeckEditor('B')
                 refreshDeckMediaUi('A')
@@ -1923,7 +1967,7 @@ async function boot() {
         online = await createVisualizeOnlineCollaboration({
             decks: state.decks,
             editorForDeck: (deckId) => document.querySelector(`.deck[data-deck="${deckId}"] code-editor`),
-            getDeckText: (deckId) => state.decks[deckId]?.currentDsl || '',
+            getDeckText: (deckId) => collaborativeDeckText(deckId),
             applyRemoteText: applyOnlineDsl,
             statusEl: $('online-session-status'),
             takeOnlineButton: $('online-take'),

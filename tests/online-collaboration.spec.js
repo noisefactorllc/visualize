@@ -230,6 +230,9 @@ test('invalid remote DSL updates editor text but preserves last-good deck render
         await setEditorText(host, 'A', INVALID_DSL)
         await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(INVALID_DSL)
         expect(await currentDsl(guest, 'A')).toBe(DSL_A1)
+        await openEditor(guest, 'A')
+        expect(await editorText(guest, 'A')).toBe(INVALID_DSL)
+        await expect(guest.locator('.deck[data-deck="A"] .deck-editor-error')).toBeVisible()
     } finally {
         await context.close()
     }
