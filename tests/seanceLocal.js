@@ -92,7 +92,7 @@ export class FakeSeanceServer {
                     this.readyState = FakeWebSocket.CLOSED
                     sockets.delete(this._socketId)
                     window.__fakeSeanceSocketClose(this._socketId)
-                    this.dispatchEvent(new CloseEvent('close'))
+                    setTimeout(() => this.dispatchEvent(new CloseEvent('close')), 0)
                 }
 
                 __receive(frame) {
