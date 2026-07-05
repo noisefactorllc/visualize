@@ -80,7 +80,12 @@ class VisualizeOnlineController {
             const editor = this.editorForDeck(deckId)
             if (!editor) continue
             this.online.bindEditor({
-                docId: DECK_DOC_IDS[deckId],
+                // Deck A omits an explicit docId so it binds through the
+                // SDK's implicit default-doc mechanism: joining a session
+                // created by a single-editor app (doc id "main") auto-adopts
+                // that doc instead of staying pinned to the local "deck:A"
+                // id, which never exists in those sessions.
+                docId: deckId === 'A' ? undefined : DECK_DOC_IDS[deckId],
                 editor,
                 getText: () => String(editor.value ?? ''),
                 setText: (text) => {

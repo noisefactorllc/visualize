@@ -307,3 +307,26 @@ test('Deck A is the SDK default document for single-editor bindings', async ({ b
         await context.close()
     }
 })
+
+test('joining a session created by a single-editor app (doc id "main") populates Deck A', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        // Models a session created by noisedeck/polymorphic/noodles, none of
+        // which know about "deck:A" — they seed the SDK's actual default
+        // doc id, "main". Visualize's Deck A must adopt it on join. DSL_B2
+        // is a valid, already-exercised DSL string that is never the guest
+        // page's own boot default for Deck A, so this can't pass by
+        // coincidentally matching local state instead of adopted state.
+        const { session_id: sessionId } = server.createSession({
+            snapshot: { docs: [{ id: 'main', title: 'Program', kind: 'noisemaker-dsl', text: DSL_B2, default: true }] },
+        })
+
+        const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
+        await waitForOnlineJoin(guest)
+
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 }).toBe(DSL_B2)
+    } finally {
+        await context.close()
+    }
+})
