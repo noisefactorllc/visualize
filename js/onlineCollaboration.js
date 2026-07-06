@@ -42,10 +42,7 @@ class VisualizeOnlineController {
         editorForDeck,
         getDeckText,
         applyRemoteText,
-        statusEl,
-        takeOnlineButton,
-        joinButton,
-        joinDialog,
+        dialog,
         toast = () => {},
         location = globalThis.location,
         history = globalThis.history,
@@ -62,10 +59,7 @@ class VisualizeOnlineController {
         this.editorForDeck = editorForDeck
         this.getDeckText = getDeckText
         this.applyRemoteText = applyRemoteText
-        this.statusEl = statusEl
-        this.takeOnlineButton = takeOnlineButton
-        this.joinButton = joinButton
-        this.joinDialog = joinDialog
+        this.dialog = dialog
         this.toast = toast
         this.location = location
         this.history = history
@@ -175,18 +169,18 @@ class VisualizeOnlineController {
     }
 
     syncStatusUi() {
-        if (!this.statusEl) return
+        if (!this.dialog) return
         const status = this.getStatus()
         const onlineStatus = status === 'online' || status === 'readonly'
         const sessionId = this.getSessionId() || ''
         const shareUrl = onlineStatus ? this.getShareUrl() : ''
 
-        this.statusEl.setAttribute('state', onlineStatus ? 'online' : 'offline')
-        this.statusEl.setAttribute('session-id', onlineStatus ? sessionId : '')
-        this.statusEl.setAttribute('session-url', shareUrl)
-
-        if (this.takeOnlineButton) this.takeOnlineButton.disabled = status === 'connecting' || onlineStatus
-        if (this.joinButton) this.joinButton.disabled = status === 'connecting'
+        // Drive the unified seance-dialog's internal view via its state; the
+        // dialog is shown/hidden by its own trigger (the go-online toolbar
+        // button), so never toggle its visibility here.
+        this.dialog.state = onlineStatus ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
+        this.dialog.sessionId = onlineStatus ? sessionId : ''
+        this.dialog.sessionUrl = shareUrl
     }
 
     async _ensureOnline() {
@@ -224,12 +218,16 @@ class VisualizeOnlineController {
     }
 
     _wireUi() {
-        this.takeOnlineButton?.addEventListener('click', () => this.takeOnline())
-        this.joinButton?.addEventListener('click', () => this.joinDialog?.show())
-        this.joinDialog?.addEventListener('join-session', (event) => {
+        // All collaboration intents now arrive from the single seance-dialog
+        // as semantic events (was: separate button clicks + status-element
+        // events spread across four distinct deps).
+        const dialog = this.dialog
+        dialog?.addEventListener('take-online', () => this.takeOnline())
+        dialog?.addEventListener('join-session', (event) => {
             this.joinSession(event.detail?.sessionId)
         })
-        this.statusEl?.addEventListener('copy-url', async (event) => {
+        dialog?.addEventListener('go-offline', () => this.goOffline())
+        dialog?.addEventListener('copy-url', async (event) => {
             const url = event.detail?.sessionUrl || this.getShareUrl()
             if (!url) return
             try {
@@ -239,7 +237,6 @@ class VisualizeOnlineController {
                 this.toast(url, 6000)
             }
         })
-        this.statusEl?.addEventListener('go-offline', () => this.goOffline())
     }
 
     _seedDocs() {
@@ -288,8 +285,15 @@ class VisualizeOnlineController {
     }
 
     _setBusy(busy) {
-        if (this.takeOnlineButton) this.takeOnlineButton.disabled = busy || this.getStatus() === 'online'
-        if (this.joinButton) this.joinButton.disabled = busy
+        // No direct button deps anymore — the dialog owns its own DOM. Reach
+        // the same two controls through their stable data-action hooks so a
+        // rapid double-click can't fire takeOnline()/joinSession() twice
+        // before the SDK's own 'status' events start flowing through
+        // syncStatusUi() (which the dialog reflects via state="connecting").
+        const takeControl = this.dialog?.querySelector?.('[data-action="take-online"]')
+        const joinControl = this.dialog?.querySelector?.('[data-action="join"]')
+        if (takeControl) takeControl.disabled = busy || this.getStatus() === 'online'
+        if (joinControl) joinControl.disabled = busy
     }
 }
 

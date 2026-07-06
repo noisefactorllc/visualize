@@ -77,15 +77,33 @@ async function currentDsl(page, deckId) {
     return page.evaluate(id => window.__visualize.decks[id].currentDsl, deckId)
 }
 
+async function openDialog(page) {
+    await page.click('#go-online-btn')
+    await expect(page.locator('#seance-dialog dialog')).toBeVisible()
+}
+
+async function closeDialog(page) {
+    // The dialog is modal — its backdrop blocks the deck/editor/topbar
+    // controls underneath, so every helper that opens it must close it
+    // again before the test touches anything else on the page.
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#seance-dialog dialog')).toBeHidden()
+}
+
 async function takeOnline(page) {
-    await page.click('#online-take')
-    await expect(page.locator('#online-session-status')).toContainText('Online', { timeout: 30_000 })
-    return page.evaluate(() => window.__visualize.online.getSessionId())
+    await openDialog(page)
+    await page.locator('#seance-dialog [data-action="take-online"]').click()
+    await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Online', { timeout: 30_000 })
+    const sessionId = await page.locator('#seance-dialog').evaluate((el) => el.sessionId)
+    await closeDialog(page)
+    return sessionId
 }
 
 async function waitForOnlineJoin(page) {
-    await expect(page.locator('#online-session-status')).toContainText('Online', { timeout: 30_000 })
+    await openDialog(page)
+    await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Online', { timeout: 30_000 })
     await page.waitForFunction(() => window.__visualize.online.getStatus() === 'online', null, { timeout: 30_000 })
+    await closeDialog(page)
 }
 
 test('deck A and deck B sync independently in one Seance session', async ({ browser }) => {
@@ -123,9 +141,8 @@ test('online collaboration controls are hidden and ?seance= is inert without the
     try {
         const page = await newOnlinePage(context, server, '/?seance=JOIN42', { online: false })
 
-        await expect(page.locator('#online-take')).toBeHidden()
-        await expect(page.locator('#online-join')).toBeHidden()
-        await expect(page.locator('#online-session-status')).toBeHidden()
+        await expect(page.locator('#go-online-btn')).toBeHidden()
+        await expect(page.locator('#seance-dialog dialog')).toBeHidden()
         expect(await page.evaluate(() => window.__visualize.online?.ready)).toBe(false)
         expect(server.sockets.size).toBe(0)
     } finally {
@@ -199,6 +216,13 @@ test('joining a different session closes the previous online connection', async 
         await waitForOnlineJoin(guest)
         await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
 
+        // Switch sessions. The unified dialog only offers join-by-id while
+        // offline, so leave session one first, then join session two — the
+        // controller must fully drop the old connection either way.
+        await openDialog(guest)
+        await guest.locator('#seance-dialog [data-action="go-offline"]').click()
+        await expect(guest.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Offline')
+        await closeDialog(guest)
         await pageJoinById(guest, sessionTwo)
         await waitForOnlineJoin(guest)
         await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A2)
@@ -212,11 +236,11 @@ test('joining a different session closes the previous online connection', async 
 })
 
 async function pageJoinById(page, sessionId) {
-    await page.click('#online-join')
-    const dialog = page.locator('#online-join-dialog dialog')
-    await expect(dialog).toBeVisible()
-    await dialog.locator('input[name="sessionId"]').fill(sessionId)
-    await dialog.locator('button[type="submit"]').click()
+    await openDialog(page)
+    const dialog = page.locator('#seance-dialog')
+    await dialog.locator('.hf-seance-join-input').fill(sessionId)
+    await dialog.locator('[data-action="join"]').click()
+    await closeDialog(page)
 }
 
 test('Go Offline preserves local editor text and stops publishing edits', async ({ browser }) => {
@@ -231,8 +255,10 @@ test('Go Offline preserves local editor text and stops publishing edits', async 
         await setEditorText(host, 'A', DSL_A1)
         await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
 
-        await host.click('#online-session-status [data-action="go-offline"]')
-        await expect(host.locator('#online-session-status')).toContainText('Offline')
+        await openDialog(host)
+        await host.locator('#seance-dialog [data-action="go-offline"]').click()
+        await expect(host.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Offline')
+        await closeDialog(host)
         expect(await editorText(host, 'A')).toBe(DSL_A1)
 
         await setEditorText(host, 'A', DSL_A2)

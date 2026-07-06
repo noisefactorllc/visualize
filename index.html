@@ -211,28 +211,9 @@
                 <button class="hf-icon-btn tooltip" id="settings-toggle" data-title="Settings (S)" aria-label="Open settings"><span class="hf-icon">settings</span></button>
                 <button class="hf-icon-btn tooltip" id="fullscreen-toggle" data-title="Fullscreen main (F)" aria-label="Toggle fullscreen"><span class="hf-icon">fullscreen</span></button>
                 <button class="hf-icon-btn tooltip" id="about-btn" data-title="About Visualize" aria-label="About Visualize"><span class="hf-icon">info</span></button>
+                <button class="hf-icon-btn tooltip" id="go-online-btn" data-title="Collaborate online" aria-label="Online collaboration" hidden></button>
             </div>
         </header>
-
-        <section class="online-collab" aria-label="Online collaboration" hidden>
-            <div class="online-actions">
-                <button id="online-take" class="ghost-button tooltip" data-title="Take Online">
-                    <span class="icon">cloud_upload</span>
-                    Take Online
-                </button>
-                <button id="online-join" class="ghost-button tooltip" data-title="Join Session by ID">
-                    <span class="icon">link</span>
-                    Join Session by ID
-                </button>
-            </div>
-            <session-status id="online-session-status" state="offline" copy-label="Copy URL" offline-label="Go Offline"></session-status>
-            <join-session-dialog
-                id="online-join-dialog"
-                title="Join Session by ID"
-                copy="Enter the six-character Seance session id for this composition."
-                join-label="Join Session"
-                cancel-label="Cancel"></join-session-dialog>
-        </section>
 
         <aside class="library" id="library-panel">
             <div class="panel-head">
@@ -672,6 +653,9 @@
         </div>
 
     </div>
+
+    <seance-dialog id="seance-dialog" heading="Go Online"
+        copy="Share this set live. Taking it online creates a session anyone with the link can join."></seance-dialog>
 
     <!-- Wire boot clicks synchronously so a fast click (test rig, eager
          user) doesn't race the deferred module graph. The shader bundle

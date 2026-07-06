@@ -15,10 +15,6 @@
 :root {
     /* Layout */
     --topbar-h: 72px;
-    /* Collapsed unless the onlineCollaboration feature flag enables the
-       bar (js sets .online-collab-enabled on #app) — the flag-off grid
-       must be identical to the pre-collaboration layout. */
-    --online-h: 0px;
     --controls-h: 168px;       /* two rows now */
     --library-w: 190px;        /* single-column card list */
 
@@ -55,26 +51,17 @@ html, body {
 #app {
     display: grid;
     grid-template-columns: var(--library-w) 1fr;
-    grid-template-rows: var(--topbar-h) var(--online-h) 1fr var(--controls-h);
+    grid-template-rows: var(--topbar-h) 1fr var(--controls-h);
     /* Library extends full-height down the left edge; topbar + stage +
        controls all live in the right column. Right column self-aligns
        so the controls strip sits directly under the decks. */
     grid-template-areas:
         "lib top"
-        "lib online"
         "lib stage"
         "lib ctl";
     height: 100vh;
     width: 100vw;
     gap: 0;
-}
-
-#app.online-collab-enabled {
-    --online-h: 44px;
-}
-
-.online-collab[hidden] {
-    display: none;
 }
 
 button:focus-visible,
@@ -175,41 +162,21 @@ select:focus-visible,
 .vz-tempo.midi-sync .tempo-bar__bpm,
 .vz-tempo.midi-sync .tempo-bar__label { color: var(--hf-accent); }
 
-.online-collab {
-    grid-area: online;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--hf-space-3);
-    min-width: 0;
-    padding: 0 var(--hf-space-3);
-    background: var(--hf-bg-surface);
-    border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
-    z-index: 9;
+/* SEANCE_LOGO_SVG in the go-online button is a raw SVG child (not a
+   .hf-icon material-symbol span) — give it the same visual weight as the
+   sibling icon buttons' material-symbol glyphs (--hf-size-lg, set by
+   handfish's .hf-topbar-cluster .hf-icon-btn .hf-icon rule). */
+.hf-topbar-cluster .hf-icon-btn svg {
+    width: var(--hf-size-lg);
+    height: var(--hf-size-lg);
+    fill: currentColor;
 }
 
-.online-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--hf-space-2);
-}
-
-.online-actions .ghost-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-#online-session-status {
-    min-width: 0;
-}
-
-#online-session-status .hf-session-status {
-    flex-wrap: nowrap;
-}
-
-#online-session-status .hf-session-status-url {
-    min-width: 0;
+/* handfish's .hf-icon-btn sets display:inline-flex, which overrides the
+   hidden attribute's default display:none — force it so the go-online
+   button stays hidden when the collaboration flag is off. */
+.hf-topbar-cluster .hf-icon-btn[hidden] {
+    display: none;
 }
 
 /* Shared handfish <led-matrix> status readout, seated in the top-bar cluster

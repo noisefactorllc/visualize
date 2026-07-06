@@ -33,13 +33,12 @@ import { clearCodeFromUrl } from './sharingLoader.js'
 import { getUserEffectsManager } from './userEffects.js'
 import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
-// plus the DSL syntax tokenizer and shared Seance affordance components.
-import { JoinSessionDialog, SessionStatus, dslTokenizer } from 'handfish'
+// plus the DSL syntax tokenizer, the Seance logo graphic (for the go-online
+// toolbar button), and the <seance-dialog> element (declared in index.html;
+// registers automatically once this module evaluates).
+import { SEANCE_LOGO_SVG, dslTokenizer } from 'handfish'
 // Injects Visualize's code-editor skin. Editor behavior comes from Handfish.
 import './ui/codeEditor.js'
-
-void JoinSessionDialog
-void SessionStatus
 
 const ONLINE_COLLABORATION_FEATURE = 'onlineCollaboration'
 const $ = (id) => document.getElementById(id)
@@ -119,12 +118,14 @@ function isFeatureEnabled(name) {
 }
 
 function setOnlineCollaborationUiVisible(visible) {
-    // The whole bar (and its 44px grid row) must vanish when the flag is
-    // off — flag-off layout has to match the pre-collaboration app.
-    const section = document.querySelector('.online-collab')
-    if (section) section.hidden = !visible
-    const app = document.getElementById('app')
-    if (app) app.classList.toggle('online-collab-enabled', visible)
+    // The go-online toolbar button is the only entry point now — the
+    // seance-dialog itself is modal and stays out of the grid entirely, so
+    // there's no bar/row to collapse when the flag is off.
+    const button = $('go-online-btn')
+    if (button) {
+        if (!button.innerHTML) button.innerHTML = SEANCE_LOGO_SVG
+        button.hidden = !visible
+    }
     if (visible && !document.querySelector('link[rel="preconnect"][href="https://seance.noisefactor.io"]')) {
         const link = document.createElement('link')
         link.rel = 'preconnect'
@@ -132,12 +133,7 @@ function setOnlineCollaborationUiVisible(visible) {
         link.crossOrigin = ''
         document.head.append(link)
     }
-    for (const id of ['online-take', 'online-join', 'online-session-status', 'online-join-dialog']) {
-        const el = $(id)
-        if (!el) continue
-        el.hidden = !visible
-        el.style.display = visible ? '' : 'none'
-    }
+    if (!visible) $('seance-dialog')?.hide?.()
 }
 
 function disabledOnlineCollaboration() {
@@ -1404,6 +1400,7 @@ async function boot() {
     // Fullscreen
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
     $('about-btn').addEventListener('click', () => aboutDialog.show())
+    $('go-online-btn').addEventListener('click', () => $('seance-dialog')?.show())
     document.addEventListener('fullscreenchange', () => {
         document.getElementById('app').classList.toggle('fullscreen-main', !!document.fullscreenElement)
     })
@@ -2018,10 +2015,7 @@ async function boot() {
                 editorForDeck: (deckId) => document.querySelector(`.deck[data-deck="${deckId}"] code-editor`),
                 getDeckText: (deckId) => collaborativeDeckText(deckId),
                 applyRemoteText: applyOnlineDsl,
-                statusEl: $('online-session-status'),
-                takeOnlineButton: $('online-take'),
-                joinButton: $('online-join'),
-                joinDialog: $('online-join-dialog'),
+                dialog: $('seance-dialog'),
                 toast,
                 location: window.location,
                 history: window.history,
