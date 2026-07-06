@@ -135,16 +135,22 @@ test('deck A and deck B sync independently in one Seance session', async ({ brow
     }
 })
 
-test('online collaboration controls are hidden and ?seance= is inert without the feature flag', async ({ browser }) => {
+test('online collaboration is available by default without any feature flag', async ({ browser }) => {
     const server = new FakeSeanceServer()
     const context = await browser.newContext()
     try {
-        const page = await newOnlinePage(context, server, '/?seance=JOIN42', { online: false })
+        // No ?features= flag on either page.
+        const host = await newOnlinePage(context, server, '/', { online: false })
+        await expect(host.locator('#go-online-btn')).toBeVisible()
+        await expect(host.locator('#seance-dialog dialog')).toBeHidden()
 
-        await expect(page.locator('#go-online-btn')).toBeHidden()
-        await expect(page.locator('#seance-dialog dialog')).toBeHidden()
-        expect(await page.evaluate(() => window.__visualize.online?.ready)).toBe(false)
-        expect(server.sockets.size).toBe(0)
+        const sessionId = await takeOnline(host)
+        await setEditorText(host, 'A', DSL_A1)
+
+        const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`, { online: false })
+        await waitForOnlineJoin(guest)
+        await openEditor(guest, 'A')
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
     } finally {
         await context.close()
     }

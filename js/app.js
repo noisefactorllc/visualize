@@ -107,6 +107,11 @@ function toast(msg, timeoutMs = 2200) {
 }
 
 function isFeatureEnabled(name) {
+    // onlineCollaboration ships enabled by default (2026-07-05); the flag
+    // machinery stays as a code-level kill-switch — remove the default to
+    // re-gate it. ?features= / localStorage still force-enable other flags.
+    const DEFAULTS = { onlineCollaboration: true }
+    if (DEFAULTS[name]) return true
     const params = new URLSearchParams(window.location.search)
     const fromUrl = (params.get('features') || '').split(',').map(s => s.trim()).filter(Boolean)
     if (fromUrl.includes(name)) return true
