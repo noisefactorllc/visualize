@@ -4,10 +4,11 @@
  * the rest of the Noise Factor platform (noisedeck, polymorphic,
  * foundry, shade).
  *
- * Visualize compiles only against the stock noisemaker shader bundle.
  * Compositions that ship portable (custom) effects via the sharing
- * API's `effects` array can't run here — fetchComposition returns the
- * raw response so callers can detect this case and decline cleanly.
+ * API's `effects` array are supported: fetchComposition returns the raw
+ * response, and the share-loader boot path installs each effect through
+ * the user-effects manager (persisted + registered with the engine)
+ * before compiling the DSL.
  */
 
 const SHARING_API_BASE = 'https://sharing.noisedeck.app'
