@@ -335,10 +335,16 @@ async function boot() {
         renderer: mixer.renderer,
         getCanvas: () => mixer.canvas,
         connectionProvider: createSyncOutputConnectionProvider({
-            connectionProvider: window.__VISUALIZE_SYNC_CONNECTION_PROVIDER__
+            transport: window.__VISUALIZE_SYNC_TRANSPORT__
         })
     })
     const syncOutputDialog = createSyncOutputDialog({ controller: syncOutputController })
+    const disposeSyncOutput = (event) => {
+        if (event.persisted) return
+        window.removeEventListener('pagehide', disposeSyncOutput)
+        syncOutputController.dispose()
+    }
+    window.addEventListener('pagehide', disposeSyncOutput)
 
     // Mirror the crossfader value into a CSS variable that drives the
     // topbar logotype gradient — 0 (deck A live) reads as blue,

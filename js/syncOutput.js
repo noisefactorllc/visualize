@@ -9,7 +9,7 @@ const RECOVERY_DELAYS_MS = Object.freeze([250, 1000, 4000])
 const RECOVERY_PROBATION_MS = 60_000
 const RECOVERY_CANCELLED = Symbol('sync recovery cancelled')
 const textEncoder = new TextEncoder()
-const FORMATTING_CHARACTERS = /[\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/u
+const FORMATTING_CHARACTERS = /\p{Cf}/u
 const EMPTY_STATS = Object.freeze({
     accepted: 0,
     droppedBusy: 0,
@@ -31,22 +31,33 @@ const INITIAL_STATE = Object.freeze({
     error: null
 })
 
-export function createDefaultSyncConnectionProvider({ Client = SyncBridgeClient } = {}) {
+export function createDefaultSyncConnectionProvider({
+    Client = SyncBridgeClient,
+    transport = {}
+} = {}) {
     if (typeof Client !== 'function') {
         throw new TypeError('Client must be a constructor')
     }
+    if (!transport || typeof transport !== 'object' || Array.isArray(transport)) {
+        throw new TypeError('transport must be an object')
+    }
+    const clientTransport = {}
+    for (const key of ['fetch', 'WebSocket', 'permissions']) {
+        if (Object.hasOwn(transport, key)) clientTransport[key] = transport[key]
+    }
     return Object.freeze({
         createClient(options = {}) {
-            return new Client(options)
+            return new Client({ ...clientTransport, ...options })
         }
     })
 }
 
 export function createSyncOutputConnectionProvider({
-    connectionProvider
+    connectionProvider,
+    transport
 } = {}) {
     if (connectionProvider !== undefined) return connectionProvider
-    return createDefaultSyncConnectionProvider()
+    return createDefaultSyncConnectionProvider({ transport })
 }
 
 function publicError(code, message) {
@@ -61,6 +72,10 @@ function outputError(code, message, options = {}) {
     error.name = 'SyncOutputError'
     error.code = code
     return error
+}
+
+function lifecycleError() {
+    return outputError('SYNC_LIFECYCLE', 'Sync output controller was disposed')
 }
 
 function rendererReplacedError(options = {}) {
@@ -247,8 +262,12 @@ export class SyncOutputController {
         this._clearTimeout = (...args) => Reflect.apply(clearTimeoutImplementation, globalThis, args)
         this._listeners = new Set([onStateChange])
         this._state = INITIAL_STATE
+        this._disposed = false
+        this._operationGeneration = 0
         this._operation = null
         this._passiveOperation = null
+        this._ownedClients = new Set()
+        this._startResources = null
         this._token = undefined
         this._client = null
         this._welcome = null
@@ -287,6 +306,7 @@ export class SyncOutputController {
     }
 
     checkAvailability() {
+        if (this._disposed) return Promise.reject(lifecycleError())
         if (this._state.status === 'recovering') return Promise.resolve(this._state)
         if (this._operation) return this._operation
         if (this._client || this._sender) return Promise.resolve(this._state)
@@ -299,7 +319,7 @@ export class SyncOutputController {
             error: null
         })
 
-        const operation = this._runPassiveCheck()
+        const operation = this._runPassiveCheck(this._operationGeneration)
         const tracked = operation.finally(() => {
             if (this._operation === tracked) this._operation = null
             if (this._passiveOperation === tracked) this._passiveOperation = null
@@ -310,6 +330,7 @@ export class SyncOutputController {
     }
 
     connect() {
+        if (this._disposed) return Promise.reject(lifecycleError())
         if (this._state.status === 'recovering') return Promise.resolve(this._state)
         if (this._operation) {
             const operation = this._operation
@@ -327,7 +348,7 @@ export class SyncOutputController {
             error: null
         })
 
-        const operation = this._runExplicitConnect()
+        const operation = this._runExplicitConnect(this._operationGeneration)
         const tracked = operation.finally(() => {
             if (this._operation === tracked) this._operation = null
         })
@@ -336,6 +357,7 @@ export class SyncOutputController {
     }
 
     start(name) {
+        if (this._disposed) return Promise.reject(lifecycleError())
         if (this._state.status === 'recovering') return Promise.resolve(this._state)
         if (this._operation) return this._operation
         if (this._state.status === 'sending') return Promise.resolve(this._state)
@@ -350,7 +372,7 @@ export class SyncOutputController {
             return Promise.reject(error)
         }
 
-        const operation = this._runStart(name)
+        const operation = this._runStart(name, this._operationGeneration)
         const tracked = operation.finally(() => {
             if (this._operation === tracked) this._operation = null
         })
@@ -359,6 +381,7 @@ export class SyncOutputController {
     }
 
     stop() {
+        if (this._disposed) return Promise.resolve(this._state)
         if (this._state.status === 'recovering') {
             this._cancelRecovery({ resetAttempts: true })
             this._setState({
@@ -386,15 +409,105 @@ export class SyncOutputController {
         return tracked
     }
 
-    async _runPassiveCheck() {
+    dispose() {
+        if (this._disposed) return
+        this._disposed = true
+        this._operationGeneration++
+        this._cancelRecovery({ resetAttempts: true })
+        this._clearStatsTimer()
+        this._cleanupStartResources(this._startResources)
+        this._startResources = null
+
+        const generation = this._liveGeneration
+        const removeSink = this._removeSink
+        const sender = this._sender
+        this._removeSink = null
+        try {
+            if (typeof removeSink === 'function') removeSink()
+            else sender?.close()
+        } catch {
+            try { sender?.close() } catch {
+                // Page lifecycle teardown remains best effort across every resource.
+            }
+        }
+        this._invalidateLiveSession(generation)
+        this._releaseClient()
+        for (const client of [...this._ownedClients]) this._closeOwnedClient(client)
+
+        this._operation = null
+        this._passiveOperation = null
+        this._state = Object.freeze({
+            ...this._state,
+            status: 'idle',
+            connected: false,
+            senderName: null,
+            stats: EMPTY_STATS,
+            error: null
+        })
+        this._listeners.clear()
+    }
+
+    async _createOwnedClient(options, lifecycleGeneration) {
+        const client = await this._connectionProvider.createClient(options)
+        if (this._disposed || lifecycleGeneration !== this._operationGeneration) {
+            try { client?.close?.() } catch {
+                // A late client is already outside the active lifecycle.
+            }
+            throw lifecycleError()
+        }
+        this._ownedClients.add(client)
+        return client
+    }
+
+    _assertLifecycleCurrent(lifecycleGeneration) {
+        if (this._disposed || lifecycleGeneration !== this._operationGeneration) {
+            throw lifecycleError()
+        }
+    }
+
+    _closeOwnedClient(client) {
+        if (!client || !this._ownedClients.delete(client)) return null
+        try {
+            client.close?.()
+            return null
+        } catch (error) {
+            return error
+        }
+    }
+
+    _cleanupStartResources(resources) {
+        const removeSink = resources?.removeSink
+        if (resources) resources.removeSink = null
+        try { removeSink?.() } catch {
+            // Continue releasing the sender or queue after an attachment failure.
+        }
+
+        const sender = resources?.sender
+        if (resources) {
+            resources.sender = null
+            if (sender) resources.queue = null
+        }
+        try { sender?.close() } catch {
+            // Continue releasing an unowned export queue.
+        }
+
+        const queue = resources?.queue
+        if (resources) resources.queue = null
+        try { queue?.close() } catch {
+            // Lifecycle cleanup is best effort across every resource.
+        }
+    }
+
+    async _runPassiveCheck(lifecycleGeneration) {
         let client
         try {
-            client = await this._connectionProvider.createClient({})
+            client = await this._createOwnedClient({}, lifecycleGeneration)
             if (!client || typeof client.probe !== 'function' || typeof client.close !== 'function') {
                 throw new TypeError('connectionProvider client must expose probe() and close()')
             }
 
             const result = await client.probe()
+            this._assertLifecycleCurrent(lifecycleGeneration)
             if (result?.available === true) {
                 const providerIds = selectedSendProviderIds(result.health)
                 if (providerIds.length > 0) {
@@ -429,6 +542,7 @@ export class SyncOutputController {
             })
             return this._state
         } catch (error) {
+            if (error?.code === 'SYNC_LIFECYCLE') throw error
             this._setState({
                 status: 'unavailable',
                 available: false,
@@ -438,27 +552,26 @@ export class SyncOutputController {
             })
             return this._state
         } finally {
-            try {
-                client?.close()
-            } catch {
-                // Passive discovery has no retained resource to recover.
-            }
+            this._closeOwnedClient(client)
         }
     }
 
-    async _runExplicitConnect() {
+    async _runExplicitConnect(lifecycleGeneration) {
         let client
         try {
             if (this._token === undefined) {
-                this._token = await this._pair()
+                const token = await this._pair(lifecycleGeneration)
+                this._assertLifecycleCurrent(lifecycleGeneration)
+                this._token = token
             }
 
-            client = await this._connectionProvider.createClient({ token: this._token })
+            client = await this._createOwnedClient({ token: this._token }, lifecycleGeneration)
             if (!client || typeof client.connect !== 'function' || typeof client.close !== 'function') {
                 throw new TypeError('authenticated Sync client must expose connect() and close()')
             }
 
             const welcome = await client.connect()
+            this._assertLifecycleCurrent(lifecycleGeneration)
             const providerIds = selectedSendProviderIds(welcome)
             if (providerIds.length === 0) {
                 const error = new Error('Sync has no selected available send providers')
@@ -477,11 +590,8 @@ export class SyncOutputController {
             })
             return this._state
         } catch (error) {
-            try {
-                client?.close()
-            } catch {
-                // The connection failure remains the actionable error.
-            }
+            this._closeOwnedClient(client)
+            if (error?.code === 'SYNC_LIFECYCLE') throw error
             let reportedError = error
             if (error?.code === 'SYNC_AUTHENTICATION') {
                 this._token = undefined
@@ -503,15 +613,16 @@ export class SyncOutputController {
         }
     }
 
-    async _pair() {
+    async _pair(lifecycleGeneration) {
         let pairingClient
         try {
-            pairingClient = await this._connectionProvider.createClient({})
+            pairingClient = await this._createOwnedClient({}, lifecycleGeneration)
             if (!pairingClient || typeof pairingClient.pair !== 'function' ||
                 typeof pairingClient.close !== 'function') {
                 throw new TypeError('pairing Sync client must expose pair() and close()')
             }
             const result = await pairingClient.pair('Visualize')
+            this._assertLifecycleCurrent(lifecycleGeneration)
             if (!result || typeof result.token !== 'string' || result.token.length === 0) {
                 const error = new Error('Sync pairing did not return a token')
                 error.code = 'SYNC_PROTOCOL'
@@ -519,21 +630,21 @@ export class SyncOutputController {
             }
             return result.token
         } finally {
-            try {
-                pairingClient?.close()
-            } catch {
-                // Pairing-client shutdown must not retain the client or replace the result.
-            }
+            this._closeOwnedClient(pairingClient)
         }
     }
 
-    async _runStart(name) {
-        let queue
-        let sender
-        let removeSink
+    async _runStart(name, lifecycleGeneration) {
+        const resources = {
+            queue: null,
+            sender: null,
+            removeSink: null
+        }
+        this._startResources = resources
         let configuredDescriptor
         let sinkGeneration = null
         try {
+            this._assertLifecycleCurrent(lifecycleGeneration)
             if (!this._client || !this._welcome) {
                 throw outputError('SYNC_NOT_CONNECTED', 'Connect Sync before starting an output')
             }
@@ -571,81 +682,77 @@ export class SyncOutputController {
             })
 
             const rendererIdentity = this._captureRendererIdentity(liveCanvas, descriptor)
-            queue = this._renderer.createFrameExportQueue({ slots: 3 })
-            if (!queue) {
+            resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+            if (!resources.queue) {
                 throw outputError(
                     'SYNC_EXPORT_UNAVAILABLE',
                     'The active renderer backend cannot export frames'
                 )
             }
-            if (typeof queue.close !== 'function') {
+            if (typeof resources.queue.close !== 'function') {
                 throw outputError('SYNC_EXPORT_UNAVAILABLE', 'Renderer returned an invalid export queue')
             }
 
-            sender = await this._client.createSender(name, {
-                exportQueue: queue,
+            resources.sender = await this._client.createSender(name, {
+                exportQueue: resources.queue,
                 maxBufferedFrames: 1,
                 clock: this._clock
             })
-            validateSender(sender)
+            this._assertLifecycleCurrent(lifecycleGeneration)
+            validateSender(resources.sender)
             this._assertRendererIdentity(rendererIdentity)
 
             configuredDescriptor = descriptor
+            const sender = resources.sender
             const sink = createConfiguredSink(sender, (nextDescriptor) => {
                 configuredDescriptor = nextDescriptor
                 if (sinkGeneration !== null) {
                     this._sinkConfigured(sender, sinkGeneration, nextDescriptor)
                 }
             })
-            removeSink = this._renderer.addSink(sink)
-            if (typeof removeSink !== 'function') {
+            resources.removeSink = this._renderer.addSink(sink)
+            if (typeof resources.removeSink !== 'function') {
                 throw outputError('SYNC_RENDERER_UNAVAILABLE', 'Renderer did not return a sink removal handle')
             }
+            this._assertLifecycleCurrent(lifecycleGeneration)
 
             const generation = ++this._liveGeneration
             sinkGeneration = generation
             this._sender = sender
-            this._removeSink = removeSink
+            this._removeSink = resources.removeSink
             this._liveCanvas = liveCanvas
             this._liveDescriptor = configuredDescriptor
             this._livePipeline = rendererIdentity.pipeline
+            resources.queue = null
+            resources.sender = null
+            resources.removeSink = null
+            if (this._startResources === resources) this._startResources = null
             this._statsTimer = this._setInterval(
                 () => this._refreshStats(generation),
                 STATS_INTERVAL_MS
             )
             this._resetRecoveryBudget()
-            this._monitorSenderClosed(sender, generation)
+            this._monitorSenderClosed(this._sender, generation)
 
             this._setState({
                 status: 'sending',
                 width: configuredDescriptor.width,
                 height: configuredDescriptor.height,
                 fps: configuredDescriptor.fps,
-                stats: this._copyStats(sender.stats),
+                stats: this._copyStats(this._sender.stats),
                 error: null
             })
             return this._state
         } catch (error) {
             this._clearStatsTimer()
-            if (typeof removeSink === 'function') {
-                try { removeSink() } catch {
-                    // The start failure remains the actionable error.
-                }
-            } else if (sender && typeof sender.close === 'function') {
-                try { sender.close() } catch {
-                    // Sender ownership supersedes direct queue cleanup.
-                }
-            } else if (queue && typeof queue.close === 'function') {
-                try { queue.close() } catch {
-                    // The start failure remains the actionable error.
-                }
-            }
+            this._cleanupStartResources(resources)
             this._sender = null
             this._removeSink = null
             this._liveCanvas = null
             this._liveDescriptor = null
             this._livePipeline = null
             this._closeClient()
+            if (error?.code === 'SYNC_LIFECYCLE') throw error
             const code = typeof error?.code === 'string' ? error.code : 'SYNC_START_FAILED'
             this._setState({
                 status: 'error',
@@ -653,6 +760,8 @@ export class SyncOutputController {
                 error: publicError(code, error?.message)
             })
             throw error
+        } finally {
+            if (this._startResources === resources) this._startResources = null
         }
     }
 
@@ -1175,6 +1284,7 @@ export class SyncOutputController {
         this._client = null
         this._welcome = null
         if (!client) return null
+        if (this._ownedClients.has(client)) return this._closeOwnedClient(client)
         try {
             client.close()
             return null
@@ -1184,6 +1294,7 @@ export class SyncOutputController {
     }
 
     _setState(next) {
+        if (this._disposed) return
         const state = { ...this._state, ...next }
         if (next.stats) state.stats = this._copyStats(next.stats)
         this._state = Object.freeze(state)
