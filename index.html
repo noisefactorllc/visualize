@@ -283,7 +283,13 @@
                 <div class="main-toolbar">
                     <span class="mixer-effect-label">mixer effect</span>
                     <select-dropdown id="mixer-effect" class="mixer-select"></select-dropdown>
-                    <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window"><span class="icon">display_external_input</span></button>
+                    <div class="main-output-targets" aria-label="Output targets">
+                        <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window" aria-label="Open mirrored output window"><span class="icon">display_external_input</span></button>
+                        <button id="sync-output-open" class="main-output-btn sync-output-open" title="Send to Noisedeck Sync" aria-label="Send to Noisedeck Sync">
+                            <span class="icon">cast_connected</span>
+                            <span>sync</span>
+                        </button>
+                    </div>
                 </div>
                 <div class="main-canvas-wrap">
                     <canvas class="main-canvas" id="main-canvas"></canvas>
@@ -656,6 +662,40 @@
 
     <seance-dialog id="seance-dialog" heading="Go Online"
         copy="Share this set live. Taking it online creates a session anyone with the link can join."></seance-dialog>
+
+    <dialog id="sync-output-dialog" class="sync-output-dialog" aria-labelledby="sync-output-title" aria-describedby="sync-output-description sync-output-preview">
+        <div class="sync-output-titlebar">
+            <div class="sync-output-heading">
+                <span id="sync-output-title">Noisedeck Sync</span>
+                <span id="sync-output-live" class="sync-output-live" hidden>LIVE</span>
+            </div>
+            <button type="button" id="sync-output-close" class="icon-button" aria-label="Close Sync output"><span class="icon">close</span></button>
+        </div>
+        <div class="sync-output-body">
+            <p id="sync-output-description">Publish Visualize’s mixer output through the local Sync companion.</p>
+            <p id="sync-output-preview" class="sync-output-preview">Preview — Sync is not ready for general use. <a href="https://github.com/noisefactorllc/sync" target="_blank" rel="noopener">learn about Sync</a></p>
+            <label class="sync-output-field" for="sync-output-name">
+                <span>output name</span>
+                <input type="text" id="sync-output-name" value="Visualize" placeholder="Visualize" autocomplete="off" spellcheck="false" maxlength="64">
+            </label>
+            <div class="sync-output-meta">
+                <div><span>state</span><strong id="sync-output-state">Disconnected</strong></div>
+                <div><span>provider</span><strong id="sync-output-provider">No provider</strong></div>
+                <div><span>format</span><strong id="sync-output-format">—×— · 60 fps</strong></div>
+            </div>
+            <div class="sync-output-counters" aria-label="Sync output counters">
+                <div><span>sent</span><output id="sync-output-sent">0</output></div>
+                <div><span>GPU busy</span><output id="sync-output-gpu-busy">0</output></div>
+                <div><span>network</span><output id="sync-output-network">0</output></div>
+                <div><span>failed</span><output id="sync-output-failed">0</output></div>
+            </div>
+            <div class="sync-output-message" role="status" aria-live="polite" aria-atomic="true">
+                <p id="sync-output-connect-notice" hidden>Your browser may request loopback access. Sync will separately ask whether this exact origin may pair.</p>
+                <p id="sync-output-status">Sync is not connected.</p>
+            </div>
+            <button type="button" id="sync-output-action" class="sync-output-action">Check again</button>
+        </div>
+    </dialog>
 
     <!-- Wire boot clicks synchronously so a fast click (test rig, eager
          user) doesn't race the deferred module graph. The shader bundle

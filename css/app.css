@@ -973,11 +973,15 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     flex: 0 1 auto;
     min-width: 180px;
 }
-/* Keep the label flush against its dropdown: push only the output button
-   to the right edge. The auto margin absorbs the toolbar's free space
-   before justify-content can spread the picker apart from its label. */
-.main-toolbar .main-output-btn {
+/* Keep the label flush against its dropdown: push the output-target group
+   to the right edge. */
+.main-toolbar .main-output-targets {
     margin-left: auto;
+}
+.main-output-targets {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--hf-space-2);
 }
 .main-output-btn {
     appearance: none;
@@ -999,6 +1003,206 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .main-output-btn:hover {
     color: var(--hf-accent);
     border-color: var(--hf-accent);
+}
+
+.sync-output-open {
+    width: auto;
+    gap: var(--hf-space-1);
+    padding: 0 var(--hf-space-3);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+}
+
+/* ─────────────── Noisedeck Sync target ─────────────── */
+.sync-output-dialog {
+    position: fixed;
+    inset: 0;
+    width: min(560px, calc(100vw - 32px));
+    max-width: none;
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 0;
+    overflow-y: auto;
+    color: var(--hf-text-normal);
+    background: var(--hf-bg-surface);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border-radius: var(--hf-radius-md);
+    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+}
+
+.sync-output-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(4px);
+}
+
+.sync-output-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--hf-space-3) var(--hf-space-4);
+    border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
+    background: var(--hf-bg-elevated);
+}
+
+.sync-output-heading {
+    display: flex;
+    align-items: center;
+    gap: var(--hf-space-2);
+    color: var(--hf-text-bright);
+    font-family: var(--hf-font-family);
+    font-weight: var(--hf-weight-bold);
+    letter-spacing: var(--hf-tracking-wide);
+}
+
+.sync-output-live {
+    padding: 2px 7px;
+    color: white;
+    background: var(--hf-danger, #e43d4f);
+    border-radius: 999px;
+    font-family: var(--hf-font-family-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+}
+
+.sync-output-body {
+    display: grid;
+    gap: var(--hf-space-4);
+    padding: var(--hf-space-4);
+}
+
+.sync-output-body > p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.sync-output-preview {
+    color: var(--hf-text-dim);
+    font-size: var(--hf-size-xs);
+}
+
+.sync-output-preview a {
+    color: var(--hf-accent);
+}
+
+.sync-output-field {
+    display: grid;
+    gap: var(--hf-space-2);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-xs);
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+}
+
+.sync-output-field input {
+    min-width: 0;
+    padding: var(--hf-space-2) var(--hf-space-3);
+    color: var(--hf-text-bright);
+    background: var(--hf-bg-base);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border-radius: var(--hf-radius-sm);
+    font: inherit;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+.sync-output-field input:focus {
+    outline: 2px solid color-mix(in srgb, var(--hf-accent) 45%, transparent);
+    border-color: var(--hf-accent);
+}
+
+.sync-output-field input[aria-invalid="true"] {
+    border-color: var(--hf-danger, #e43d4f);
+}
+
+.sync-output-meta,
+.sync-output-counters {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--hf-space-2);
+}
+
+.sync-output-counters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.sync-output-meta > div,
+.sync-output-counters > div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    padding: var(--hf-space-2);
+    background: var(--hf-bg-base);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border-radius: var(--hf-radius-sm);
+}
+
+.sync-output-meta span,
+.sync-output-counters span {
+    color: var(--hf-text-dim);
+    font-family: var(--hf-font-family-mono);
+    font-size: 10px;
+    letter-spacing: var(--hf-tracking-wide);
+    text-transform: uppercase;
+}
+
+.sync-output-meta strong,
+.sync-output-counters output {
+    overflow: hidden;
+    color: var(--hf-text-bright);
+    font-family: var(--hf-font-family-mono);
+    font-size: var(--hf-size-sm);
+    font-weight: var(--hf-weight-normal);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sync-output-message {
+    min-height: 48px;
+    padding: var(--hf-space-3);
+    color: var(--hf-text-dim);
+    background: color-mix(in srgb, var(--hf-accent) 8%, var(--hf-bg-base));
+    border-left: 3px solid var(--hf-accent);
+    font-size: var(--hf-size-sm);
+    line-height: 1.45;
+}
+
+.sync-output-message p {
+    margin: 0;
+}
+
+.sync-output-message p + p {
+    margin-top: var(--hf-space-2);
+}
+
+.sync-output-dialog[data-tone="error"] .sync-output-message {
+    border-left-color: var(--hf-danger, #e43d4f);
+}
+
+.sync-output-action {
+    justify-self: end;
+    min-width: 148px;
+    padding: var(--hf-space-2) var(--hf-space-4);
+    color: var(--hf-bg-base);
+    background: var(--hf-accent);
+    border: 0;
+    border-radius: var(--hf-radius-sm);
+    cursor: pointer;
+    font-family: var(--hf-font-family-mono);
+    font-weight: var(--hf-weight-bold);
+}
+
+.sync-output-action:disabled {
+    cursor: wait;
+    opacity: 0.55;
+}
+
+@media (max-width: 620px) {
+    .sync-output-meta,
+    .sync-output-counters {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .main-head {

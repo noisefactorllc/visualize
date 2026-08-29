@@ -22,6 +22,11 @@ import { Library } from './library.js'
 import { AutoMix } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
+import {
+    SyncOutputController,
+    createSyncOutputConnectionProvider
+} from './syncOutput.js'
+import { createSyncOutputDialog } from './syncOutputDialog.js'
 import { Scenes } from './scenes.js'
 import * as rebind from './rebind.js'
 import { AutoXfade } from './autoxfade.js'
@@ -323,6 +328,18 @@ async function boot() {
     )
     compositor.start()
 
+    // Noisedeck Sync is an additional target for the mixer renderer's
+    // selected output texture. Construction stays passive: discovery and
+    // pairing happen only after the operator opens the dialog and acts.
+    const syncOutputController = new SyncOutputController({
+        renderer: mixer.renderer,
+        getCanvas: () => mixer.canvas,
+        connectionProvider: createSyncOutputConnectionProvider({
+            connectionProvider: window.__VISUALIZE_SYNC_CONNECTION_PROVIDER__
+        })
+    })
+    const syncOutputDialog = createSyncOutputDialog({ controller: syncOutputController })
+
     // Mirror the crossfader value into a CSS variable that drives the
     // topbar logotype gradient — 0 (deck A live) reads as blue,
     // 1 (deck B live) as red, with the middle landing on yellow when
@@ -391,7 +408,19 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
-    window.__visualize = { audio, midi, compositor, decks: state.decks, rebind, state, mixer, get autoXfade() { return autoXfade }, get autoMix() { return autoMix } }
+    window.__visualize = {
+        audio,
+        midi,
+        compositor,
+        decks: state.decks,
+        rebind,
+        state,
+        mixer,
+        syncOutputController,
+        syncOutputDialog,
+        get autoXfade() { return autoXfade },
+        get autoMix() { return autoMix }
+    }
     let online = null
     const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
     setOnlineCollaborationUiVisible(onlineCollaborationEnabled)

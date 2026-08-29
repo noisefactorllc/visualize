@@ -25,7 +25,8 @@
   ],
   "scripts": {
     "dev": "npx http-server . -p 3007 -c-1",
-    "test": "npx playwright test",
+    "test": "npm run test:node && npx playwright test",
+    "test:node": "node --test tests/sync-output.node-test.js tests/sync-output-sdk.node-test.js",
     "lint": "node --check js/*.js js/ui/*.js js/noisemaker/*.js"
   },
   "devDependencies": {

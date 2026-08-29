@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
     testDir: './tests',
+    testIgnore: '**/*.node-test.js',
     // 120s budget — the smoke spec exercises ~20 distinct interactions
     // against random program pairs from a 90+ entry library, plus three
     // CanvasRenderer pipelines (deck A, deck B, mixer) compiling their
