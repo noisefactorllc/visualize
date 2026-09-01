@@ -1,3 +1,8 @@
+<!-- repo-hero -->
+<a href="https://visualize.noisedeck.app/"><img src="docs/hero.jpg" alt="VISUALIZE Music visualizer and VJ gig player" width="100%"></a>
+
+<sub>Open source from <a href="https://noisefactor.io">Noise Factor</a> &middot; <a href="https://github.com/noisefactorllc">more projects</a></sub>
+
 # Visualize
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
