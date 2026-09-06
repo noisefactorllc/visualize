@@ -22,9 +22,9 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device** to enable mic/loopback input.
+Open <http://localhost:3007>. Click **START SET**. Click **⚙ → audio device** to enable mic/loopback input.
 
-> No-Node alternative: any static server will do — `python3 -m http.server 3007` works too.
+> Without Node, use any static server. `python3 -m http.server 3007` works too.
 
 ## Features
 
@@ -32,9 +32,9 @@ Open <http://localhost:3007>, click **START SET**, then **⚙ → audio device**
 - **Crossfader** with four blend curves (linear / sharp / dipped equal-power / hard cut).
 - **117 curated programs** — 89 audio-reactive (use `audio(band: 0|1|2)` DSL automation), 28 base presets.
 - **Audio analyzer** maps low/mid/high FFT bands into each deck's `audioState` so DSL programs using `audio()` automation react to live mic/loopback input. Device picker + sensitivity slider.
-- **MIDI** with `requestMIDIAccess()` — learn any CC **or Note** to crossfader, speed A/B, or any of the 6 main FX. Faders use **soft-takeover** (no jumps after a scene/auto-mix move); FX toggles are edge-detected (momentary `flash`, latching others). Per-mapping range + invert editing, live value bars, and conflict warnings. Persisted to localStorage. Optional MIDI clock follower drives BPM.
+- **MIDI** with `requestMIDIAccess()` — learn any CC **or Note** to crossfader, speed A/B, or any of the 6 main FX. Faders use **soft-takeover** (no jumps after a scene/auto-mix move). FX toggles are edge-detected (momentary `flash`, latching others). Per-mapping range + invert editing, live value bars, and conflict warnings. Persisted to localStorage. Optional MIDI clock follower drives BPM.
 - **Beat scheduler** with tap tempo, manual BPM input, and beat indicator. Synchronizes auto-mix and strobe.
-- **Main FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the main canvas (cheap); strobe/flash/freeze are handled inside the compositor draw loop.
+- **Main FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the main canvas (cheap). The compositor draw loop handles strobe/flash/freeze.
 - **Auto-VJ mode**: every N bars, picks a fresh random program, loads into the off-side deck, and fades to it over the chosen curve.
 - **Scenes**: save a full snapshot (both decks' programs + speeds, crossfader, BPM, FX, auto-VJ config) as a named scene. Recall instantly via the panel or Shift+1…9. Stored in browser localStorage.
 - **Recording**: capture the main canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
@@ -71,7 +71,15 @@ js/ (core modules — abridged)
 └── ui/                 codeEditor + mixerControls panels (plus tooltips, about-dialog, handfish-theme)
 ```
 
-Both decks render via their own `CanvasRenderer` to a hidden-ish offscreen-style canvas (technically visible in the deck preview pane). A third `CanvasRenderer`, owned by the `MixerRenderer`, blends the two deck canvases through the selected mixer effect; once it's online the main is a 2D context that simply blits that pre-blended frame. During boot (before the mixer has compiled) and as a safety net if the mixer pipeline fails, the main falls back to sampling both deck canvases directly and blending with the active crossfade curve. Either way the main stays a plain 2D context, so the recorder, fullscreen, and output-window features can all hand around plain `HTMLCanvasElement` references — no `OffscreenCanvas` or `captureStream` chaining required.
+Each deck uses its own `CanvasRenderer` to render to a canvas visible in the deck preview pane.
+A third `CanvasRenderer`, owned by the `MixerRenderer`, blends the two deck canvases through the selected mixer effect.
+Once the mixer is ready, the main canvas uses a 2D context to copy that blended frame.
+
+During boot, before the mixer compiles, the main canvas samples both deck canvases directly and blends with the active crossfade curve.
+It also uses this fallback if the mixer pipeline fails.
+The main canvas remains a plain 2D context in either case.
+Thus, the recorder, fullscreen, and output-window features can exchange plain `HTMLCanvasElement` references.
+No `OffscreenCanvas` or `captureStream` chaining is required.
 
 ## Adding programs
 
@@ -90,12 +98,12 @@ Programs are written in the [Polymorphic Shader Language (DSL)](https://polymorp
 
 - `tint` — color of the card gradient in the library panel
 - `tags` — used by the search/filter box
-- `category` — optional; groups the program into a library section (`abstract`, `attractor`, `geometric`, `life`, `particles`). Programs without a category fall into the default section.
+- `category` — optional. Groups the program into a library section (`abstract`, `attractor`, `geometric`, `life`, `particles`). Programs without a category fall into the default section.
 - `dsl` — multi-line DSL (use `\n` for line breaks)
 
-For audio reactivity, declare `let name = audio(band: 0|1|2, min: ..., max: ...)` and use the name as a parameter value. Band 0 = bass, 1 = mid, 2 = treble.
+For audio reactivity, declare `let name = audio(band: 0|1|2, min: ..., max: ...)`. Use the name as a parameter value. Band 0 = bass, 1 = mid, 2 = treble.
 
-Edit the file and reload — no build step.
+Edit the file. Reload the page. No build step is needed.
 
 ## Testing
 
@@ -104,7 +112,17 @@ npx playwright install   # first time only
 npm test
 ```
 
-`npm test` runs the Playwright suite (11 specs) against headless Chromium. The headline **smoke** spec drives a full session — boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, scene save/recall — and the rest cover audio + MIDI, auto-xfade oscillators, EQ/MIDI rebind, MIDI-learn value mapping (soft-takeover + conflict detection), scenes round-trip, the share-loader, library sections, user-effect (.zip) import, the global typeface, and the WebGPU renderer preference (persist + restore across reload). Catches regressions in any of the above before they hit production.
+`npm test` runs the Playwright suite (11 specs) against headless Chromium.
+The **smoke** spec drives a full session: boot, shader load, deck compile, crossfader mixing, FX toggle, tap tempo, auto-VJ, and scene save/recall.
+The other specs cover:
+
+- Audio + MIDI and auto-xfade oscillators.
+- EQ/MIDI rebind and MIDI-learn value mapping (soft-takeover + conflict detection).
+- Scenes round-trip, the share-loader, and library sections.
+- User-effect (.zip) import and the global typeface.
+- The WebGPU renderer preference (persist + restore across reload).
+
+These tests catch regressions in the listed features before they reach production.
 
 ## Contributing
 
