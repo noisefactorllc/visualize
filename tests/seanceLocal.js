@@ -47,6 +47,11 @@ function cloneDoc(doc) {
 
 export class FakeSeanceServer {
     constructor() {
+        // Every doc-edit frame the server received, and every one it refused.
+        // Tests assert on these: a proposal loop against a document the
+        // session does not have is invisible from the app side.
+        this.proposals = []
+        this.rejected = []
         this._nextSession = 1
         this._nextSocket = 1
         this._nextPage = 1
@@ -129,6 +134,16 @@ export class FakeSeanceServer {
         }, { sdkUrl: `${SDK_CDN_PREFIX}index.js`, seanceUrl: SEANCE_URL, pageKey })
     }
 
+    /**
+     * Refuse the next join of this session with a server `error` frame, then
+     * leave the socket open: that is what the deployed SDK sees while it sits
+     * in 'connecting' retrying a terminal refusal.
+     */
+    refuseJoin(sessionId, error = { code: 'forbidden', detail: 'roster full' }) {
+        const session = this.sessions.get(sessionId)
+        if (session) session.refuse = error
+    }
+
     createSession(body = {}) {
         const sessionId = `S${String(this._nextSession++).padStart(5, '0')}`
         const docs = new Map()
@@ -170,6 +185,14 @@ export class FakeSeanceServer {
         const msg = JSON.parse(data)
 
         if (msg.type === 'hello') {
+            if (session.refuse) {
+                await this.deliver(socketId, {
+                    type: 'error',
+                    code: session.refuse.code,
+                    detail: session.refuse.detail,
+                })
+                return
+            }
             await this.deliver(socketId, {
                 type: 'welcome',
                 seq: this._nextSeq(),
@@ -189,17 +212,25 @@ export class FakeSeanceServer {
         }
 
         if (msg.type === 'doc-edit') {
-            let doc = session.docs.get(msg.docId)
+            this.proposals.push({ sessionId: session.id, docId: msg.docId, socketId })
+            const doc = session.docs.get(msg.docId)
             if (!doc) {
-                doc = {
-                    id: msg.docId,
-                    title: msg.docId,
-                    kind: 'dsl',
-                    text: '',
-                    default: session.docs.size === 0,
-                    rev: 0,
-                }
-                session.docs.set(msg.docId, doc)
+                // The real server refuses an edit to a document that does not
+                // exist ("invalid", with no recovery snapshot) and the SDK
+                // re-proposes immediately. Auto-creating it here hid a loop
+                // that runs about nine times a second in production, so the
+                // double has to refuse it the same way.
+                this.rejected.push({ sessionId: session.id, docId: msg.docId })
+                await this.deliver(socketId, {
+                    type: 'doc-reject',
+                    seq: this._nextSeq(),
+                    docId: msg.docId,
+                    baseRev: msg.baseRev,
+                    authorSeq: msg.authorSeq,
+                    reason: 'invalid',
+                    snapshot: null,
+                })
+                return
             }
             doc.text = applyTextEdit(doc.text, msg.edit)
             doc.rev += 1

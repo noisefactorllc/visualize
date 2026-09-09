@@ -362,3 +362,38 @@ test('joining a session created by a single-editor app (doc id "main") populates
         await context.close()
     }
 })
+
+test('joining a single-document session never proposes the deck it does not have', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        // A session created by any single-editor app (noisedeck, polymorphic)
+        // has one document, "main", and no "deck:B". Deck B's local text held
+        // against that missing document made the SDK propose it about nine
+        // times a second for the life of the session, invisibly, eating the
+        // proposal budget deck A's real edits need.
+        const { session_id: sessionId } = server.createSession({
+            snapshot: { docs: [{ id: 'main', title: 'Program', kind: 'noisemaker-dsl', text: DSL_B2, default: true }] },
+        })
+
+        const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
+        await waitForOnlineJoin(guest)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 }).toBe(DSL_B2)
+
+        // Typing into deck B must not re-arm the loop either.
+        await setEditorText(guest, 'B', DSL_B1)
+        await guest.waitForTimeout(2_000)
+
+        expect(server.proposals.filter(p => p.docId === 'deck:B')).toEqual([])
+        expect(server.rejected).toEqual([])
+        await expect.poll(() => guest.locator('#toast').textContent(), { timeout: 10_000 })
+            .toContain('stays local')
+
+        // Deck A still works: the session's own document is unaffected.
+        await setEditorText(guest, 'A', DSL_A1)
+        await expect.poll(() => server.docsFor(sessionId).find(d => d.id === 'main')?.text, { timeout: 45_000 })
+            .toBe(DSL_A1)
+    } finally {
+        await context.close()
+    }
+})

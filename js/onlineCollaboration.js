@@ -19,6 +19,7 @@ export function docIdForDeck(deckId) {
     return DECK_DOC_IDS[deckId] || deckId
 }
 
+
 export async function createVisualizeOnlineCollaboration(options) {
     const runtimeConfig = globalThis.__VISUALIZE_SEANCE_CONFIG__ || {}
     const sdkUrl = runtimeConfig.sdkUrl || options.sdkUrl || DEFAULT_SEANCE_SDK_URL
@@ -50,6 +51,10 @@ class VisualizeOnlineController {
     }) {
         this.ready = true
         this.online = null
+        // Document ids the joined session actually has, or null before its
+        // first snapshot. See _adoptSessionDocs.
+        this._sessionDocIds = null
+        this._absentDocNoticeShown = false
         this._onlinePromise = null
         this._boundEditors = false
         this.sdkUrl = sdkUrl
@@ -85,7 +90,7 @@ class VisualizeOnlineController {
                 setText: (text) => {
                     editor.value = String(text ?? '')
                 },
-                validateText: () => true,
+                validateText: () => this._validateDeckWrite(deckId),
                 onRemoteText: (text, context) => {
                     this.applyRemoteText(deckId, text, context)
                 },
@@ -94,16 +99,49 @@ class VisualizeOnlineController {
         this._boundEditors = true
     }
 
-    syncLocalDecks(source = 'sync') {
-        if (!this.online) return
-        for (const deckId of ['A', 'B']) {
-            const text = this.getDeckText(deckId)
-            this.updateLocalText(DECK_DOC_IDS[deckId], text, { source })
+    /**
+     * Record which documents the joined session carries.
+     *
+     * Deck A rides the SDK's default-document binding, so it always resolves
+     * onto whatever document the session calls default. Deck B is pinned to
+     * "deck:B", which exists only in sessions Visualize itself created. Every
+     * single-document session (one made by Noisedeck, Polymorphic, or any
+     * other single-editor app) lacks it, and local deck B text held against a
+     * missing document made the SDK propose it about nine times a second for
+     * the life of the session: the server rejects each one as invalid with no
+     * recovery snapshot, and the SDK immediately re-proposes. Nothing
+     * surfaced that loop, and it burned the connection's proposal budget,
+     * which is the same budget deck A's real edits have to fit into.
+     */
+    _adoptSessionDocs(docs) {
+        this._sessionDocIds = new Set((docs || []).map((doc) => doc?.id).filter(Boolean))
+    }
+
+    /** True when this deck's document exists in the session (deck A always does). */
+    _deckDocInSession(deckId) {
+        if (!this._sessionDocIds) return true
+        if (deckId === 'A') return true
+        return this._sessionDocIds.has(DECK_DOC_IDS[deckId])
+    }
+
+    /**
+     * Binding-level gate for local writes, per the SDK's validateText hook.
+     * Refusing here covers every writer at once: editor typing, program loads,
+     * rebinds, AutoMix and scene recall.
+     */
+    _validateDeckWrite(deckId) {
+        if (this._deckDocInSession(deckId)) return true
+        if (!this._absentDocNoticeShown) {
+            this._absentDocNoticeShown = true
+            this.toast(`this session has one deck: deck ${deckId} stays local`, 4200)
         }
+        return { ok: false, reason: `session has no ${DECK_DOC_IDS[deckId]} document` }
     }
 
     updateLocalText(docId, text, meta = {}) {
         if (!this.online) return null
+        const deckId = Object.keys(DECK_DOC_IDS).find((id) => DECK_DOC_IDS[id] === docId)
+        if (deckId && !this._deckDocInSession(deckId)) return null
         return this.online.updateLocalText(docId, text, meta)
     }
 
@@ -200,13 +238,15 @@ class VisualizeOnlineController {
                     ...(this.runtimeConfig.connectionId ? { connectionId: this.runtimeConfig.connectionId } : {}),
                 })
                 this.online.on('status', () => this.syncStatusUi())
-                this.online.on('snapshot', () => this.syncStatusUi())
+                this.online.on('snapshot', ({ docs }) => {
+                    this._adoptSessionDocs(docs)
+                    this.syncStatusUi()
+                })
                 this.online.on('error', (err) => {
                     console.warn('[seance]', err?.message || err)
                     this.toast(`online: ${err?.message || err}`, 4200)
                 })
                 this.bindDeckEditors()
-                this.syncLocalDecks('initial')
                 this.syncStatusUi()
                 return this.online
             })
@@ -279,6 +319,8 @@ class VisualizeOnlineController {
     }
 
     _closeActiveSession() {
+        this._sessionDocIds = null
+        this._absentDocNoticeShown = false
         if (!this.online) return
         if (this.online.getStatus?.() === 'offline' && !this.online.getSessionId?.()) return
         this.online.goOffline?.()
