@@ -131,7 +131,7 @@ export class FakeSeanceServer {
                     return fetch(url, init)
                 },
             }
-        }, { sdkUrl: `${SDK_CDN_PREFIX}index.js`, seanceUrl: SEANCE_URL, pageKey })
+        }, { sdkUrl: `${SDK_CDN_PREFIX}index.js?v=0.2.2`, seanceUrl: SEANCE_URL, pageKey })
     }
 
     /**

@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createVisualizeOnlineCollaboration } from '../js/onlineCollaboration.js'
+import { createVisualizeOnlineCollaboration, DEFAULT_SEANCE_SDK_URL } from '../js/onlineCollaboration.js'
+
+test('the rolling SDK URL bypasses previously cached releases', () => {
+    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2')
+})
 
 async function harness() {
     const messages = []

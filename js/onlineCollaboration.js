@@ -8,7 +8,8 @@
  */
 
 export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
-export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js'
+// Bypass browsers that cached the older alias without Cache-Control.
+export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2'
 
 export const DECK_DOC_IDS = {
     A: 'deck:A',
