@@ -17,7 +17,17 @@
     <!-- Resolve `import ... from 'handfish'` in app.js to the CDN bundle.
          Used for the <code-editor> custom element + dslTokenizer. -->
     <script type="importmap">
-        { "imports": { "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js" } }
+        {
+            "imports": {
+                "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js",
+                "/js/app.js": "/js/app.js?v=seance-0.2.2",
+                "/js/automix.js": "/js/automix.js?v=seance-0.2.2",
+                "/js/noisemaker/deck.js": "/js/noisemaker/deck.js?v=seance-0.2.2",
+                "/js/onlineCollaboration.js": "/js/onlineCollaboration.js?v=seance-0.2.2",
+                "/js/rebind.js": "/js/rebind.js?v=seance-0.2.2",
+                "/js/scenes.js": "/js/scenes.js?v=seance-0.2.2"
+            }
+        }
     </script>
 
     <!-- Preload the always-needed blanks + the icon font so any element
@@ -764,6 +774,6 @@
         })
     })()
     </script>
-    <script type="module" src="js/app.js"></script>
+    <script type="module" src="js/app.js?v=seance-0.2.2"></script>
 </body>
 </html>
