@@ -57,8 +57,9 @@ test('end-to-end smoke', async ({ page }) => {
     await expect(page.locator('html')).toHaveAttribute('data-language', 'industrial')
     // Colored logotype wordmark, ALL CAPS.
     await expect(page.locator('.hf-logotype .hf-logotype-text')).toHaveText('VISUALIZE')
-    // Top-bar icon cluster: three .hf-icon-btn affordances (settings/fullscreen/about).
-    await expect(page.locator('.hf-topbar-cluster .hf-icon-btn')).toHaveCount(3)
+    // Top-bar icon cluster: settings, fullscreen, about, and collaboration.
+    await expect(page.locator('.hf-topbar-cluster .hf-icon-btn')).toHaveCount(4)
+    await expect(page.locator('#go-online-btn')).toBeVisible()
     // The <tempo-bar> component replaced the inline tempo DOM and bound its
     // scheduler to the app's test hook.
     await expect(page.locator('tempo-bar .tempo-bar__bpm')).toBeVisible()

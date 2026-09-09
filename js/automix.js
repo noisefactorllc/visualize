@@ -155,6 +155,7 @@ export class AutoMix {
 
         try {
             const res = await deck.load(program.dsl, program.title)
+            if (res.superseded) return
             if (!res.success) {
                 console.warn('[AutoMix] failed to load', program.title, res.error)
                 return

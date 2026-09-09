@@ -90,6 +90,7 @@ class VisualizeOnlineController {
         this._sdkReportsDisconnect = false
         this._onlinePromise = null
         this._boundEditors = false
+        this._actionInFlight = false
         this.sdkUrl = sdkUrl
         this.seanceUrl = seanceUrl
         this.runtimeConfig = runtimeConfig
@@ -179,6 +180,8 @@ class VisualizeOnlineController {
     }
 
     async takeOnline() {
+        if (this._actionInFlight) return
+        this._actionInFlight = true
         try {
             this._refusalAnnounced = false
             this._setBusy(true)
@@ -194,13 +197,15 @@ class VisualizeOnlineController {
                 this.toast(`online failed: ${refusalMessage(err) || err?.message || err}`, 5000)
             }
         } finally {
+            this._actionInFlight = false
             this._setBusy(false)
         }
     }
 
     async joinSession(sessionId, { writeUrl = true } = {}) {
         const id = String(sessionId || '').trim()
-        if (!id) return
+        if (!id || this._actionInFlight) return
+        this._actionInFlight = true
         try {
             this._refusalAnnounced = false
             this._setBusy(true)
@@ -216,6 +221,7 @@ class VisualizeOnlineController {
                 this.toast(`join failed: ${refusalMessage(err) || err?.message || err}`, 5000)
             }
         } finally {
+            this._actionInFlight = false
             this._setBusy(false)
         }
     }
@@ -255,7 +261,7 @@ class VisualizeOnlineController {
         // Drive the unified seance-dialog's internal view via its state; the
         // dialog is shown/hidden by its own trigger (the go-online toolbar
         // button), so never toggle its visibility here.
-        this.dialog.state = onlineStatus ? 'online' : (status === 'connecting' ? 'connecting' : 'offline')
+        this.dialog.state = onlineStatus ? status : (status === 'connecting' ? 'connecting' : 'offline')
         this.dialog.sessionId = onlineStatus ? sessionId : ''
         this.dialog.sessionUrl = shareUrl
     }
@@ -277,6 +283,13 @@ class VisualizeOnlineController {
                     ...(this.runtimeConfig.connectionId ? { connectionId: this.runtimeConfig.connectionId } : {}),
                 })
                 this.online.on('status', () => this.syncStatusUi())
+                this.online.on('doc-reject', (info) => {
+                    if (info?.reason === 'reconnect_ambiguous' || info?.reason === 'readonly_draft') {
+                        this.toast('Sync paused to protect your edits. Copy your deck draft, rejoin the session, then apply your merged version.', 10000)
+                    } else if (info?.reason === 'missing_document') {
+                        this.toast('This deck is not part of the session. Copy your draft, then go offline and create a new session to share it.', 10000)
+                    }
+                })
                 this.online.on('snapshot', ({ docs }) => {
                     this._adoptSessionDocs(docs)
                     this.syncStatusUi()

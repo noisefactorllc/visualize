@@ -18,6 +18,9 @@ test.describe.configure({ timeout: 120_000, retries: 1 })
 async function bootAndLoad(browser, programTitle) {
     const context = await browser.newContext()
     const page = await context.newPage()
+    page.on('console', message => {
+        if (message.type() === 'error') console.error('[browser]', message.text())
+    })
     await routeHandfishLocal(page)
     await page.goto('/')
     await page.click('#boot-start')

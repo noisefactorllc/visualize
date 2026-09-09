@@ -422,3 +422,41 @@ test('a refused join stops retrying and reports the reason', async ({ browser })
         await context.close()
     }
 })
+
+
+test('remote deck edits serialize a delayed renderer compile and retain the newest program', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    const firstDsl = DSL_A2.replace('202', '765')
+    const latestDsl = DSL_B2.replace('404', '876')
+    try {
+        const host = await newOnlinePage(context, server)
+        const sessionId = await takeOnline(host)
+        const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
+        await waitForOnlineJoin(guest)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45000 }).toBe(await currentDsl(host, 'A'))
+        await guest.evaluate(() => {
+            const renderer = window.__visualize.decks.A.inner
+            const compile = renderer.compile.bind(renderer)
+            window.__compileCalls = []
+            renderer.compile = async text => {
+                window.__compileCalls.push(text)
+                if (window.__compileCalls.length === 1) {
+                    await new Promise(resolve => { window.__releaseCompile = resolve })
+                }
+                return compile(text)
+            }
+        })
+        await setEditorText(host, 'A', firstDsl)
+        await guest.waitForFunction(() => !!window.__releaseCompile)
+        await setEditorText(host, 'A', latestDsl)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 15000 }).toBe(latestDsl)
+        expect(await guest.evaluate(() => window.__compileCalls.length)).toBe(1)
+        await guest.evaluate(() => window.__releaseCompile())
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45000 }).toBe(latestDsl)
+        expect(await guest.evaluate(() => window.__visualize.decks.A.inner.currentDsl)).toBe(latestDsl)
+        expect(await editorText(guest, 'A')).toBe(latestDsl)
+    } finally {
+        await context.close()
+    }
+})

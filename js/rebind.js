@@ -160,7 +160,10 @@ function oscNode(typeIndex, speed, m1, m2) {
         oscType: typeIndex,
         min: m1,
         max: m2,
-        speed
+        speed,
+        // This is a resolved engine config. The unparser expects the numeric
+        // default here; omitting it serializes as `offset: undefined`.
+        offset: 0
     }
 }
 

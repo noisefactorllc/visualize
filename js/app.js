@@ -774,6 +774,7 @@ async function boot() {
         if (!deck || !String(dsl || '').trim()) return
         setCollaborativeDeckText(deckId, dsl)
         const res = await deck.load(dsl, '(online)')
+        if (res.superseded) return
         if (!res.success) {
             showDeckEditorError(deckId, res.error || 'compile failed')
             toast(`${deckId}: ${res.error.slice(0, 60)}`, 4200)
@@ -810,6 +811,7 @@ async function boot() {
         updateDensityButton(deckId)
 
         const res = await deck.load(program.dsl, program.title)
+        if (res.superseded) return
         if (!res.success) {
             toast(`${deckId}: ${res.error.slice(0, 60)}`)
             return
@@ -1211,32 +1213,26 @@ async function boot() {
                 }
             })
 
-            let inFlight = false
             let hotReloadTimer = null
             async function compileFromEditor() {
-                if (inFlight) return
                 const dsl = editor.value
                 if (!dsl.trim()) return
                 setCollaborativeDeckText(deckId, dsl, { syncOpen: false })
-                inFlight = true
-                try {
-                    const res = await state.decks[deckId].load(dsl, '(custom)')
-                    if (!res.success) {
-                        showDeckEditorError(deckId, res.error || 'compile failed')
-                        return
-                    }
-                    clearDeckEditorError(deckId)
-                    audio.refreshDeckStates()
-                    const labels = deckLabels[deckId]
-                    if (labels) {
-                        labels.name.textContent = '(custom)'
-                        labels.tag.textContent = ''
-                    }
-                    publishDeckDsl(deckId, 'editor-compile')
-                    updateLed()
-                } finally {
-                    inFlight = false
+                const res = await state.decks[deckId].load(dsl, '(custom)')
+                if (res.superseded || editor.value !== dsl) return
+                if (!res.success) {
+                    showDeckEditorError(deckId, res.error || 'compile failed')
+                    return
                 }
+                clearDeckEditorError(deckId)
+                audio.refreshDeckStates()
+                const labels = deckLabels[deckId]
+                if (labels) {
+                    labels.name.textContent = '(custom)'
+                    labels.tag.textContent = ''
+                }
+                publishDeckDsl(deckId, 'editor-compile')
+                updateLed()
             }
 
             // Hot reload — recompile 500ms after the user stops typing.

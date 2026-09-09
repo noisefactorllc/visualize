@@ -145,6 +145,7 @@ export class Scenes {
                 // won't have rebind.originalDsl, so fall back to dsl.
                 const originalDsl = d.rebind?.originalDsl || d.dsl
                 const res = await decks[id].load(originalDsl, d.title || '')
+                if (res.superseded) continue
                 if (!res.success) {
                     errors.push(`deck ${id}: ${res.error}`)
                     continue

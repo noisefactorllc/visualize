@@ -84,6 +84,9 @@ export class Deck {
         })
 
         this._initialized = false
+        this._disposed = false
+        this._loadVersion = 0
+        this._loadQueue = Promise.resolve()
         this._currentDsl = ''
         this._currentName = ''
         this._speed = 1
@@ -177,36 +180,71 @@ export class Deck {
      * running and surfaces the message to the caller.
      */
     async load(dsl, name = '') {
-        if (!this._initialized) await this.init()
+        return this._queueLoad(dsl, name, true)
+    }
+
+    // CanvasRenderer mutates a shared pipeline across awaited compilation.
+    // Run one load at a time and discard obsolete queued requests. Callers
+    // must not publish or relabel a request that returns superseded: true.
+    async _queueLoad(dsl, name, resetRebind) {
+        const version = ++this._loadVersion
+        const rebindSource = resetRebind ? null : {
+            name: this._currentName,
+            originalDsl: this.rebind.originalDsl,
+            overrides: this.rebind.overrides,
+        }
+        const previous = this._loadQueue
+        let release
+        this._loadQueue = new Promise(resolve => { release = resolve })
+        const superseded = () => ({ success: false, superseded: true })
 
         try {
+            await previous
+            if (this._disposed || version !== this._loadVersion) return superseded()
+            if (!this._initialized) await this.init()
+            if (version !== this._loadVersion) return superseded()
             const effectData = extractEffectNamesFromDsl(dsl, this._renderer.manifest || {})
             const effectIds = effectData.map(e => e.effectId)
             if (effectIds.length > 0) {
                 await this._renderer.loadEffects(effectIds)
             }
+            if (version !== this._loadVersion) return superseded()
             await this._renderer.compile(dsl)
+            if (this._disposed) return superseded()
+            // Compilation has installed this program even if another request
+            // arrived meanwhile. Record the actual last successful render so
+            // a failing next request cannot leave stale metadata behind.
             this._currentDsl = dsl
-            this._currentName = name
             // New program → rebind state resets to the author's
             // original. The rebind module's reloadDsl() path does NOT
             // touch this — it's how rebind can push regenerated DSL
             // without wiping its own overrides.
-            this.rebind.originalDsl = dsl
-            this.rebind.overrides = {}
+            if (resetRebind) {
+                this._currentName = name
+                this.rebind.originalDsl = dsl
+                this.rebind.overrides = {}
+            } else {
+                this._currentName = rebindSource.name
+                this.rebind.originalDsl = rebindSource.originalDsl
+                this.rebind.overrides = rebindSource.overrides
+            }
             this._normalizeColorUniforms()
             // recompile() preserves o0..oN textures so stateful effects
             // (reaction-diffusion, MNCA, CA, feedback) keep evolving on
             // recompile. For a fresh program load that's wrong — the
             // new program inherits the old's seed. Wipe surfaces here.
-            this.clearSurfaces()
+            if (resetRebind) this.clearSurfaces()
             if (!this._renderer.isRunning) this._renderer.start()
+            if (version !== this._loadVersion) return superseded()
             return { success: true }
         } catch (err) {
+            if (version !== this._loadVersion) return superseded()
             const msg = typeof err === 'string' ? err
                 : err?.message || err?.error || 'Unknown compile error'
             console.error(`[${this.id}] load error:`, err)
             return { success: false, error: msg }
+        } finally {
+            release()
         }
     }
 
@@ -219,24 +257,7 @@ export class Deck {
      * behaviour as load(). Returns { success, error? }.
      */
     async reloadDsl(dsl) {
-        if (!this._initialized) await this.init()
-        try {
-            const effectData = extractEffectNamesFromDsl(dsl, this._renderer.manifest || {})
-            const effectIds = effectData.map(e => e.effectId)
-            if (effectIds.length > 0) {
-                await this._renderer.loadEffects(effectIds)
-            }
-            await this._renderer.compile(dsl)
-            this._currentDsl = dsl
-            this._normalizeColorUniforms()
-            if (!this._renderer.isRunning) this._renderer.start()
-            return { success: true }
-        } catch (err) {
-            const msg = typeof err === 'string' ? err
-                : err?.message || err?.error || 'Unknown compile error'
-            console.error(`[${this.id}] reloadDsl error:`, err)
-            return { success: false, error: msg }
-        }
+        return this._queueLoad(dsl, '', false)
     }
 
     /** Current effective playback speed (the source of truth for MIDI takeover). */
@@ -299,6 +320,8 @@ export class Deck {
     }
 
     dispose() {
+        this._disposed = true
+        ++this._loadVersion
         this.stop()
         if (this._renderer.dispose) this._renderer.dispose()
     }
