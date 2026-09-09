@@ -2122,6 +2122,12 @@ async function boot() {
         clearCodeFromUrl()
     }
 
+    // The decks are up and the app is usable, so say so BEFORE joining a
+    // session. The toast is a single slot: announcing readiness after the join
+    // would overwrite the join's own outcome, and an expired or refused
+    // invitation would vanish behind a cheerful "ready" the user cannot act on.
+    toast('ready: open settings to enable audio/MIDI')
+
     // `?seance=` joins after the boot choice. If a legacy `?code=` share
     // loader is also present, the user's deck choice and load complete first;
     // joining a Seance session then adopts the server documents as the single
@@ -2150,8 +2156,6 @@ async function boot() {
     // handlers + migrates any `title=` in static markup over to the
     // [data-title].tooltip convention).
     setupTooltips()
-
-    toast('ready — open settings to enable audio/MIDI')
 }
 
 /** Register each Visualize control as a MIDI-learnable target. */

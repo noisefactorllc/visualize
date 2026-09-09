@@ -397,3 +397,28 @@ test('joining a single-document session never proposes the deck it does not have
         await context.close()
     }
 })
+
+test('a refused join stops retrying and reports the reason', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        const host = await newOnlinePage(context, server)
+        const sessionId = await takeOnline(host)
+        // The server refuses and leaves the socket open, which is what the
+        // deployed SDK sees while it retries a terminal refusal forever.
+        server.refuseJoin(sessionId, { code: 'forbidden', detail: 'roster full' })
+
+        const guest = await newOnlinePage(context, server)
+        await pageJoinById(guest, sessionId)
+
+        await expect.poll(() => guest.locator('#toast').textContent(), { timeout: 30_000 })
+            .toContain('that session is full')
+        // Not left pulsing on "Connecting", whose controls are all hidden.
+        await openDialog(guest)
+        await expect(guest.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Offline', { timeout: 30_000 })
+        await closeDialog(guest)
+        expect(await guest.evaluate(() => window.__visualize.online.getStatus())).toBe('offline')
+    } finally {
+        await context.close()
+    }
+})

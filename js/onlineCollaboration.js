@@ -19,6 +19,38 @@ export function docIdForDeck(deckId) {
     return DECK_DOC_IDS[deckId] || deckId
 }
 
+/**
+ * Copy for a server refusal, chosen by the wire `code`, never by message text.
+ *
+ * Seance answers a refused join with an `error` frame and closes. `forbidden`
+ * covers four different situations that share one code, so its `detail`
+ * refines the wording, and only the wording: the decision to stop retrying is
+ * made from the code alone.
+ *
+ * @param {Object} frame - error frame or Error carrying `.code` / `.frame`
+ * @returns {string|null} copy for the user, or null when this is not a refusal
+ */
+export function refusalMessage(frame) {
+    const code = frame?.code || frame?.frame?.code
+    const detail = String(frame?.detail || frame?.frame?.detail || '')
+    switch (code) {
+        case 'unknown_session':
+            return 'that session has expired or does not exist'
+        case 'dialect_mismatch':
+            return 'that session belongs to a different app'
+        case 'unauthorized':
+            return 'that session did not accept your identity'
+        case 'forbidden':
+            if (detail.includes('roster full') || detail.includes('too many connections')) {
+                return 'that session is full'
+            }
+            if (detail.includes('locked')) return 'that session is locked'
+            if (detail.includes('banned')) return 'you cannot rejoin that session'
+            return 'that session refused the connection'
+        default:
+            return null
+    }
+}
 
 export async function createVisualizeOnlineCollaboration(options) {
     const runtimeConfig = globalThis.__VISUALIZE_SEANCE_CONFIG__ || {}
@@ -55,6 +87,7 @@ class VisualizeOnlineController {
         // first snapshot. See _adoptSessionDocs.
         this._sessionDocIds = null
         this._absentDocNoticeShown = false
+        this._sdkReportsDisconnect = false
         this._onlinePromise = null
         this._boundEditors = false
         this.sdkUrl = sdkUrl
@@ -147,6 +180,7 @@ class VisualizeOnlineController {
 
     async takeOnline() {
         try {
+            this._refusalAnnounced = false
             this._setBusy(true)
             await this._ensureOnline()
             this._closeActiveSession()
@@ -156,7 +190,9 @@ class VisualizeOnlineController {
             this.toast('online session ready')
         } catch (err) {
             console.error('[seance] take online failed', err)
-            this.toast(`online failed: ${err?.message || err}`, 5000)
+            if (!this._refusalAnnounced) {
+                this.toast(`online failed: ${refusalMessage(err) || err?.message || err}`, 5000)
+            }
         } finally {
             this._setBusy(false)
         }
@@ -166,6 +202,7 @@ class VisualizeOnlineController {
         const id = String(sessionId || '').trim()
         if (!id) return
         try {
+            this._refusalAnnounced = false
             this._setBusy(true)
             await this._ensureOnline()
             this._closeActiveSession()
@@ -175,7 +212,9 @@ class VisualizeOnlineController {
             this.toast(`joined online session ${id}`)
         } catch (err) {
             console.error('[seance] join failed', err)
-            this.toast(`join failed: ${err?.message || err}`, 5000)
+            if (!this._refusalAnnounced) {
+                this.toast(`join failed: ${refusalMessage(err) || err?.message || err}`, 5000)
+            }
         } finally {
             this._setBusy(false)
         }
@@ -242,9 +281,32 @@ class VisualizeOnlineController {
                     this._adoptSessionDocs(docs)
                     this.syncStatusUi()
                 })
+                // Newer SDKs report a terminal close as its own event and stop
+                // retrying by themselves. Subscribing costs nothing on the
+                // bundle that never emits it, and we defer to it when it does.
+                this.online.on('disconnect', (info) => {
+                    this._sdkReportsDisconnect = true
+                    const message = refusalMessage(info) || refusalMessage(info?.error)
+                    if (message) this.toast(message, 5000)
+                    this.syncStatusUi()
+                })
                 this.online.on('error', (err) => {
                     console.warn('[seance]', err?.message || err)
-                    this.toast(`online: ${err?.message || err}`, 4200)
+                    const message = refusalMessage(err)
+                    if (message && this.getStatus() === 'connecting') {
+                        // Terminal, but the deployed SDK retries it forever and
+                        // re-emits this event every time, leaving an endless
+                        // toast and a dialog stuck on "Connecting" whose only
+                        // controls are hidden. Stop, and say why once.
+                        if (!this._sdkReportsDisconnect) this._closeActiveSession()
+                        if (!this._refusalAnnounced) {
+                            this._refusalAnnounced = true
+                            this.toast(message, 5000)
+                        }
+                        this.syncStatusUi()
+                        return
+                    }
+                    this.toast(`online: ${message || err?.message || err}`, 4200)
                 })
                 this.bindDeckEditors()
                 this.syncStatusUi()
