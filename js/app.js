@@ -34,6 +34,7 @@ import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
+import { calculateCrossfadeNudge } from './crossfader.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
 import { getUserEffectsManager } from './userEffects.js'
 import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
@@ -1934,9 +1935,11 @@ async function boot() {
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
     document.addEventListener('keydown', (e) => {
-        // ignore when typing in inputs
-        const tag = e.target.tagName
-        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+        // ignore when typing in text inputs or code editors
+        const tag = e.target?.tagName
+        const isTextInput = tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable ||
+            (tag === 'INPUT' && !['range', 'button', 'submit', 'checkbox', 'radio', 'file'].includes((e.target?.type || 'text').toLowerCase()))
+        if (isTextInput) return
         const key = e.key.toLowerCase()
 
         // Shift+S toggles scenes drawer; Shift+1..9 recalls scene.
@@ -1987,20 +1990,37 @@ async function boot() {
                 loadProgram('B', p)
                 break
             }
-            case 'arrowleft': {
-                state.crossfade = Math.max(0, state.crossfade - 0.05)
+            case 'arrowleft':
+            case 'arrowright': {
+                if (e.metaKey) return
+                if (e.target?.tagName === 'INPUT' && e.target.type === 'range' && e.target !== xfaderEl) {
+                    return
+                }
+                if (e.target === xfaderEl && (e.altKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    return
+                }
+                if (e.altKey || e.ctrlKey) return
+                e.preventDefault()
+                state.crossfade = calculateCrossfadeNudge(state.crossfade, key === 'arrowleft' ? 'left' : 'right', { shiftKey: e.shiftKey })
                 compositor.setCrossfade(state.crossfade)
                 xfaderEl.value = String(state.crossfade)
                 updateLiveIndicator()
                 autoMix.noteUserOverride()
                 break
             }
-            case 'arrowright': {
-                state.crossfade = Math.min(1, state.crossfade + 0.05)
-                compositor.setCrossfade(state.crossfade)
-                xfaderEl.value = String(state.crossfade)
-                updateLiveIndicator()
-                autoMix.noteUserOverride()
+            case 'arrowdown':
+            case 'arrowup': {
+                if (e.target === xfaderEl) {
+                    if (e.metaKey) return
+                    e.preventDefault()
+                    if (e.altKey || e.ctrlKey) return
+                    state.crossfade = calculateCrossfadeNudge(state.crossfade, key === 'arrowdown' ? 'left' : 'right', { shiftKey: e.shiftKey })
+                    compositor.setCrossfade(state.crossfade)
+                    xfaderEl.value = String(state.crossfade)
+                    updateLiveIndicator()
+                    autoMix.noteUserOverride()
+                }
                 break
             }
             case '1': toggleFx('strobe'); break
