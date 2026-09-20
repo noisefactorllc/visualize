@@ -13,7 +13,11 @@
  */
 
 import { Deck, isHeavyDsl } from './noisemaker/deck.js'
-import { SharedAudio } from './audio.js'
+import {
+    SharedAudio,
+    loadAudioSensitivity,
+    persistAudioSensitivity
+} from './audio.js'
 import { SharedMidi } from './midi.js'
 import { MainCompositor } from './compositor.js'
 import { MixerRenderer, MIXERS, DEFAULT_MIXER_ID } from './mixer.js'
@@ -387,7 +391,8 @@ async function boot() {
         })
 
     // Audio
-    const audio = new SharedAudio()
+    const savedAudioSens = loadAudioSensitivity()
+    const audio = new SharedAudio({ sensitivity: savedAudioSens })
     audio.addDeck(state.decks.A)
     audio.addDeck(state.decks.B)
     audio.onStatusChange((msg, enabled) => {
@@ -1555,10 +1560,42 @@ async function boot() {
         }
     }
     $('audio-device').addEventListener('change', handleAudioDeviceChange)
-    $('audio-sensitivity').addEventListener('input', (e) => {
+    const audioSensInput = $('audio-sensitivity')
+    const audioSensVal = $('audio-sensitivity-val')
+    if (audioSensInput) {
+        audioSensInput.value = String(audio.sensitivity)
+    }
+    if (audioSensVal) {
+        audioSensVal.textContent = `${audio.sensitivity.toFixed(1)}×`
+    }
+    let _audioPersistTimer = null
+    function persistAudioSensitivityDebounced(v) {
+        if (_audioPersistTimer) clearTimeout(_audioPersistTimer)
+        _audioPersistTimer = setTimeout(() => {
+            persistAudioSensitivity(v)
+            _audioPersistTimer = null
+        }, 200)
+    }
+
+    audioSensInput?.addEventListener('input', (e) => {
         const v = parseFloat(e.target.value)
         audio.setSensitivity(v)
-        $('audio-sensitivity-val').textContent = `${v.toFixed(1)}×`
+    })
+    audioSensInput?.addEventListener('change', () => {
+        if (_audioPersistTimer) {
+            clearTimeout(_audioPersistTimer)
+            _audioPersistTimer = null
+        }
+        persistAudioSensitivity(audio.sensitivity)
+    })
+    audio.onSensitivityChange((v) => {
+        persistAudioSensitivityDebounced(v)
+        if (audioSensInput && parseFloat(audioSensInput.value) !== v) {
+            audioSensInput.value = String(v)
+        }
+        if (audioSensVal) {
+            audioSensVal.textContent = `${v.toFixed(1)}×`
+        }
     })
 
     // MIDI

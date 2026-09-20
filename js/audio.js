@@ -10,14 +10,71 @@
  * bands into each deck's audioState every frame while enabled.
  */
 
+export const AUDIO_STORAGE_KEY = 'visualize.audio.v1'
+export const AUDIO_SENSITIVITY_STORAGE_KEY = 'visualize.audio.sensitivity.v1'
+export const DEFAULT_AUDIO_SENSITIVITY = 1.5
+export const MIN_AUDIO_SENSITIVITY = 0.5
+export const MAX_AUDIO_SENSITIVITY = 4.0
+
+export function parseAudioSensitivity(raw, fallback = DEFAULT_AUDIO_SENSITIVITY) {
+    if (raw == null || typeof raw === 'boolean') return fallback
+    let val = raw
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw)
+            val = typeof parsed === 'number' ? parsed : (parsed?.sensitivity ?? parseFloat(raw))
+        } catch {
+            val = parseFloat(raw)
+        }
+    } else if (typeof raw === 'object' && raw !== null) {
+        val = raw.sensitivity
+    }
+    const num = typeof val === 'number' ? val : Number(val)
+    if (!Number.isFinite(num)) return fallback
+    const clamped = Math.max(MIN_AUDIO_SENSITIVITY, Math.min(MAX_AUDIO_SENSITIVITY, num))
+    return Math.round(clamped * 10) / 10
+}
+
+export function loadAudioSensitivity(storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
+    if (!storage) return DEFAULT_AUDIO_SENSITIVITY
+    try {
+        const item = storage.getItem(AUDIO_STORAGE_KEY) ?? storage.getItem(AUDIO_SENSITIVITY_STORAGE_KEY)
+        return parseAudioSensitivity(item)
+    } catch {
+        return DEFAULT_AUDIO_SENSITIVITY
+    }
+}
+
+export function persistAudioSensitivity(sensitivity, storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
+    if (!storage) return false
+    try {
+        const val = parseAudioSensitivity(sensitivity)
+        let existing = {}
+        try {
+            const raw = storage.getItem(AUDIO_STORAGE_KEY)
+            if (raw) {
+                const parsed = JSON.parse(raw)
+                if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+                    existing = parsed
+                }
+            }
+        } catch {}
+        storage.setItem(AUDIO_STORAGE_KEY, JSON.stringify({ ...existing, sensitivity: val }))
+        return true
+    } catch {
+        return false
+    }
+}
+
 export class SharedAudio {
-    constructor() {
+    constructor(options = {}) {
         this._decks = new Set()
         this._audioStates = new Map() // deck -> audioState
         this._enabled = false
         this._deviceId = ''
         this._deviceLabel = ''
-        this._sensitivity = 1.5
+        const initialSens = typeof options === 'number' ? options : options?.sensitivity
+        this._sensitivity = parseAudioSensitivity(initialSens, DEFAULT_AUDIO_SENSITIVITY)
         this._stream = null
         this._audioContext = null
         this._analyser = null
@@ -30,6 +87,7 @@ export class SharedAudio {
         this._loopBound = () => this._loop()
         this._onStatus = null
         this._onMeters = null
+        this._onSensitivity = null
 
         this.meters = { sub: 0, low: 0, mid: 0, high: 0, vol: 0 }
     }
@@ -43,12 +101,20 @@ export class SharedAudio {
 
     onStatusChange(cb) { this._onStatus = cb }
     onMeters(cb) { this._onMeters = cb }
+    onSensitivityChange(cb) { this._onSensitivity = cb }
 
     get enabled() { return this._enabled }
     get currentDeviceId() { return this._deviceId }
     get currentDeviceLabel() { return this._deviceLabel }
+    get sensitivity() { return this._sensitivity }
 
-    setSensitivity(s) { this._sensitivity = Math.max(0.1, s) }
+    setSensitivity(s) {
+        if (s == null || typeof s === 'boolean') return
+        const num = typeof s === 'number' ? s : Number(s)
+        if (!Number.isFinite(num)) return
+        this._sensitivity = parseAudioSensitivity(num, this._sensitivity)
+        if (this._onSensitivity) this._onSensitivity(this._sensitivity)
+    }
 
     /**
      * Register a deck so its audioState gets written every frame.
