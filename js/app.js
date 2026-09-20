@@ -1872,10 +1872,13 @@ async function boot() {
         }
     }
 
+    let editingSceneName = null
+
     function renderScenes() {
         const list = scenes.scenes
         scenesList.innerHTML = ''
         if (list.length === 0) {
+            editingSceneName = null
             const empty = document.createElement('div')
             empty.className = 'scenes-empty'
             empty.textContent = 'no scenes saved yet — set up your decks and save a snapshot above'
@@ -1890,35 +1893,153 @@ async function boot() {
                 .filter(([, v]) => v)
                 .map(([k]) => k.toUpperCase())
                 .join('·') || '—'
-            row.innerHTML = `
-                <span class="sr-key">${hot}</span>
-                <span>
-                    <div class="sr-name">${escapeHtml(s.name)}</div>
-                    <div class="sr-meta">${Math.round(s.bpm || 0)} BPM · ${fxBadges}</div>
-                </span>
-            `
-            const actions = document.createElement('span')
-            actions.className = 'sr-actions'
-            const load = document.createElement('button')
-            load.textContent = 'recall'
-            load.addEventListener('click', (e) => {
-                e.stopPropagation()
-                recallScene(s)
-            })
-            const del = document.createElement('button')
-            del.className = 'sr-delete'
-            del.textContent = '✕'
-            setTooltip(del, 'delete')
-            del.addEventListener('click', (e) => {
-                e.stopPropagation()
-                if (confirm(`Delete scene "${s.name}"?`)) {
-                    scenes.delete(s.name)
+
+            const isEditing = editingSceneName === s.name
+            if (isEditing) {
+                row.classList.add('editing')
+                row.innerHTML = `
+                    <span class="sr-key">${hot}</span>
+                    <span class="sr-edit-wrap">
+                        <input type="text" class="sr-rename-input" maxlength="40" value="${escapeHtml(s.name)}" aria-label="Rename scene">
+                        <div class="sr-meta">${Math.round(s.bpm || 0)} BPM · ${fxBadges}</div>
+                    </span>
+                `
+                const actions = document.createElement('span')
+                actions.className = 'sr-actions'
+
+                const saveBtn = document.createElement('button')
+                saveBtn.className = 'sr-rename-save'
+                saveBtn.textContent = 'save'
+                setTooltip(saveBtn, 'save new name')
+
+                const cancelBtn = document.createElement('button')
+                cancelBtn.className = 'sr-rename-cancel'
+                cancelBtn.textContent = 'cancel'
+                setTooltip(cancelBtn, 'cancel rename')
+
+                actions.appendChild(saveBtn)
+                actions.appendChild(cancelBtn)
+                row.appendChild(actions)
+
+                const input = row.querySelector('.sr-rename-input')
+
+                const doSave = () => {
+                    const newName = input.value
+                    const valRes = scenes.validateName(newName, s.name)
+                    if (!valRes.ok) {
+                        toast(valRes.message || 'invalid scene name')
+                        input.classList.add('sr-input-error')
+                        input.focus()
+                        return
+                    }
+                    editingSceneName = null
+                    if (valRes.unchanged) {
+                        renderScenes()
+                        return
+                    }
+                    const res = scenes.rename(s.name, newName)
+                    if (res.ok) {
+                        toast(`renamed: ${res.name}`)
+                    }
                 }
-            })
-            actions.appendChild(load)
-            actions.appendChild(del)
-            row.appendChild(actions)
-            row.addEventListener('click', () => recallScene(s))
+
+                const doCancel = () => {
+                    editingSceneName = null
+                    renderScenes()
+                }
+
+                saveBtn.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    doSave()
+                })
+
+                cancelBtn.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    doCancel()
+                })
+
+                input.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                })
+
+                input.addEventListener('input', () => {
+                    input.classList.remove('sr-input-error')
+                })
+
+                input.addEventListener('keydown', (e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') {
+                        e.preventDefault()
+                        doSave()
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        doCancel()
+                    }
+                })
+
+                setTimeout(() => {
+                    input.focus()
+                    input.select()
+                }, 0)
+            } else {
+                row.innerHTML = `
+                    <span class="sr-key">${hot}</span>
+                    <span>
+                        <div class="sr-name" title="Double-click to rename">${escapeHtml(s.name)}</div>
+                        <div class="sr-meta">${Math.round(s.bpm || 0)} BPM · ${fxBadges}</div>
+                    </span>
+                `
+                const actions = document.createElement('span')
+                actions.className = 'sr-actions'
+
+                const load = document.createElement('button')
+                load.textContent = 'recall'
+                load.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    recallScene(s)
+                })
+
+                const ren = document.createElement('button')
+                ren.className = 'sr-rename'
+                ren.textContent = 'rename'
+                setTooltip(ren, 'rename scene')
+                ren.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    editingSceneName = s.name
+                    renderScenes()
+                })
+
+                const del = document.createElement('button')
+                del.className = 'sr-delete'
+                del.textContent = '✕'
+                setTooltip(del, 'delete')
+                del.addEventListener('click', (e) => {
+                    e.stopPropagation()
+                    if (editingSceneName === s.name) editingSceneName = null
+                    if (confirm(`Delete scene "${s.name}"?`)) {
+                        scenes.delete(s.name)
+                    }
+                })
+
+                const nameEl = row.querySelector('.sr-name')
+                if (nameEl) {
+                    nameEl.addEventListener('click', (e) => {
+                        // Prevent click on the scene name from triggering row click (recallScene)
+                        e.stopPropagation()
+                    })
+                    nameEl.addEventListener('dblclick', (e) => {
+                        e.stopPropagation()
+                        editingSceneName = s.name
+                        renderScenes()
+                    })
+                }
+
+                actions.appendChild(load)
+                actions.appendChild(ren)
+                actions.appendChild(del)
+                row.appendChild(actions)
+                row.addEventListener('click', () => recallScene(s))
+            }
             scenesList.appendChild(row)
         })
     }
@@ -1943,16 +2064,35 @@ async function boot() {
         window.__visualize.scenes = scenes
         window.__visualize.takeSnapshot = () => Scenes.snapshot(snapshotAccessors())
         window.__visualize.applySnapshot = (snap) => Scenes.apply(snap, applyAccessors())
+        window.__visualize.renameScene = (oldName, newName) => scenes.rename(oldName, newName)
     }
 
     scenes.onChange(() => renderScenes())
     renderScenes()
 
+    function openScenesDrawer() {
+        scenesDrawer.setAttribute('aria-hidden', 'false')
+    }
+
+    function closeScenesDrawer() {
+        editingSceneName = null
+        scenesDrawer.setAttribute('aria-hidden', 'true')
+        renderScenes()
+    }
+
+    function toggleScenesDrawer() {
+        if (scenesDrawer.getAttribute('aria-hidden') === 'false') {
+            closeScenesDrawer()
+        } else {
+            openScenesDrawer()
+        }
+    }
+
     $('scenes-open').addEventListener('click', () => {
-        scenesDrawer.setAttribute('aria-hidden', scenesDrawer.getAttribute('aria-hidden') === 'false' ? 'true' : 'false')
+        toggleScenesDrawer()
     })
     $('scenes-close').addEventListener('click', () => {
-        scenesDrawer.setAttribute('aria-hidden', 'true')
+        closeScenesDrawer()
     })
     $('scene-save').addEventListener('click', () => {
         const name = sceneNameInput.value
@@ -1986,8 +2126,7 @@ async function boot() {
         if (e.shiftKey && (key === 's' || digitMatch)) {
             e.preventDefault()
             if (key === 's') {
-                scenesDrawer.setAttribute('aria-hidden',
-                    scenesDrawer.getAttribute('aria-hidden') === 'false' ? 'true' : 'false')
+                toggleScenesDrawer()
                 return
             }
             const idx = parseInt(e.code.replace('Digit', ''), 10) - 1
@@ -2082,7 +2221,7 @@ async function boot() {
                 if (drawer.getAttribute('aria-hidden') === 'false') {
                     closeSettings()
                 } else if (scenesDrawer.getAttribute('aria-hidden') === 'false') {
-                    scenesDrawer.setAttribute('aria-hidden', 'true')
+                    closeScenesDrawer()
                 } else if (document.fullscreenElement) {
                     document.exitFullscreen?.()
                 }

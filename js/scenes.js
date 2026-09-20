@@ -23,6 +23,45 @@
 const STORAGE_KEY = 'visualize.scenes.v1'
 const MAX_SCENES = 16
 
+export { STORAGE_KEY as SCENES_STORAGE_KEY, MAX_SCENES }
+
+/**
+ * Validates a proposed scene name against empty/whitespace-only input,
+ * length constraints, and duplicate names in existing scenes.
+ *
+ * @param {string} name - The proposed scene name.
+ * @param {string|null} [currentName=null] - The current name of the scene if renaming.
+ * @param {Array<Object|string>} [existingScenes=[]] - Existing scenes to check against.
+ * @returns {{ ok: boolean, success: boolean, name?: string, unchanged?: boolean, error?: string, message?: string }}
+ */
+export function validateSceneName(name, currentName = null, existingScenes = []) {
+    if (typeof name !== 'string') {
+        return { ok: false, success: false, error: 'empty', message: 'Scene name cannot be empty' }
+    }
+    const trimmed = name.trim().slice(0, 40)
+    if (!trimmed) {
+        return { ok: false, success: false, error: 'empty', message: 'Scene name cannot be empty' }
+    }
+
+    const curTrimmed = typeof currentName === 'string' ? currentName.trim() : null
+    if (curTrimmed && trimmed.toLowerCase() === curTrimmed.toLowerCase()) {
+        return { ok: true, success: true, name: trimmed, unchanged: trimmed === curTrimmed }
+    }
+
+    const isDuplicate = existingScenes.some(s => {
+        const sName = typeof s === 'string' ? s.trim() : (typeof s?.name === 'string' ? s.name.trim() : '')
+        if (!sName) return false
+        if (curTrimmed && sName.toLowerCase() === curTrimmed.toLowerCase()) return false
+        return sName.toLowerCase() === trimmed.toLowerCase()
+    })
+
+    if (isDuplicate) {
+        return { ok: false, success: false, error: 'duplicate', message: `A scene named "${trimmed}" already exists` }
+    }
+
+    return { ok: true, success: true, name: trimmed }
+}
+
 /** Snapshot a deck's rebind state. Overrides are pure AST nodes —
  *  JSON-clone is safe (no functions, no cycles). */
 function cloneRebind(rebind) {
@@ -35,7 +74,8 @@ function cloneRebind(rebind) {
 }
 
 export class Scenes {
-    constructor() {
+    constructor(options = {}) {
+        this._storage = options?.storage || (typeof localStorage !== 'undefined' ? localStorage : null)
         this._scenes = this._load()
         this._listeners = []
     }
@@ -121,6 +161,64 @@ export class Scenes {
     }
 
     /**
+     * Validate a proposed scene name against existing scenes.
+     */
+    static validateName(name, currentName = null, existingScenes = []) {
+        return validateSceneName(name, currentName, existingScenes)
+    }
+
+    /**
+     * Validate a proposed scene name against this instance's current scenes.
+     */
+    validateName(newName, currentName = null) {
+        return validateSceneName(newName, currentName, this._scenes)
+    }
+
+    /**
+     * Rename an existing scene, validating against empty and duplicate names.
+     * Preserves scene order, index position (Shift+1..9 hotkeys), and snapshot contents.
+     *
+     * @param {string|Object} oldName - The current scene name or scene object.
+     * @param {string} newName - The proposed new scene name.
+     * @returns {{ ok: boolean, success: boolean, name?: string, prevName?: string, unchanged?: boolean, error?: string, message?: string }}
+     */
+    rename(oldName, newName) {
+        if (!oldName || (typeof oldName !== 'string' && typeof oldName !== 'object')) {
+            return { ok: false, success: false, error: 'not_found', message: 'Scene not found' }
+        }
+        let scene = null
+        if (typeof oldName === 'object' && oldName !== null) {
+            scene = this._scenes.find(s => s === oldName)
+        }
+        const lookup = typeof oldName === 'object' && oldName !== null ? oldName.name : oldName
+        if (!scene && typeof lookup === 'string' && lookup.trim()) {
+            const trimmedOld = lookup.trim()
+            // Exact match pass first
+            scene = this._scenes.find(s => s.name === trimmedOld)
+            // Case-insensitive fallback
+            if (!scene) {
+                scene = this._scenes.find(s => s.name.toLowerCase() === trimmedOld.toLowerCase())
+            }
+        }
+        if (!scene) {
+            return { ok: false, success: false, error: 'not_found', message: `Scene "${lookup || oldName}" not found` }
+        }
+
+        const res = validateSceneName(newName, scene.name, this._scenes)
+        if (!res.ok) return res
+
+        if (res.name === scene.name) {
+            return { ok: true, success: true, name: scene.name, unchanged: true }
+        }
+
+        const prevName = scene.name
+        scene.name = res.name
+        this._persist()
+        this._emit()
+        return { ok: true, success: true, name: res.name, prevName }
+    }
+
+    /**
      * Apply a scene to the live app state via supplied applicators.
      * Returns a list of any errors encountered (per-deck load failures
      * mostly), but always applies as much as it can.
@@ -192,7 +290,8 @@ export class Scenes {
 
     _load() {
         try {
-            const raw = localStorage.getItem(STORAGE_KEY)
+            const storage = this._storage || (typeof localStorage !== 'undefined' ? localStorage : null)
+            const raw = storage?.getItem(STORAGE_KEY)
             const list = raw ? JSON.parse(raw) : []
             return Array.isArray(list) ? list : []
         } catch {
@@ -202,7 +301,8 @@ export class Scenes {
 
     _persist() {
         try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this._scenes))
+            const storage = this._storage || (typeof localStorage !== 'undefined' ? localStorage : null)
+            storage?.setItem(STORAGE_KEY, JSON.stringify(this._scenes))
         } catch (err) {
             // QuotaExceededError — most likely scenes filled the budget
             console.warn('[Scenes] persist failed', err)
