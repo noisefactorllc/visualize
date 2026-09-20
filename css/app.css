@@ -192,8 +192,8 @@ select:focus-visible,
     padding: 2px;
     border-radius: var(--hf-radius-sm);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
-    background: #03060a;
-    box-shadow: inset 0 0 0 1px #000, inset 0 1px 8px rgba(0, 0, 0, 0.8);
+    background: var(--hf-led-bg, var(--hf-color-1));
+    box-shadow: inset 0 0 0 1px var(--hf-color-1), inset 0 1px 8px color-mix(in srgb, var(--hf-color-1) 80%, transparent);
 }
 
 .status-pill {
@@ -427,20 +427,20 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    color: #fff;
+    color: var(--hf-text-bright);
     pointer-events: none;
     background: linear-gradient(to top,
-        rgba(0, 0, 0, 0.85) 0%,
-        rgba(0, 0, 0, 0.55) 40%,
-        rgba(0, 0, 0, 0) 75%);
+        color-mix(in srgb, var(--hf-bg-base) 85%, transparent) 0%,
+        color-mix(in srgb, var(--hf-bg-base) 55%, transparent) 40%,
+        transparent 75%);
 }
 
 .program-card .pc-title {
     font-size: 11px;
     font-weight: var(--hf-weight-semibold);
     line-height: 1.15;
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+    color: var(--hf-text-bright);
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--hf-bg-base) 70%, transparent);
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -453,8 +453,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     margin-top: 1px;
     font-size: 9px;
     line-height: 1.1;
-    color: rgba(255, 255, 255, 0.78);
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8);
+    color: color-mix(in srgb, var(--hf-text-bright) 80%, transparent);
+    text-shadow: 0 1px 1px color-mix(in srgb, var(--hf-bg-base) 80%, transparent);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -469,9 +469,9 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     right: 4px;
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: var(--hf-radius-full);
     background: var(--card-tint, var(--hf-accent));
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--hf-shadow-sm);
     z-index: 2;
     pointer-events: none;
 }
@@ -486,9 +486,9 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .program-card .pc-load {
     flex: 1;
     appearance: none;
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    color: #fff;
+    background: color-mix(in srgb, var(--hf-text-bright) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--hf-text-bright) 22%, transparent);
+    color: var(--hf-text-bright);
     border-radius: var(--hf-radius-sm);
     padding: 2px 0;
     font-size: 10px;
@@ -497,11 +497,11 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     line-height: 1;
     cursor: pointer;
     transition: background 0.12s, border-color 0.12s;
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.6);
+    text-shadow: 0 1px 1px color-mix(in srgb, var(--hf-bg-base) 60%, transparent);
 }
 .program-card .pc-load:hover {
-    background: rgba(255, 255, 255, 0.28);
-    border-color: rgba(255, 255, 255, 0.55);
+    background: color-mix(in srgb, var(--hf-text-bright) 28%, transparent);
+    border-color: color-mix(in srgb, var(--hf-text-bright) 55%, transparent);
 }
 
 /* Per-card Auto-VJ include checkbox. Sits before the A/B load
@@ -672,7 +672,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck-media[hidden],
 .deck-media-camera[hidden],
 .deck-media-file-btn[hidden] {
-    display: none !important;
+    display: none;
 }
 .deck-media-camera {
     min-width: 140px;
@@ -865,7 +865,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     bottom: 0.5em;
     padding: 0;
     background: transparent;
-    color: #ff6b6b;
+    color: var(--hf-red);
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     line-height: 1.45;
@@ -881,8 +881,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck-editor-error[hidden] { display: none; }
 .deck-editor-error span {
     display: inline;
-    background: rgba(0, 0, 0, 0.85);
-    color: #ff6b6b;
+    background: color-mix(in srgb, var(--hf-bg-base) 88%, transparent);
+    color: var(--hf-red);
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
     padding: 0 0.15em;
@@ -890,9 +890,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 
 /* Bottom-of-panel label block: DECK A / program title / tagline.
    Title + tagline match .program-card's .pc-title / .pc-tagline
-   pixel-for-pixel (same font sizes, weights, line-heights,
-   text-shadows, line clamps) so the deck panels read as a natural
-   extension of the library list above. */
+   in font sizing, weights, line-heights, and line clamps, adapting
+   cleanly to the active Handfish theme surface. */
 .deck-meta {
     padding: var(--hf-space-2) var(--hf-space-3);
 }
@@ -902,8 +901,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-size: 11px;
     font-weight: var(--hf-weight-semibold);
     line-height: 1.15;
-    color: #fff;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+    color: var(--hf-text-bright);
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -916,8 +914,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     margin-top: 1px;
     font-size: 9px;
     line-height: 1.1;
-    color: rgba(255, 255, 255, 0.78);
-    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8);
+    color: var(--hf-text-dim);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1029,11 +1026,11 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     background: var(--hf-bg-surface);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-md);
-    box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--hf-shadow-xl);
 }
 
 .sync-output-dialog::backdrop {
-    background: rgba(0, 0, 0, 0.72);
+    background: var(--hf-backdrop);
     backdrop-filter: blur(4px);
 }
 
@@ -1058,9 +1055,9 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 
 .sync-output-live {
     padding: 2px 7px;
-    color: white;
-    background: var(--hf-danger, #e43d4f);
-    border-radius: 999px;
+    color: var(--hf-bg-base);
+    background: var(--hf-red);
+    border-radius: var(--hf-radius-pill);
     font-family: var(--hf-font-family-mono);
     font-size: 10px;
     letter-spacing: 0.12em;
@@ -1113,7 +1110,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 .sync-output-field input[aria-invalid="true"] {
-    border-color: var(--hf-danger, #e43d4f);
+    border-color: var(--hf-red);
 }
 
 .sync-output-meta,
@@ -1177,7 +1174,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 .sync-output-dialog[data-tone="error"] .sync-output-message {
-    border-left-color: var(--hf-danger, #e43d4f);
+    border-left-color: var(--hf-red);
 }
 
 .sync-output-action {
@@ -1463,8 +1460,8 @@ input[type="range"]:not(.slider) {
     appearance: none;
     width: 100%;
     height: 0.5rem;
-    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 15%, transparent 85%);
-    border-radius: var(--hf-radius-sm, 0.25rem);
+    background: color-mix(in srgb, var(--hf-accent) 15%, transparent 85%);
+    border-radius: var(--hf-radius-sm);
     cursor: pointer;
     transition: background 0.15s ease;
     margin: 0;
@@ -1474,37 +1471,37 @@ input[type="range"]:not(.slider):focus-visible {
     outline-offset: var(--hf-focus-ring-offset);
 }
 input[type="range"]:not(.slider):hover {
-    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 22%, transparent 78%);
+    background: color-mix(in srgb, var(--hf-accent) 22%, transparent 78%);
 }
 input[type="range"]:not(.slider)::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
     width: 0.875rem;
     height: 0.875rem;
-    border-radius: 50%;
-    background: var(--hf-accent, #5a7fdd);
+    border-radius: var(--hf-radius-full);
+    background: var(--hf-accent);
     cursor: pointer;
-    border: 2px solid var(--hf-accent, #5a7fdd);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    border: 2px solid var(--hf-accent);
+    box-shadow: var(--hf-shadow-sm);
     transition: all 0.15s ease;
 }
 input[type="range"]:not(.slider):hover::-webkit-slider-thumb {
-    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 85%, var(--hf-text-bright, #fff) 15%);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    background: color-mix(in srgb, var(--hf-accent) 85%, var(--hf-text-bright) 15%);
+    box-shadow: var(--hf-shadow);
 }
 input[type="range"]:not(.slider)::-moz-range-thumb {
     width: 0.875rem;
     height: 0.875rem;
-    border-radius: 50%;
-    background: var(--hf-accent, #5a7fdd);
+    border-radius: var(--hf-radius-full);
+    background: var(--hf-accent);
     cursor: pointer;
-    border: 2px solid var(--hf-accent, #5a7fdd);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    border: 2px solid var(--hf-accent);
+    box-shadow: var(--hf-shadow-sm);
     transition: all 0.15s ease;
 }
 input[type="range"]:not(.slider):hover::-moz-range-thumb {
-    background: color-mix(in srgb, var(--hf-accent, #5a7fdd) 85%, var(--hf-text-bright, #fff) 15%);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    background: color-mix(in srgb, var(--hf-accent) 85%, var(--hf-text-bright) 15%);
+    box-shadow: var(--hf-shadow);
 }
 input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing; }
 
@@ -1733,12 +1730,12 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
 .record-button:hover { border-color: var(--hf-red); }
 .record-button[data-state="on"] {
     background: var(--hf-red);
-    color: white;
+    color: var(--hf-bg-base);
     border-color: var(--hf-red);
 }
 
 .record-button[data-state="on"] .record-dot {
-    background: white;
+    background: var(--hf-bg-base);
     animation: blink 1s ease-in-out infinite;
 }
 
@@ -1748,7 +1745,7 @@ input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing
 }
 
 .record-time { color: var(--hf-text-dim); font-size: var(--hf-size-xs); }
-.record-button[data-state="on"] .record-time { color: white; }
+.record-button[data-state="on"] .record-time { color: var(--hf-bg-base); }
 
 /* ─────────────── settings drawer ─────────────── */
 .settings-drawer {
@@ -2155,7 +2152,7 @@ kbd {
     background: var(--hf-bg-surface);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-lg);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--hf-shadow-xl);
 }
 
 .boot-brand {
@@ -2177,6 +2174,7 @@ kbd {
     font-size: 56px;
     font-weight: var(--hf-weight-bold);
     letter-spacing: var(--hf-tracking-wide);
+    margin-bottom: var(--hf-space-2);
     background: linear-gradient(90deg, var(--hf-blue), var(--hf-yellow), var(--hf-red));
     background-size: 200% 200%;
     -webkit-background-clip: text;
@@ -2251,13 +2249,13 @@ kbd {
     background: var(--hf-blue);
 }
 .boot-button-deck-a:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--hf-blue) 80%, white);
+    background: color-mix(in srgb, var(--hf-blue) 80%, var(--hf-text-bright));
 }
 .boot-button-deck-b {
     background: var(--hf-red);
 }
 .boot-button-deck-b:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--hf-red) 80%, white);
+    background: color-mix(in srgb, var(--hf-red) 80%, var(--hf-text-bright));
 }
 
 .boot-hint {
@@ -2335,7 +2333,7 @@ kbd {
 }
 
 @media (max-width: 600px) {
-    .boot-small-screen-warning { display: block !important; }
+    .boot-small-screen-warning { display: block; }
     .boot-title { font-size: 38px; }
 }
 
