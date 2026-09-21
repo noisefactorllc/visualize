@@ -437,6 +437,9 @@ async function boot() {
     const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
     setOnlineCollaborationUiVisible(onlineCollaborationEnabled)
 
+    // Wire handfish tooltips early so static title attributes migrate immediately
+    setupTooltips()
+
     // Cached DOM refs — declared before any callbacks that capture them
     // so we don't risk TDZ if a callback fires between declaration and
     // first use (e.g. compositor frame hook firing during boot).
@@ -488,6 +491,8 @@ async function boot() {
     window.__visualize.scheduler = scheduler
     window.__visualize.tempoBar = tempoBar
     const bpmLabelEl = tempoBar.querySelector('.tempo-bar__label')
+    const tapBtn = tempoBar.querySelector('.tempo-bar__tap')
+    if (tapBtn) setTooltip(tapBtn, 'Tap tempo (T)')
     const mainLoopDerivedEl = $('main-loop-derived')
 
     function applyLoopFromBpm() {
@@ -609,6 +614,7 @@ async function boot() {
         onStateChange: (recording) => {
             const btn = $('record-toggle')
             btn.dataset.state = recording ? 'on' : 'off'
+            setTooltip(btn, recording ? 'Stop recording (R)' : 'Record main output (R)')
             if (!recording) $('record-time').textContent = '0:00'
             toast(recording ? 'recording…' : 'recording saved')
         },
@@ -1985,7 +1991,7 @@ async function boot() {
                 row.innerHTML = `
                     <span class="sr-key">${hot}</span>
                     <span>
-                        <div class="sr-name" title="Double-click to rename">${escapeHtml(s.name)}</div>
+                        <div class="sr-name tooltip" data-title="Double-click to rename">${escapeHtml(s.name)}</div>
                         <div class="sr-meta">${Math.round(s.bpm || 0)} BPM · ${fxBadges}</div>
                     </span>
                 `
@@ -1994,6 +2000,7 @@ async function boot() {
 
                 const load = document.createElement('button')
                 load.textContent = 'recall'
+                setTooltip(load, i < 9 ? `Recall scene (Shift+${i + 1})` : 'Recall scene')
                 load.addEventListener('click', (e) => {
                     e.stopPropagation()
                     recallScene(s)
@@ -2343,11 +2350,6 @@ async function boot() {
             setTimeout(enableThumbs, 2500)
         }
     }
-
-    // Boot complete — wire handfish tooltips (registers hover/focus
-    // handlers + migrates any `title=` in static markup over to the
-    // [data-title].tooltip convention).
-    setupTooltips()
 }
 
 /** Register each Visualize control as a MIDI-learnable target. */
