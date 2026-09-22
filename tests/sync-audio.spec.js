@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER
+const fixtureDsl = 'search synth, render\nnoise(seed: 7).write(o0)\nrender(o0)'
 let daemon, endpoint
 
 test.beforeAll(async () => {
@@ -29,6 +30,13 @@ test.afterAll(async () => {
 })
 
 async function setup(page, fullApp = false) {
+    if (fullApp) {
+        // Exercise real rendering with a bounded input, without randomly
+        // compiling a heavy simulation during native protocol assertions.
+        await page.route('**/data/programs.json', route => route.fulfill({
+            json: [{ title: 'Sync fixture', tagline: '', tags: ['abstract'], category: 'abstract', dsl: fixtureDsl }]
+        }))
+    }
     await page.route('**/js/sync/audio.js', route => route.fulfill({
         contentType: 'text/javascript',
         body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.0/browser/index.js';
@@ -196,7 +204,10 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
             }`
     }))
     await setup(page, true)
-    await page.waitForFunction(() => window.__visualize?.mixer?.ready)
+    await page.waitForFunction(dsl => {
+        const app = window.__visualize
+        return app?.online && app.mixer?.ready && Object.values(app.decks).every(deck => deck.currentDsl === dsl)
+    }, fixtureDsl)
     await page.evaluate(async () => {
         const sync = await import('/js/sync/audioInput.js')
         await sync.connectSyncAudio()
@@ -205,15 +216,22 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
         await output.connect()
         await output.start('Visualize native receiver')
     })
-    await expect.poll(() => page.evaluate(async () => {
+    const receiverStatus = () => page.evaluate(async () => {
         const output = window.__visualize.syncOutputController
         const client = output._client, sender = output._sender
-        if (!sender) return false
+        if (!sender) return { state: output.state, accepted: false }
         const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
             { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
         window.nativeReceiverStats = stats
-        return Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum))
-    })).toBe(true)
+        return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
+            accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
+    })
+    try {
+        await expect.poll(async () => (await receiverStatus()).accepted).toBe(true)
+    } catch (error) {
+        error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
+        throw error
+    }
     const stats = await page.evaluate(() => window.nativeReceiverStats)
     expect(Number(stats.rejected)).toBe(0)
     expect(Number(stats.failed)).toBe(0)
