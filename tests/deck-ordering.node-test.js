@@ -172,3 +172,77 @@ test('disposing during compilation cannot restart the deck or adopt its late res
     assert.equal(h.deck.currentDsl, '')
     assert.equal(h.deck.isRunning, false)
 })
+
+test('cancelPending invalidates an in-flight load while loading effects before compilation', async () => {
+    const compiles = []
+    const effectGates = []
+    const engine = {
+        manifest: {},
+        async loadEffects(ids) {
+            const gate = deferred()
+            effectGates.push({ ids, ...gate })
+            await gate.promise
+        },
+        rendered: '',
+        async compile(dsl) {
+            const gate = deferred()
+            compiles.push({ dsl, ...gate })
+            await gate.promise
+            this.rendered = dsl
+        },
+        start() { this.isRunning = true }, stop() {}, dispose() {},
+    }
+    const context = vm.createContext({
+        console,
+        CanvasRenderer: function () { return engine },
+        CDN_BASE: '',
+        extractEffectNamesFromDsl: () => [{ effectId: 'fx1' }]
+    })
+    const Deck = vm.runInContext(source + '\nDeck', context)
+    const deck = new Deck({})
+    deck._initialized = true
+    deck._normalizeColorUniforms = () => {}
+
+    const loadPromise = deck.load('pending-fx', 'PendingFx')
+    await flush()
+    assert.equal(effectGates.length, 1)
+    assert.equal(compiles.length, 0, 'compilation should not start before effects load')
+
+    deck.cancelPending()
+    effectGates[0].resolve()
+    const res = await loadPromise
+
+    assert.equal(res.superseded, true)
+    assert.equal(res.success, false)
+    assert.equal(compiles.length, 0, 'cancelled load must never call compile()')
+    assert.equal(deck.currentDsl, '')
+    assert.equal(deck.currentName, '')
+})
+
+test('cancelPending marks an in-flight compiling load as superseded', async () => {
+    const h = harness()
+    const loadPromise = h.deck.load('pending', 'Pending')
+    await flush()
+    assert.equal(h.compiles.length, 1)
+    h.deck.cancelPending()
+    h.compiles[0].resolve()
+    const res = await loadPromise
+    assert.equal(res.superseded, true)
+    assert.equal(res.success, false)
+})
+
+test('cancelPending invalidates a queued load so it never compiles', async () => {
+    const h = harness()
+    const first = h.deck.load('first', 'First')
+    await flush()
+    const second = h.deck.load('second', 'Second')
+    await flush()
+    h.deck.cancelPending()
+    h.compiles[0].resolve()
+    await flush()
+    assert.equal((await first).superseded, true)
+    assert.equal((await second).superseded, true)
+    assert.deepEqual(h.compiles.map(c => c.dsl), ['first'])
+})
+
+

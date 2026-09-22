@@ -643,13 +643,23 @@ async function boot() {
     // ── Wire UI ───────────────────────────────────────────────────────────
 
     // Crossfader
+    let xfadeAnimId = null
+    function cancelXfadeAnimation() {
+        if (xfadeAnimId !== null) {
+            cancelAnimationFrame(xfadeAnimId)
+            xfadeAnimId = null
+        }
+    }
+
     xfaderEl.addEventListener('input', (e) => {
+        cancelXfadeAnimation()
         state.crossfade = parseFloat(e.target.value)
         compositor.setCrossfade(state.crossfade)
         updateLiveIndicator()
         autoMix.noteUserOverride()
     })
     $('cut-a').addEventListener('click', () => {
+        cancelXfadeAnimation()
         state.crossfade = 0
         compositor.setCrossfade(0)
         xfaderEl.value = '0'
@@ -657,6 +667,7 @@ async function boot() {
         autoMix.noteUserOverride()
     })
     $('cut-b').addEventListener('click', () => {
+        cancelXfadeAnimation()
         state.crossfade = 1
         compositor.setCrossfade(1)
         xfaderEl.value = '1'
@@ -669,10 +680,19 @@ async function boot() {
     })
 
     function animateXfade(target, durSec = state.fadeDurSec) {
+        cancelXfadeAnimation()
         autoMix.noteUserOverride()
+        const dur = Math.max(0, Number(durSec) || 0)
+        if (dur <= 0) {
+            state.crossfade = target
+            compositor.setCrossfade(target)
+            xfaderEl.value = String(target)
+            updateLiveIndicator()
+            return
+        }
         const start = state.crossfade
         const startMs = performance.now()
-        const durMs = durSec * 1000
+        const durMs = dur * 1000
         const step = () => {
             const t = Math.min(1, (performance.now() - startMs) / durMs)
             const eased = 0.5 - 0.5 * Math.cos(t * Math.PI)
@@ -680,7 +700,11 @@ async function boot() {
             compositor.setCrossfade(state.crossfade)
             xfaderEl.value = String(state.crossfade)
             updateLiveIndicator()
-            if (t < 1) requestAnimationFrame(step)
+            if (t < 1) {
+                xfadeAnimId = requestAnimationFrame(step)
+            } else {
+                xfadeAnimId = null
+            }
         }
         step()
     }
@@ -1708,9 +1732,12 @@ async function boot() {
     // MIDI learn rows
     registerMidiControls(midi, {
         crossfader: (v01) => {
+            cancelXfadeAnimation()
             state.crossfade = v01
             compositor.setCrossfade(v01)
             xfaderEl.value = String(v01)
+            updateLiveIndicator()
+            autoMix.noteUserOverride()
         },
         crossfaderValue: () => state.crossfade,
         speedA: (v01) => {
@@ -2260,6 +2287,7 @@ async function boot() {
                 }
                 if (e.altKey || e.ctrlKey) return
                 e.preventDefault()
+                cancelXfadeAnimation()
                 state.crossfade = calculateCrossfadeNudge(state.crossfade, key === 'arrowleft' ? 'left' : 'right', { shiftKey: e.shiftKey })
                 compositor.setCrossfade(state.crossfade)
                 xfaderEl.value = String(state.crossfade)
@@ -2273,6 +2301,7 @@ async function boot() {
                     if (e.metaKey) return
                     e.preventDefault()
                     if (e.altKey || e.ctrlKey) return
+                    cancelXfadeAnimation()
                     state.crossfade = calculateCrossfadeNudge(state.crossfade, key === 'arrowdown' ? 'left' : 'right', { shiftKey: e.shiftKey })
                     compositor.setCrossfade(state.crossfade)
                     xfaderEl.value = String(state.crossfade)

@@ -93,8 +93,26 @@ export class AutoMix {
         this._fadeTargetXfade = 0
         this._userOverride = false
         this._userOverrideUntil = 0
+        this._swapGeneration = 0
+        this._incomingDeck = null
+        this._incomingDeckId = null
 
         this.scheduler.onBeat((b) => this._onBeat(b))
+    }
+
+    /**
+     * Cancels any in-flight scene swap or pending deck compilation.
+     * Called when initiating a fast crossfade (user override, cut,
+     * auto-fade, disabling auto-VJ, or triggering a new swap).
+     */
+    cancelInFlightSwap() {
+        this._swapGeneration = (this._swapGeneration || 0) + 1
+        this._fadeStartMs = null
+        if (this._incomingDeck && typeof this._incomingDeck.cancelPending === 'function') {
+            this._incomingDeck.cancelPending()
+        }
+        this._incomingDeck = null
+        this._incomingDeckId = null
     }
 
     setEnabled(v) {
@@ -103,7 +121,7 @@ export class AutoMix {
             this._lastSwitchBeat = this.scheduler.beatIndex
             this.onStatus('auto-VJ ON', true)
         } else {
-            this._fadeStartMs = null
+            this.cancelInFlightSwap()
             this.onStatus('auto-VJ off', false)
         }
     }
@@ -127,11 +145,13 @@ export class AutoMix {
     get autoRebindEq() { return this._autoRebindEq }
 
     /**
-     * Called by the UI whenever the user touches the crossfader.
-     * Halts the auto-mix animation but doesn't disable the feature.
+     * Called by the UI whenever the user touches the crossfader
+     * or initiates a manual cut or auto-fade.
+     * Cancels any in-flight auto-mix swap/compilation and halts
+     * the auto-mix animation without disabling the feature.
      */
     noteUserOverride() {
-        this._fadeStartMs = null
+        this.cancelInFlightSwap()
         this._userOverride = true
         this._userOverrideUntil = performance.now() + 1500
     }
@@ -168,7 +188,11 @@ export class AutoMix {
         const eased = FADE_CURVES[this._curve](t)
         const value = this._fadeStartXfade + (this._fadeTargetXfade - this._fadeStartXfade) * eased
         this.setXfade(value)
-        if (t >= 1) this._fadeStartMs = null
+        if (t >= 1) {
+            this._fadeStartMs = null
+            this._incomingDeck = null
+            this._incomingDeckId = null
+        }
     }
 
     _isUserOverriding() {
@@ -176,6 +200,11 @@ export class AutoMix {
     }
 
     async _triggerSceneSwap(b) {
+        // If a swap or compilation is already in flight, cancel it before
+        // initiating a new one (crucial for fast Auto-Mix cadences).
+        this.cancelInFlightSwap()
+        const generation = this._swapGeneration
+
         const current = this.getXfade()
         // Target the opposite side of the crossfader
         const target = current < 0.5 ? 1 : 0
@@ -191,13 +220,35 @@ export class AutoMix {
         const program = this.library.randomExcept(exclude)
         if (!program) return
 
+        this._incomingDeck = deck
+        this._incomingDeckId = incomingDeckId
+
+        const clearIncoming = () => {
+            if (generation === this._swapGeneration) {
+                this._incomingDeck = null
+                this._incomingDeckId = null
+            }
+        }
+
         try {
             const res = await deck.load(program.dsl, program.title)
-            if (res.superseded) return
-            if (!res.success) {
-                console.warn('[AutoMix] failed to load', program.title, res.error)
+            if (res.superseded || generation !== this._swapGeneration) {
+                clearIncoming()
                 return
             }
+            if (!res.success) {
+                console.warn('[AutoMix] failed to load', program.title, res.error)
+                clearIncoming()
+                return
+            }
+
+            // State can change during the async load: the operator may have
+            // switched auto-VJ off or grabbed the crossfader or initiated a fast crossfade.
+            if (!this._enabled || this._isUserOverriding() || generation !== this._swapGeneration) {
+                clearIncoming()
+                return
+            }
+
             this.onStatus(`auto: ${incomingDeckId} ← ${program.title}`, true)
             this.onLoad(incomingDeckId, program)
             // Auto-rebind on the freshly-loaded deck so the binding
@@ -229,19 +280,20 @@ export class AutoMix {
             }
         } catch (err) {
             console.error('[AutoMix] load error', err)
+            clearIncoming()
             return
         }
 
-        // State can change during the async load: the operator may have
-        // switched auto-VJ off or grabbed the crossfader. Loading the program
-        // into the off-deck is harmless, but moving the fader now would fire a
-        // swap after "off", or fight the operator by re-arming the fade from a
-        // crossfade value captured before the await. Leave the fader put.
-        if (!this._enabled || this._isUserOverriding()) return
+        // Final check before moving the crossfader
+        if (!this._enabled || this._isUserOverriding() || generation !== this._swapGeneration) {
+            clearIncoming()
+            return
+        }
 
         // Cut-mode: snap immediately
         if (this._curve === 'cut' || this._fadeDurSec <= 0) {
             this.setXfade(target)
+            clearIncoming()
             return
         }
 
@@ -249,7 +301,7 @@ export class AutoMix {
         // seconds; tickFrame() reads wall-clock elapsed and applies
         // the easing curve.
         this._fadeStartMs = performance.now()
-        this._fadeStartXfade = current
+        this._fadeStartXfade = this.getXfade()
         this._fadeTargetXfade = target
     }
 }

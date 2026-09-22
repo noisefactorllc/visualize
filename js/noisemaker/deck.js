@@ -176,7 +176,19 @@ export class Deck {
     stop() { this._renderer.stop() }
 
     /**
-     * Compile and run a DSL program. On error, keeps the previous program
+     * Invalidate any in-flight or queued compile operations on this deck.
+     * Any pending load() or reloadDsl() call will resolve with
+     * { success: false, superseded: true } so callers suppress UI and audio
+     * rebind publication. If a compile has already reached the renderer,
+     * hardware state remains tracked without publishing stale metadata.
+     */
+    cancelPending() {
+        this._loadVersion++
+    }
+
+    /**
+     * Load a DSL program by string. Returns { success, error } so caller
+     * knows whether compile succeeded. On error, keeps the current program
      * running and surfaces the message to the caller.
      */
     async load(dsl, name = '') {
