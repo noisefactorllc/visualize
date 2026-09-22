@@ -105,6 +105,38 @@ test('audio settings expose Sync discovery and native selection without micropho
     await page.evaluate(() => window.__visualize.audio.disable())
 })
 
+test('initial deck loading cannot reset an active Sync audio status', async ({ page }) => {
+    await page.route(url => url.pathname === '/js/noisemaker/deck.js' && !url.searchParams.has('ungated'), route => route.fulfill({
+        contentType: 'text/javascript',
+        body: `import { Deck as RealDeck, isHeavyDsl } from './deck.js?ungated';
+            export { isHeavyDsl };
+            const initialLoad = new Promise(resolve => { window.finishInitialDeckLoad = resolve; });
+            export class Deck extends RealDeck {
+                async load(...args) { await initialLoad; return super.load(...args); }
+            }`
+    }))
+    await setup(page, true)
+    await page.evaluate(async () => {
+        const audio = window.__visualize.audio
+        const onStatus = audio._onStatus
+        window.bootAudioEvents = []
+        audio.onStatusChange((message, enabled, error) => {
+            window.bootAudioEvents.push({ message, enabled, error: error?.message })
+            onStatus(message, enabled, error)
+        })
+        const sync = await import('/js/sync/audioInput.js')
+        await sync.connectSyncAudio()
+        await audio.enable('sync-audio:audio_2')
+    })
+    await expect(page.locator('#audio-status')).toContainText('audio: ')
+    await page.evaluate(() => window.finishInitialDeckLoad())
+    await page.waitForFunction(() => window.__visualize?.online)
+    const status = await page.evaluate(() => ({ enabled: window.__visualize.audio.enabled, events: window.bootAudioEvents }))
+    expect(status.enabled, JSON.stringify(status.events)).toBe(true)
+    await expect(page.locator('#audio-status')).toContainText('audio: ')
+    await page.evaluate(() => window.__visualize.audio.disable())
+})
+
 test('a failed Sync input can be selected again in the settings', async ({ page }) => {
     await setup(page, true)
     await page.click('#settings-toggle')

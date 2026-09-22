@@ -392,6 +392,7 @@ async function boot() {
         })
 
     // Audio
+    setStatusPill('audio-status', 'audio off', 'off')
     const savedAudioSens = loadAudioSensitivity()
     const audio = new SharedAudio({ sensitivity: savedAudioSens })
     let audioSelectionGeneration = 0
@@ -2305,7 +2306,6 @@ async function boot() {
     await loadProgram('A', startA)
     await loadProgram('B', startB)
     updateLiveIndicator()
-    setStatusPill('audio-status', 'audio off', 'off')
     setStatusPill('midi-status', 'midi off', 'off')
 
     if (onlineCollaborationEnabled) {
