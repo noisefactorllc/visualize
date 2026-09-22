@@ -1304,6 +1304,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 .fx-button {
+    position: relative;
     appearance: none;
     background: var(--hf-bg-base);
     color: var(--hf-text-dim);
@@ -1312,16 +1313,90 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     padding: 6px 4px;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
+    font-weight: var(--hf-weight-medium);
     letter-spacing: var(--hf-tracking-wide);
     cursor: pointer;
-    transition: var(--hf-transition-color), var(--hf-transition-border), var(--hf-transition-bg);
+    text-align: center;
+    user-select: none;
+    transition: var(--hf-transition-color), var(--hf-transition-border), var(--hf-transition-bg), box-shadow var(--hf-transition);
 }
 
-.fx-button:hover { color: var(--hf-text-bright); border-color: var(--hf-accent); }
-.fx-button.active {
+/* Recessed hardware-style indicator slot on top edge */
+.fx-button::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 2px;
+    border-radius: var(--hf-radius-pill);
+    background: var(--hf-border-subtle);
+    opacity: 0.6;
+    pointer-events: none;
+    transition: opacity var(--hf-transition), background var(--hf-transition), box-shadow var(--hf-transition);
+}
+
+.fx-button:hover {
+    color: var(--hf-text-bright);
+    border-color: var(--hf-accent);
+}
+
+.fx-button:hover::before {
+    background: var(--hf-accent);
+    opacity: 0.85;
+}
+
+/* Latched active FX toggle appearance with distinct high-contrast indicator */
+.fx-button.active,
+.fx-button[aria-pressed="true"],
+.fx-button[data-state="on"] {
     background: var(--hf-accent);
     color: var(--hf-bg-base);
     border-color: var(--hf-accent);
+    font-weight: var(--hf-weight-bold);
+    box-shadow: 0 0 0 1px var(--hf-accent), var(--hf-glow-accent, 0 0 8px color-mix(in srgb, var(--hf-accent) 45%, transparent));
+}
+
+.fx-button.active::before,
+.fx-button[aria-pressed="true"]::before,
+.fx-button[data-state="on"]::before {
+    opacity: 1;
+    background: var(--hf-bg-base);
+    box-shadow: 0 0 2px var(--hf-bg-base);
+}
+
+/* Preserve active latched contrast during mouse hover */
+.fx-button.active:hover,
+.fx-button[aria-pressed="true"]:hover,
+.fx-button[data-state="on"]:hover {
+    background: var(--hf-accent-hover, var(--hf-accent));
+    color: var(--hf-bg-base);
+    border-color: var(--hf-accent-hover, var(--hf-accent));
+    box-shadow: 0 0 0 1px var(--hf-accent-hover, var(--hf-accent)), var(--hf-glow-accent, 0 0 10px color-mix(in srgb, var(--hf-accent) 55%, transparent));
+}
+
+.fx-button.active:hover::before,
+.fx-button[aria-pressed="true"]:hover::before,
+.fx-button[data-state="on"]:hover::before {
+    opacity: 1;
+    background: var(--hf-bg-base);
+    box-shadow: 0 0 2px var(--hf-bg-base);
+}
+
+/* Momentary trigger visual feedback for flash */
+.fx-button[data-fx="flash"].flash-active {
+    background: var(--hf-accent);
+    color: var(--hf-bg-base);
+    border-color: var(--hf-accent);
+    font-weight: var(--hf-weight-bold);
+    box-shadow: 0 0 0 1px var(--hf-accent), var(--hf-glow-accent, 0 0 10px color-mix(in srgb, var(--hf-accent) 55%, transparent));
+}
+
+.fx-button[data-fx="flash"].flash-active::before {
+    opacity: 1;
+    background: var(--hf-bg-base);
+    box-shadow: 0 0 2px var(--hf-bg-base);
 }
 
 /* ─────────────── controls bar ─────────────── */
@@ -2522,7 +2597,7 @@ button.status-pill:hover,
 .deck-edit-toggle:hover,
 .deck-density:hover,
 .deck-load-random:hover,
-.fx-button:hover,
+.fx-button:hover:not(.active):not([aria-pressed="true"]):not([data-state="on"]),
 .big-toggle:hover,
 .quick-cut:hover,
 .ghost-button:hover,

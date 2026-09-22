@@ -431,7 +431,8 @@ async function boot() {
         syncOutputController,
         syncOutputDialog,
         get autoXfade() { return autoXfade },
-        get autoMix() { return autoMix }
+        get autoMix() { return autoMix },
+        toggleFx: (fx, forceState) => toggleFx(fx, null, forceState)
     }
     let online = null
     const onlineCollaborationEnabled = isFeatureEnabled(ONLINE_COLLABORATION_FEATURE)
@@ -1349,15 +1350,9 @@ async function boot() {
         btn.addEventListener('click', () => toggleFx(fx, btn))
     })
 
-    function toggleFx(fx, btnEl) {
+    function toggleFx(fx, btnEl, forceState) {
         const btn = btnEl || document.querySelector(`.fx-button[data-fx="${fx}"]`)
-        const active = !btn.classList.contains('active')
-        if (fx === 'strobe') compositor.setStrobe(active)
-        else if (fx === 'invert') compositor.setInvert(active)
-        else if (fx === 'bw') compositor.setBW(active)
-        else if (fx === 'zoom') compositor.setZoom(active)
-        else if (fx === 'freeze') compositor.setFreeze(active)
-        else if (fx === 'flash') {
+        if (fx === 'flash') {
             compositor.flash()
             // Also pulse the CSS overlay for a soft "screen flash" feel
             // on top of the canvas-level white frame
@@ -1365,9 +1360,25 @@ async function boot() {
                 flashOverlayEl.classList.add('flash')
                 setTimeout(() => flashOverlayEl.classList.remove('flash'), 300)
             }
+            if (btn) {
+                btn.classList.add('flash-active')
+                setTimeout(() => btn.classList.remove('flash-active'), 150)
+            }
             return
         }
-        if (btn) btn.classList.toggle('active', active)
+        const active = typeof forceState === 'boolean'
+            ? forceState
+            : (btn ? !btn.classList.contains('active') : !compositor[fx])
+        if (fx === 'strobe') compositor.setStrobe(active)
+        else if (fx === 'invert') compositor.setInvert(active)
+        else if (fx === 'bw') compositor.setBW(active)
+        else if (fx === 'zoom') compositor.setZoom(active)
+        else if (fx === 'freeze') compositor.setFreeze(active)
+        if (btn) {
+            btn.classList.toggle('active', active)
+            btn.setAttribute('aria-pressed', active ? 'true' : 'false')
+            btn.dataset.state = active ? 'on' : 'off'
+        }
     }
 
     // Auto-VJ toggle (with mutual exclusion against Auto-Mix below)
@@ -1666,7 +1677,7 @@ async function boot() {
         },
         speedBValue: () => (state.decks.B.speed - 0.1) / 3.9,
         fxToggle: (name) => toggleFx(name),
-        fxFlash: () => compositor.flash(),
+        fxFlash: () => toggleFx('flash'),
     })
     midi.onLearnUpdate((rows) => renderLearnRows(rows, midi))
     renderLearnRows(midi.getLearnView(), midi)
@@ -1810,7 +1821,7 @@ async function boot() {
                     const have = compositor[name]
                     if (want !== have) {
                         const btn = document.querySelector(`.fx-button[data-fx="${name}"]`)
-                        toggleFx(name, btn)
+                        toggleFx(name, btn, want)
                     }
                 }
             },
