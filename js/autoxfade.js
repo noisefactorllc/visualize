@@ -18,6 +18,8 @@
  * the current source value and writes via setXfade(value01).
  */
 
+import { clampBarsPerScene } from './automix.js'
+
 const OSC_NAMES = ['sine', 'tri', 'saw', 'sawInv', 'square']
 const AUDIO_BANDS = ['sub', 'low', 'mid', 'high']
 
@@ -90,7 +92,7 @@ export class AutoXfade {
             // shared with Auto-VJ's "cycle" dropdown). The cycle
             // tracks the music — resets on tap, follows MIDI clock,
             // doesn't drift.
-            const bars = Math.max(1, Number(this.getBarsPerCycle()) || 1)
+            const bars = clampBarsPerScene(this.getBarsPerCycle(), 1)
             const cycleBeats = bars * 4
             const sched = this.scheduler
             if (sched && typeof sched.beatIndex === 'number'

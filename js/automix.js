@@ -13,6 +13,40 @@
  * animates while no manual interaction is in progress.
  */
 
+export const MIN_BARS_PER_SCENE = 1
+export const MAX_BARS_PER_SCENE = 128
+export const DEFAULT_BARS_PER_SCENE = 8
+
+/**
+ * Validates and clamps an Auto-VJ bar count input.
+ * - Rejects non-finite, null, undefined, empty, or boolean values (falling back to fallback or DEFAULT_BARS_PER_SCENE: 8)
+ * - Rejects zero and negative values, clamping strictly to a safe minimum of MIN_BARS_PER_SCENE (1 bar)
+ * - Clamps upper bound to MAX_BARS_PER_SCENE (128 bars)
+ * - Quantizes to integer (Math.round)
+ *
+ * @param {any} val - Input bar count (number, string, etc.)
+ * @param {number} [fallback=DEFAULT_BARS_PER_SCENE] - Fallback value if input is invalid
+ * @returns {number} Integer bar count in [1, 128]
+ */
+export function clampBarsPerScene(val, fallback = DEFAULT_BARS_PER_SCENE) {
+    if (
+        val == null ||
+        typeof val === 'boolean' ||
+        (typeof val === 'string' && val.trim() === '') ||
+        (typeof val !== 'number' && typeof val !== 'string')
+    ) {
+        const fb = Number(fallback)
+        return Number.isFinite(fb) ? clampBarsPerScene(fb, DEFAULT_BARS_PER_SCENE) : DEFAULT_BARS_PER_SCENE
+    }
+    const num = Number(val)
+    if (!Number.isFinite(num)) {
+        const fb = Number(fallback)
+        return Number.isFinite(fb) ? clampBarsPerScene(fb, DEFAULT_BARS_PER_SCENE) : DEFAULT_BARS_PER_SCENE
+    }
+    const rounded = Math.round(num)
+    return Math.max(MIN_BARS_PER_SCENE, Math.min(MAX_BARS_PER_SCENE, rounded))
+}
+
 const FADE_CURVES = {
     linear: (x) => x,
     dipped: (x) => 0.5 - 0.5 * Math.cos(x * Math.PI),
@@ -45,7 +79,7 @@ export class AutoMix {
         this.midi = midi || null
 
         this._enabled = false
-        this._barsPerScene = 8
+        this._barsPerScene = DEFAULT_BARS_PER_SCENE
         this._fadeDurSec = 3        // wall-clock seconds (shared with the manual auto-fade button)
         this._curve = 'dipped'
         // Default on — auto-VJ exists to keep the visual moving, and
@@ -81,10 +115,14 @@ export class AutoMix {
 
     get enabled() { return this._enabled }
 
-    setBarsPerScene(n) { this._barsPerScene = Math.max(1, Number(n) || 8) }
+    setBarsPerScene(n) {
+        this._barsPerScene = clampBarsPerScene(n, this._barsPerScene || DEFAULT_BARS_PER_SCENE)
+    }
     get barsPerScene() { return this._barsPerScene }
     setFadeDurationSec(s) { this._fadeDurSec = Math.max(0, Number(s) || 0) }
+    get fadeDurationSec() { return this._fadeDurSec }
     setCurve(name) { if (FADE_CURVES[name]) this._curve = name }
+    get curve() { return this._curve }
     setAutoRebindEq(v) { this._autoRebindEq = !!v }
     get autoRebindEq() { return this._autoRebindEq }
 

@@ -24,7 +24,7 @@ import { MainCompositor } from './compositor.js'
 import { MixerRenderer, MIXERS, DEFAULT_MIXER_ID } from './mixer.js'
 import { MixerControls } from './ui/mixerControls.js'
 import { Library } from './library.js'
-import { AutoMix } from './automix.js'
+import { AutoMix, clampBarsPerScene } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import {
@@ -1455,7 +1455,7 @@ async function boot() {
         persistAutoXfade()
     })
     $('automix-bars').addEventListener('change', (e) => {
-        autoMix.setBarsPerScene(parseInt(e.target.value, 10))
+        autoMix.setBarsPerScene(clampBarsPerScene(e.target.value))
     })
     $('automix-curve').addEventListener('change', (e) => {
         state.curve = e.target.value
@@ -1825,7 +1825,7 @@ async function boot() {
             }),
             getAutoMixConfig: () => ({
                 enabled: autoMix.enabled,
-                barsPerScene: parseInt($('automix-bars').value, 10),
+                barsPerScene: autoMix.barsPerScene,
                 curve: $('automix-curve').value
             }),
             // Mixer effect + per-effect overrides have major visual
@@ -1877,10 +1877,23 @@ async function boot() {
                 }
             },
             setAutoMixConfig: (cfg) => {
-                if (typeof cfg.barsPerScene === 'number') {
-                    autoMix.setBarsPerScene(cfg.barsPerScene)
+                if (cfg.barsPerScene != null) {
+                    const clamped = clampBarsPerScene(cfg.barsPerScene)
+                    autoMix.setBarsPerScene(clamped)
                     const sel = $('automix-bars')
-                    if (sel) sel.value = String(cfg.barsPerScene)
+                    if (sel) {
+                        const strVal = String(clamped)
+                        const opts = sel.getOptions ? sel.getOptions().map(o => o.value) : Array.from(sel.querySelectorAll('option')).map(o => o.value)
+                        if (opts.includes(strVal)) {
+                            sel.value = strVal
+                        } else {
+                            const nums = opts.map(Number).filter(Number.isFinite)
+                            if (nums.length > 0) {
+                                const closest = nums.reduce((prev, curr) => Math.abs(curr - clamped) < Math.abs(prev - clamped) ? curr : prev)
+                                sel.value = String(closest)
+                            }
+                        }
+                    }
                 }
                 if (cfg.curve) {
                     autoMix.setCurve(cfg.curve)

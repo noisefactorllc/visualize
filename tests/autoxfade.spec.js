@@ -139,3 +139,43 @@ test('autoXfade: mutual exclusion with auto-VJ', async ({ browser }) => {
         await context.close()
     }
 })
+
+test('autoMix: bar count rejects zero/negative and clamps to safe minimum (1 bar)', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const result = await page.evaluate(() => {
+            const am = window.__visualize.autoMix
+            const ax = window.__visualize.autoXfade
+            const sel = document.getElementById('automix-bars')
+            const options = sel.getOptions ? sel.getOptions().map(o => o.value) : Array.from(sel.querySelectorAll('option')).map(o => o.value)
+
+            // Test clamping zero to 1 bar
+            am.setBarsPerScene(0)
+            const barsZero = am.barsPerScene
+            // AutoXfade saw oscillator with 1 bar (4 beats) at beat 2 yields phase 0.5
+            ax.setSource({ kind: 'osc', oscType: 2 })
+            const sched = ax.scheduler
+            sched._beatIndex = 2
+            Object.defineProperty(sched, 'beatPhase', { get: () => 0, configurable: true })
+            const valZero = ax.readSource(0)
+
+            // Test clamping negative to 1 bar
+            am.setBarsPerScene(-4)
+            const barsNeg = am.barsPerScene
+            const valNeg = ax.readSource(0)
+
+            return { options, barsZero, valZero, barsNeg, valNeg }
+        })
+
+        expect(result.options).toContain('1')
+        expect(result.options).toContain('2')
+        expect(result.options).toContain('4')
+        expect(result.barsZero).toBe(1)
+        expect(result.valZero).toBeCloseTo(0.5, 1)
+        expect(result.barsNeg).toBe(1)
+        expect(result.valNeg).toBeCloseTo(0.5, 1)
+    } finally {
+        await context.close()
+    }
+})
+
