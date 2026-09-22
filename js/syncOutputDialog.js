@@ -1,4 +1,5 @@
 import { deriveSyncOutputView } from './syncOutput.js'
+import { detectLoopbackPolicy } from './sync/policy.js'
 
 function requireElement(documentObject, id) {
     const element = documentObject.getElementById(id)
@@ -23,7 +24,12 @@ export function createSyncOutputDialog({
     controller,
     document: documentObject = globalThis.document,
     window: windowObject = globalThis.window,
-    afterPaint = () => afterBrowserPaint(windowObject)
+    afterPaint = () => afterBrowserPaint(windowObject),
+    getPolicy = () => detectLoopbackPolicy({
+        isEmbedded: windowObject.top !== windowObject.self,
+        permissionsPolicy: documentObject.permissionsPolicy,
+        featurePolicy: documentObject.featurePolicy
+    })
 } = {}) {
     if (!controller || typeof controller.subscribe !== 'function') {
         throw new TypeError('controller must expose subscribe(listener)')
@@ -48,9 +54,10 @@ export function createSyncOutputDialog({
     let state = controller.state || {}
     let pendingConnect = false
     let destroyed = false
+    let policy = { status: 'unknown' }
 
     const render = () => {
-        const view = deriveSyncOutputView(state)
+        const view = deriveSyncOutputView(state, { policy })
         dialog.dataset.tone = view.live ? 'live' : (state.error ? 'error' : 'neutral')
         stateText.textContent = view.stateLabel
         liveBadge.hidden = !view.live
@@ -76,7 +83,8 @@ export function createSyncOutputDialog({
     }
 
     const runAction = async () => {
-        const { action } = deriveSyncOutputView(state)
+        const { action } = deriveSyncOutputView(state, { policy })
+        if (destroyed || pendingConnect || action.disabled) return
         try {
             switch (action.kind) {
             case 'check':
@@ -86,7 +94,7 @@ export function createSyncOutputDialog({
                 pendingConnect = true
                 render()
                 await afterPaint()
-                await controller.connect()
+                if (!destroyed) await controller.connect()
                 break
             case 'start':
                 await controller.start(nameInput.value)
@@ -105,10 +113,11 @@ export function createSyncOutputDialog({
 
     const open = () => {
         if (destroyed) return
+        policy = getPolicy()
         if (!dialog.open) dialog.showModal()
         render()
         nameInput.focus()
-        if (shouldCheckOnOpen(state)) {
+        if (!deriveSyncOutputView(state, { policy }).policyBlocked && shouldCheckOnOpen(state)) {
             void controller.checkAvailability().catch(() => {})
         }
     }

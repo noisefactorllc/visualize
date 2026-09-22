@@ -17,6 +17,9 @@
  * call is cheap to repeat per frame on a stable source.
  */
 
+import { createSyncCameraSession } from './sync/cameraSession.js'
+import { canQueueSyncCamera } from './sync/cameraFrameQueue.js'
+
 import { extractEffectsFromDsl } from './noisemaker/bundle.js'
 
 // The bundle resolves `media()` (with `search synth`) to "synth.media".
@@ -25,7 +28,13 @@ import { extractEffectsFromDsl } from './noisemaker/bundle.js'
 const MEDIA_EFFECT_KEYS = new Set(['synth.media', 'synth/media'])
 
 export class DeckMedia {
-    constructor({ deck }) {
+    constructor({ deck, onError = () => {} }) {
+        this._onError = onError
+        this._generation = 0
+        this._frameQueue = null
+        this._frameCleanup = Promise.resolve()
+        this._queuedCamera = false
+        this._frameError = null
         this.deck = deck
         this._source = null         // 'camera' | 'file' | null
         this._label = ''            // device label or file name
@@ -74,8 +83,10 @@ export class DeckMedia {
     }
 
     async setCamera(deviceId = '') {
-        this._stopStream()
-        this._revokeUrl()           // release any file source we're leaving
+        const stopping = this.stop()
+        const generation = this._generation
+        await stopping
+        if (generation !== this._generation) return
         const constraints = {
             video: deviceId ? { deviceId: { exact: deviceId } } : true,
             audio: false
@@ -84,7 +95,12 @@ export class DeckMedia {
         try {
             stream = await navigator.mediaDevices.getUserMedia(constraints)
         } catch (err) {
+            if (generation !== this._generation) return
             throw new Error(`camera access failed: ${err?.message || err.name}`)
+        }
+        if (generation !== this._generation) {
+            stream.getTracks().forEach(track => track.stop())
+            return
         }
         const track = stream.getVideoTracks()[0]
         this._stream = stream
@@ -96,14 +112,38 @@ export class DeckMedia {
         this._ensureVideo()
         this._video.srcObject = stream
         await this._video.play().catch(() => { /* autoplay may need retry */ })
+        if (generation !== this._generation) return
         this._source = 'camera'
         this._img = null
+        this._queuedCamera = canQueueSyncCamera(track)
+        if (this._queuedCamera) {
+            let queue
+            try { queue = await createSyncCameraSession(track, {
+                stream,
+                isCurrent: () => generation === this._generation && this._source === 'camera' && this._stream === stream,
+                upload: frame => this._uploadSource(frame),
+                onError: error => {
+                    if (generation !== this._generation) return
+                    void this.stop()
+                    this._frameError = error
+                    this._onError(error)
+                }
+            }) } catch (error) {
+                if (generation !== this._generation) return
+                await this.stop()
+                throw error
+            }
+            if (generation !== this._generation) { await queue?.stop(); return }
+            this._frameQueue = queue
+        }
     }
 
     async setFile(file) {
         if (!file) return
-        this._stopStream()
-        this._revokeUrl()           // release the previous file's blob URL
+        const stopping = this.stop()
+        const generation = this._generation
+        await stopping
+        if (generation !== this._generation) return
         const url = URL.createObjectURL(file)
         this._objectUrl = url
         this._label = file.name
@@ -127,11 +167,18 @@ export class DeckMedia {
             // keep the single reused element.
             this._stopVideoEl()
         }
+        if (generation !== this._generation) return
         this._source = 'file'
     }
 
     /** Stop the camera stream + clear any video src. Idempotent. */
     stop() {
+        this._generation++
+        const queue = this._frameQueue
+        this._frameQueue = null
+        if (queue) this._frameCleanup = Promise.all([this._frameCleanup, queue.stop()]).then(() => {})
+        this._queuedCamera = false
+        this._frameError = null
         this._stopStream()
         this._stopVideoEl()
         if (this._img) this._img.src = ''
@@ -139,42 +186,38 @@ export class DeckMedia {
         this._source = null
         this._label = ''
         this._cameraDeviceId = ''
+        return this._frameCleanup
     }
 
     /** Push the current source into the renderer. Cheap to call per
      *  frame; safe to call when there's no source — it just no-ops. */
     tick() {
-        const step = this._discoverMediaStep()
-        if (step == null) return
+        if (this._discoverMediaStep() == null) return
+        if (this._queuedCamera) {
+            if (!this._frameError) this._frameQueue?.consume()
+            return
+        }
         const src = this._video?.readyState >= 2 ? this._video
                   : this._img?.complete ? this._img : null
         if (!src) return
-        try {
-            this.deck._renderer.updateTextureFromSource?.(
-                `imageTex_step_${step}`, src, { flipY: false }
-            )
-            // The synth/media shader samples its texture via
-            //   st = gl_FragCoord.xy / imageSize
-            // so imageSize must match the canvas the shader writes
-            // into — otherwise the texture lands in a fixed patch
-            // sized by the manifest default and the rest reads
-            // bgColor. Same trick mixer.js does for its deck-canvas
-            // inputs. Read from `canvas.width/height` (the deck's
-            // actual render-buffer size including pixel density)
-            // since the bundled CanvasRenderer doesn't expose
-            // public width/height getters. Cache to avoid uniform
-            // churn between frames.
-            const w = this.deck.canvas.width
-            const h = this.deck.canvas.height
-            if (w > 0 && h > 0 && (this._lastImageW !== w || this._lastImageH !== h || this._lastImageStep !== step)) {
-                this.deck._renderer.applyStepParameterValues?.({
-                    [`step_${step}`]: { imageSize: [w, h] }
-                })
-                this._lastImageW = w
-                this._lastImageH = h
-                this._lastImageStep = step
-            }
-        } catch { /* mid-recompile */ }
+        try { this._uploadSource(src) } catch { /* mid-recompile */ }
+    }
+
+    _uploadSource(source) {
+        const step = this._discoverMediaStep()
+        if (step == null) throw new Error('Camera media effect is unavailable')
+        const result = this.deck._renderer.updateTextureFromSource?.(
+            `imageTex_step_${step}`, source, { flipY: false }
+        )
+        const w = this.deck.canvas.width
+        const h = this.deck.canvas.height
+        if (w > 0 && h > 0 && (this._lastImageW !== w || this._lastImageH !== h || this._lastImageStep !== step)) {
+            this.deck._renderer.applyStepParameterValues?.({ [`step_${step}`]: { imageSize: [w, h] } })
+            this._lastImageW = w
+            this._lastImageH = h
+            this._lastImageStep = step
+        }
+        return result
     }
 
     _stopStream() {

@@ -5,12 +5,12 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 
-const sdkDir = resolve(dirname(fileURLToPath(import.meta.url)), '../js/sync/sdk/0.1.3')
+const sdkDir = resolve(dirname(fileURLToPath(import.meta.url)), '../js/sync/sdk/0.1.5')
 const EXPECTED_SDK_HASHES = Object.freeze({
-    'browser/client.js': '9973ef141ef227683a6851cbc8dfef9ecbcaaa42638c3b5652a5f5bdab25987c',
-    'browser/frame-sink.js': 'd048850d32dc08e16fc9e573254c4fd8412e5247268073f1d8e00c3da1b0cb7d',
+    'browser/client.js': '873c5cb236d595cabf6a5f4b0299c2d1133682e2ef6fd81cb57fd5976dbd59b1',
+    'browser/frame-sink.js': '362b55583b44c1f1d578fb8fd6348501fa9dc568d152f09afc56363402dd1eed',
     'browser/index.js': 'd51672680d2d8ab6861c7f4edf89a4c8e66b8b60fabe9193b1449d9986691b98',
-    'browser/protocol.js': 'dda9dadb1cf4bb1d44d28d63f5c3779a651cfe7d62295b1a5e0bc329972f8105'
+    'browser/protocol.js': '764788789ad904ffafe873d3d1e0077747f13c1de3d33d8474b0a9740e32980b'
 })
 
 async function filesBelow(directory, prefix = '') {
@@ -45,5 +45,16 @@ test('vendored Sync browser SDK matches its pinned checksums', async () => {
         const contents = await readFile(resolve(sdkDir, filename))
         const actual = createHash('sha256').update(contents).digest('hex')
         assert.equal(actual, expected, `${filename} checksum`)
+    }
+})
+
+
+test('native audio SDK matches the reviewed immutable manifest', async () => {
+    const directory = resolve(sdkDir, '../0.3.0')
+    const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
+    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'fb85d80c57b39a63839afe9d1e507ff8e03b719928132e25aba7cfb8c248ceaf')
+    for (const line of manifest.trim().split('\n')) {
+        const [expected, filename] = line.split('  ')
+        assert.equal(createHash('sha256').update(await readFile(resolve(directory, filename))).digest('hex'), expected, filename)
     }
 })

@@ -523,30 +523,68 @@ test('dispose tears down a live sender once and is idempotent', async () => {
     assert.equal(controller.state.senderName, null)
 })
 
-test('recovery uses exactly the bounded 250ms, 1000ms, and 4000ms retry budget', async () => {
-    const unavailable = () => recoveryProbe({
-        available: false,
-        code: 'SYNC_UNAVAILABLE',
-        message: 'private recovery detail'
-    })
+test('recovery continues after the fast ramp and reconnects without pairing again', async () => {
+    const unavailable = () => recoveryProbe({ available: false, code: 'SYNC_UNAVAILABLE' })
+    const replacement = senderFixture()
     const fixture = await connectedRecoveryFixture({
-        recoveryClients: [unavailable(), unavailable(), unavailable()]
+        recoveryClients: [unavailable(), unavailable(), unavailable(), unavailable(),
+            recoveryProbe({ available: true, health: health() }),
+            recoveryConnection({ sender: replacement.sender })]
     })
+    fixture.initial.completion.reject(senderLoss(1006))
+    await flushMicrotasks()
+    for (const delay of [250, 1000, 4000, 10_000]) {
+        fixture.timers.fireTimeout(delay)
+        await flushMicrotasks(12)
+        assert.equal(fixture.controller.state.status, 'recovering')
+        assert.equal(fixture.controller.state.error, null)
+    }
+    fixture.timers.fireTimeout(10_000)
+    await flushMicrotasks(20)
+    assert.equal(fixture.controller.state.status, 'sending')
+    assert.equal(fixture.calls.filter(call => call.token).length, 2)
+    fixture.controller.dispose()
+    assert.equal(fixture.timers.timeouts.size, 0)
+    assert.equal(fixture.timers.intervals.size, 0)
+})
 
+test('Stop cancels sustained recovery with no later attempts', async () => {
+    const fixture = await connectedRecoveryFixture({
+        recoveryClients: Array.from({ length: 3 }, () => recoveryProbe({ available: false, code: 'SYNC_UNAVAILABLE' }))
+    })
     fixture.initial.completion.reject(senderLoss(1006))
     await flushMicrotasks()
     for (const delay of [250, 1000, 4000]) {
-        assert.deepEqual([...fixture.timers.timeouts.values()].map((timer) => timer.delay), [delay])
         fixture.timers.fireTimeout(delay)
         await flushMicrotasks(12)
     }
-
-    assert.equal(fixture.controller.state.status, 'error')
-    assert.equal(fixture.controller.state.error.code, 'SYNC_RECOVERY_EXHAUSTED')
-    assert.equal(fixture.controller.state.error.message.includes('private'), false)
-    assert.equal(fixture.calls.length, 5)
+    assert.equal(fixture.controller.state.status, 'recovering')
+    await fixture.controller.stop()
     assert.equal(fixture.timers.timeouts.size, 0)
-    assert.equal(fixture.timers.intervals.size, 0)
+    assert.equal(fixture.calls.length, 5)
+    assert.equal(fixture.controller.state.status, 'ready')
+})
+
+test('recovery adopts a resize of the same canvas and retains the loss cause', async () => {
+    const canvas = { width: 1280, height: 720 }
+    const replacement = senderFixture()
+    const fixture = await connectedRecoveryFixture({ canvas, recoveryClients: [
+        recoveryProbe({ available: true, health: health() }),
+        recoveryConnection({ sender: replacement.sender })
+    ] })
+    fixture.initial.completion.reject(senderLoss(1008, 'incomplete_frame_timeout'))
+    await flushMicrotasks()
+    canvas.width = 1920
+    canvas.height = 1080
+    fixture.timers.fireTimeout(250)
+    await flushMicrotasks(20)
+    assert.equal(fixture.controller.state.status, 'sending')
+    assert.equal(fixture.controller.state.width, 1920)
+    assert.equal(fixture.controller.state.height, 1080)
+    assert.equal(fixture.controller._lastRecoveryCause.closeCode, 1008)
+    assert.equal(fixture.controller._lastRecoveryCause.closeReason, 'incomplete_frame_timeout')
+    assert.equal(fixture.controller._lastRecoveryCause.recoveryCount, 1)
+    fixture.controller.dispose()
 })
 
 test('recovery retains attempts during probation and resets the budget after 60 seconds', async () => {
@@ -772,4 +810,45 @@ test('default connection provider injects only external transport beneath each r
     provider.createClient({ token })
 
     assert.deepEqual(constructions, [{ ...transport, token }])
+})
+
+
+test('video reuses the current audio credential without pairing and preserves newer rotations', async () => {
+    let credential = Object.freeze({ token: 'audio-grant' })
+    const store = {
+        current: () => credential,
+        publish(token) { return credential = Object.freeze({ token }) },
+        clear(value) { if (value === credential) credential = undefined }
+    }
+    const options = []
+    const pending = deferred()
+    const controller = new syncOutput.SyncOutputController({
+        connectionProvider: {
+            credentialStore: store,
+            createClient(value) {
+                options.push(value)
+                return { connect: () => pending.promise, close() {} }
+            }
+        }
+    })
+    const connecting = controller.connect()
+    await flushMicrotasks(10)
+    store.publish('rotated-audio-grant')
+    pending.reject(Object.assign(new Error('denied'), { code: 'SYNC_AUTHENTICATION' }))
+    await assert.rejects(connecting, { code: 'SYNC_AUTHENTICATION' })
+    assert.deepEqual(options, [{ token: 'audio-grant' }])
+    assert.equal(store.current().token, 'rotated-audio-grant')
+    controller.dispose()
+})
+
+test('blocked iframe explains delegation while a live or recovering output remains stoppable', () => {
+    const policy = { status: 'blocked', feature: 'loopback-network' }
+    const ready = syncOutput.deriveSyncOutputView({ status: 'ready' }, { policy })
+    assert.equal(ready.action.disabled, true)
+    assert.match(ready.status, /embedding page/)
+    for (const status of ['sending', 'recovering']) {
+        const view = syncOutput.deriveSyncOutputView({ status }, { policy })
+        assert.equal(view.action.kind, 'stop')
+        assert.equal(view.action.disabled, false)
+    }
 })

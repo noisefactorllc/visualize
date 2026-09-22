@@ -10,8 +10,16 @@
  * bands into each deck's audioState every frame while enabled.
  */
 
+import * as nativeSyncAudio from './sync/audioInput.js'
+import { SyncAudioChannels } from './sync/audioChannels.js'
+
 export class SharedAudio {
-    constructor() {
+    constructor({ syncAudio = nativeSyncAudio } = {}) {
+        this._syncAudio = syncAudio
+        this._captureGeneration = 0
+        this._pendingAbort = null
+        this._nativeCapture = null
+        this._nativeChannels = null
         this._decks = new Set()
         this._audioStates = new Map() // deck -> audioState
         this._enabled = false
@@ -76,61 +84,86 @@ export class SharedAudio {
 
     async enable(deviceId = '') {
         if (this._enabled && deviceId === this._deviceId) return true
-        if (this._enabled) await this.disable()
-        if (!SharedAudio.isSupported()) {
-            this._notify('audio input not supported')
-            return false
-        }
-        const constraints = {
-            audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-            }
-        }
-        if (deviceId) constraints.audio.deviceId = { exact: deviceId }
+        // Invalidate pending opens before replacing a source.
+        const stopping = this.disable()
+        const generation = this._captureGeneration
+        await stopping
+        if (generation !== this._captureGeneration) return false
+        const abort = new AbortController()
+        this._pendingAbort = abort
+        let capture, stream, context, source, channels, failure
         try {
-            this._stream = await navigator.mediaDevices.getUserMedia(constraints)
-        } catch (err) {
-            this._notify(`audio access denied: ${err.message || err.name}`)
+            if (nativeSyncAudio.isSyncAudioSource(deviceId)) {
+                capture = await this._syncAudio.openSyncAudioSource(deviceId, error => {
+                    failure = error
+                    if (generation !== this._captureGeneration || !this._enabled) return
+                    const stopping = this.disable()
+                    const stoppedGeneration = this._captureGeneration
+                    void stopping.then(() => {
+                        if (stoppedGeneration === this._captureGeneration) this._notify(`Sync audio: ${error.message}`, error)
+                    })
+                }, { signal: abort.signal })
+                abort.signal.throwIfAborted()
+                if (failure) throw failure
+                context = capture.context
+                source = capture.source
+                const device = this._syncAudio.getSyncAudioDevices().find(item => item.id === deviceId)
+                this._deviceId = deviceId
+                this._deviceLabel = device?.name || 'Sync audio'
+                channels = new SyncAudioChannels(capture, { id: deviceId, name: this._deviceLabel })
+            } else {
+                if (!SharedAudio.isSupported()) throw new Error('Audio input not supported')
+                stream = await navigator.mediaDevices.getUserMedia({ audio: {
+                    echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+                    ...(deviceId ? { deviceId: { exact: deviceId } } : {})
+                } })
+                abort.signal.throwIfAborted()
+                const track = stream.getAudioTracks()[0]
+                this._deviceId = track?.getSettings?.().deviceId || deviceId || ''
+                this._deviceLabel = track?.label || 'default'
+                context = new AudioContext()
+                source = context.createMediaStreamSource(stream)
+            }
+            await context.resume()
+            abort.signal.throwIfAborted()
+            if (failure) throw failure
+            const analyser = context.createAnalyser()
+            analyser.fftSize = 256
+            analyser.smoothingTimeConstant = 0.8
+            source.connect(analyser)
+            this._stream = stream || null
+            this._audioContext = context
+            this._source = source
+            this._nativeCapture = capture || null
+            this._nativeChannels = channels || null
+            this._analyser = analyser
+            this._fftData = new Uint8Array(analyser.frequencyBinCount)
+            this._timeDomainData = new Uint8Array(analyser.fftSize)
+            this.refreshDeckStates()
+            this._enabled = true
+            this._loop()
+            this._notify(`audio: ${this._deviceLabel}`)
+            return true
+        } catch (error) {
+            channels?.stop()
+            capture?.bridge.stop()
+            stream?.getTracks().forEach(track => track.stop())
+            try { source?.disconnect() } catch {}
+            await context?.close().catch(() => {})
+            if (generation === this._captureGeneration) this._notify(`audio input failed: ${error.message || error.name}`, error)
             return false
         }
-        const track = this._stream.getAudioTracks()[0]
-        const settings = track?.getSettings?.() || {}
-        this._deviceId = settings.deviceId || deviceId || ''
-        this._deviceLabel = track?.label || 'default'
-
-        this._audioContext = new AudioContext()
-        // The AudioContext is constructed after an awaited getUserMedia,
-        // which puts us outside the user-gesture scope. Browsers that
-        // enforce the autoplay policy create the context in 'suspended'
-        // state in that case, so getByteFrequencyData() returns all zeros
-        // forever (the visible bug: device picks "succeed" but meters
-        // never move). resume() is a no-op when already running.
-        try { await this._audioContext.resume() } catch {}
-        this._analyser = this._audioContext.createAnalyser()
-        this._analyser.fftSize = 256
-        this._analyser.smoothingTimeConstant = 0.8
-        this._source = this._audioContext.createMediaStreamSource(this._stream)
-        this._source.connect(this._analyser)
-        this._fftData = new Uint8Array(this._analyser.frequencyBinCount)
-        this._timeDomainData = new Uint8Array(this._analyser.fftSize)
-
-        // Refresh audio state references for each deck (renderer may have
-        // recreated the bag during compilation).
-        for (const deck of this._decks) {
-            const state = deck.ensureAudioState()
-            if (state) this._audioStates.set(deck, state)
-        }
-
-        this._enabled = true
-        this._loop()
-        this._notify(`audio: ${this._deviceLabel}`)
-        return true
     }
 
     async disable() {
-        if (!this._enabled) return
+        this._captureGeneration++
+        this._pendingAbort?.abort()
+        this._pendingAbort = null
+        this._enabled = false
+        this._nativeChannels?.stop()
+        this._nativeChannels = null
+        this._nativeCapture?.bridge.stop()
+        this._nativeCapture = null
         if (this._rafId) {
             cancelAnimationFrame(this._rafId)
             this._rafId = null
@@ -141,10 +174,8 @@ export class SharedAudio {
             for (const t of this._stream.getTracks()) t.stop()
             this._stream = null
         }
-        if (this._audioContext) {
-            try { await this._audioContext.close() } catch {}
-            this._audioContext = null
-        }
+        const context = this._audioContext
+        this._audioContext = null
         this._analyser = null
         this._fftData = null
         this._timeDomainData = null
@@ -156,6 +187,7 @@ export class SharedAudio {
             state.waveform?.fill?.(0.5)
         }
         this._notify('audio off')
+        try { await context?.close() } catch {}
     }
 
     async toggle(deviceId = '') {
@@ -210,11 +242,12 @@ export class SharedAudio {
             state.setWaveform?.(this._timeDomainData)
         }
 
+        this._nativeChannels?.update(this._audioStates.values(), sens)
         if (this._onMeters) this._onMeters(this.meters)
         this._rafId = requestAnimationFrame(this._loopBound)
     }
 
-    _notify(msg) {
-        if (this._onStatus) this._onStatus(msg, this._enabled)
+    _notify(msg, error = null) {
+        if (this._onStatus) this._onStatus(msg, this._enabled, error)
     }
 }

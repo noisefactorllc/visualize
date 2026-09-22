@@ -1,3 +1,4 @@
+import { connectSyncAudio, refreshSyncAudioDevices } from './sync/audioInput.js'
 /**
  * Visualize — main entry point.
  *
@@ -387,10 +388,19 @@ async function boot() {
 
     // Audio
     const audio = new SharedAudio()
+    let audioSelectionGeneration = 0
+    let audioDeviceRefreshGeneration = 0
+    window.addEventListener('pagehide', event => {
+        if (!event.persisted) void audio.disable()
+    })
     audio.addDeck(state.decks.A)
     audio.addDeck(state.decks.B)
-    audio.onStatusChange((msg, enabled) => {
+    audio.onStatusChange((msg, enabled, error) => {
         setStatusPill('audio-status', enabled ? `audio: ${audio.currentDeviceLabel.slice(0, 14)}` : 'audio off', enabled ? 'on' : 'off')
+        if (error && !enabled) {
+            audioSelectionGeneration++
+            $('audio-device').value = ''
+        }
         if (msg) toast(msg)
     })
     audio.onMeters((m) => {
@@ -1013,9 +1023,21 @@ async function boot() {
     // operator selects a camera device or a local file from the deck's
     // own row, and we push it into the renderer's imageTex each frame.
     const deckMedia = {
-        A: new DeckMedia({ deck: state.decks.A }),
-        B: new DeckMedia({ deck: state.decks.B })
+        A: new DeckMedia({ deck: state.decks.A, onError: error => handleCameraFailure('A', error) }),
+        B: new DeckMedia({ deck: state.decks.B, onError: error => handleCameraFailure('B', error) })
     }
+    const cameraSelectionGeneration = { A: 0, B: 0 }
+    function handleCameraFailure(deckId, error) {
+        cameraSelectionGeneration[deckId]++
+        $(`deck-${deckId.toLowerCase()}-media-camera`).value = ''
+        $(`deck-${deckId.toLowerCase()}-media-label`).textContent = ''
+        toast(`${deckId}: ${error.message}. Select the camera again.`)
+    }
+    window.addEventListener('pagehide', event => {
+        if (event.persisted) return
+        void deckMedia.A.stop()
+        void deckMedia.B.stop()
+    })
     compositor.onFrame(() => {
         deckMedia.A.tick()
         deckMedia.B.tick()
@@ -1098,6 +1120,7 @@ async function boot() {
             const fileInput = $(`deck-${deckId.toLowerCase()}-media-file-input`)
             const labelEl = $(`deck-${deckId.toLowerCase()}-media-label`)
             if (cameraSel) cameraSel.addEventListener('change', async () => {
+                const generation = ++cameraSelectionGeneration[deckId]
                 const v = cameraSel.value
                 // Placeholder (empty) or __active__ (already-running
                 // camera) are no-ops.
@@ -1108,6 +1131,7 @@ async function boot() {
                 const deviceId = v === '__default__' ? '' : v
                 try {
                     await deckMedia[deckId].setCamera(deviceId)
+                    if (generation !== cameraSelectionGeneration[deckId]) return
                     if (labelEl) labelEl.textContent = deckMedia[deckId].currentLabel
                     // Re-render so post-permission enumerated labels
                     // appear AND so the trigger picks up the live
@@ -1115,6 +1139,8 @@ async function boot() {
                     // didn't report a deviceId.
                     await refreshDeckMediaUi(deckId)
                 } catch (err) {
+                    if (generation !== cameraSelectionGeneration[deckId]) return
+                    cameraSel.value = ''
                     toast(`${deckId}: ${err.message || err}`)
                 }
             })
@@ -1497,6 +1523,8 @@ async function boot() {
     setupUserEffectsPanel(userEffects, state.decks.A.inner)
 
     async function refreshAudioDevices() {
+        const selectionGeneration = audioSelectionGeneration
+        const refreshGeneration = ++audioDeviceRefreshGeneration
         // <select-dropdown> exposes setOptions() for programmatic
         // population. We use that rather than appending <option>
         // children because the component's children-parser remaps
@@ -1505,6 +1533,8 @@ async function boot() {
         const sel = $('audio-device')
         const cur = sel.value
         const devices = await audio.listDevices()
+        const nativeDevices = await refreshSyncAudioDevices()
+        if (selectionGeneration !== audioSelectionGeneration || refreshGeneration !== audioDeviceRefreshGeneration) return
         const opts = [{ value: '', text: '— pick to enable —' }]
         // Pre-permission browsers return entries with empty deviceId
         // + empty label. Safari returns an empty list. Either way:
@@ -1517,6 +1547,9 @@ async function boot() {
             }
         } else {
             opts.push({ value: '__default__', text: 'Enable audio (default device)' })
+        }
+        for (const device of nativeDevices) {
+            if (device.connected) opts.push({ value: device.id, text: device.name })
         }
         sel.setOptions(opts)
         // Pick initial value: live device preferred, else what was
@@ -1532,6 +1565,7 @@ async function boot() {
     }
 
     async function handleAudioDeviceChange(e) {
+        const generation = ++audioSelectionGeneration
         const sel = e.target
         const value = sel.value
         if (!value) {
@@ -1544,6 +1578,7 @@ async function boot() {
         // gives us labels on the next refresh.
         const deviceId = value === '__default__' ? '' : value
         const ok = await audio.enable(deviceId)
+        if (generation !== audioSelectionGeneration) return
         if (ok) {
             await refreshAudioDevices()
         } else {
@@ -1554,6 +1589,21 @@ async function boot() {
         }
     }
     $('audio-device').addEventListener('change', handleAudioDeviceChange)
+    $('sync-audio-connect').addEventListener('click', async () => {
+        const button = $('sync-audio-connect')
+        const status = $('sync-audio-status')
+        button.disabled = true
+        status.textContent = 'Connecting to Sync. Approve audio access in the companion.'
+        try {
+            const devices = await connectSyncAudio()
+            await refreshAudioDevices()
+            status.textContent = devices.length ? 'Select a Sync input from the device list.' : 'Sync has no audio inputs.'
+        } catch (error) {
+            status.textContent = error.message || 'Sync audio could not connect.'
+        } finally {
+            button.disabled = false
+        }
+    })
     $('audio-sensitivity').addEventListener('input', (e) => {
         const v = parseFloat(e.target.value)
         audio.setSensitivity(v)

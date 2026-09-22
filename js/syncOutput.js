@@ -1,4 +1,5 @@
 import { SyncBridgeClient } from './sync/bundle.js'
+import { syncCredentialStore } from './sync/credentials.js'
 
 const MAX_SENDER_NAME_BYTES = 64
 const RGBA8_BYTES_PER_PIXEL = 4
@@ -6,6 +7,8 @@ const MAX_V1_PAYLOAD_BYTES = 0xffffffff
 const STATS_INTERVAL_MS = 250
 const STOP_TIMEOUT_MS = 3000
 const RECOVERY_DELAYS_MS = Object.freeze([250, 1000, 4000])
+// Continue retryable transport recovery until stopped by the operator.
+const RECOVERY_SUSTAINED_DELAY_MS = 10_000
 const RECOVERY_PROBATION_MS = 60_000
 const RECOVERY_CANCELLED = Symbol('sync recovery cancelled')
 const textEncoder = new TextEncoder()
@@ -33,10 +36,14 @@ const INITIAL_STATE = Object.freeze({
 
 export function createDefaultSyncConnectionProvider({
     Client = SyncBridgeClient,
+    credentialStore = syncCredentialStore,
     transport = {}
 } = {}) {
     if (typeof Client !== 'function') {
         throw new TypeError('Client must be a constructor')
+    }
+    if (!credentialStore || !['current', 'publish', 'clear'].every(key => typeof credentialStore[key] === 'function')) {
+        throw new TypeError('credentialStore must manage Sync credentials')
     }
     if (!transport || typeof transport !== 'object' || Array.isArray(transport)) {
         throw new TypeError('transport must be an object')
@@ -46,6 +53,7 @@ export function createDefaultSyncConnectionProvider({
         if (Object.hasOwn(transport, key)) clientTransport[key] = transport[key]
     }
     return Object.freeze({
+        credentialStore,
         createClient(options = {}) {
             return new Client({ ...clientTransport, ...options })
         }
@@ -268,7 +276,8 @@ export class SyncOutputController {
         this._passiveOperation = null
         this._ownedClients = new Set()
         this._startResources = null
-        this._token = undefined
+        this._credentialStore = connectionProvider.credentialStore ?? null
+        this._credential = undefined
         this._client = null
         this._welcome = null
         this._sender = null
@@ -280,6 +289,7 @@ export class SyncOutputController {
         this._liveDescriptor = null
         this._livePipeline = null
         this._recoveryGeneration = 0
+        this._lastRecoveryCause = null
         this._recoveryAttempts = 0
         this._recoveryTimer = null
         this._recoveryProbationTimer = null
@@ -558,14 +568,16 @@ export class SyncOutputController {
 
     async _runExplicitConnect(lifecycleGeneration) {
         let client
+        let credential
         try {
-            if (this._token === undefined) {
+            credential = this._currentCredential()
+            if (!credential) {
                 const token = await this._pair(lifecycleGeneration)
                 this._assertLifecycleCurrent(lifecycleGeneration)
-                this._token = token
+                credential = this._publishCredential(token)
             }
 
-            client = await this._createOwnedClient({ token: this._token }, lifecycleGeneration)
+            client = await this._createOwnedClient({ token: credential.token }, lifecycleGeneration)
             if (!client || typeof client.connect !== 'function' || typeof client.close !== 'function') {
                 throw new TypeError('authenticated Sync client must expose connect() and close()')
             }
@@ -594,7 +606,7 @@ export class SyncOutputController {
             if (error?.code === 'SYNC_LIFECYCLE') throw error
             let reportedError = error
             if (error?.code === 'SYNC_AUTHENTICATION') {
-                this._token = undefined
+                this._clearCredential(credential)
                 reportedError = outputError(
                     'SYNC_AUTHENTICATION',
                     'Sync authentication failed; connect again to pair'
@@ -916,7 +928,7 @@ export class SyncOutputController {
         this._releaseClient()
 
         if (!rendererReplaced && isRetryableRecoveryError(senderError)) {
-            this._beginRecovery(context)
+            this._beginRecovery(context, senderError)
             return
         }
 
@@ -937,9 +949,17 @@ export class SyncOutputController {
         })
     }
 
-    _beginRecovery(context) {
+    _beginRecovery(context, cause) {
         const generation = ++this._recoveryGeneration
         this._recoveryContext = context
+        this._lastRecoveryCause = Object.freeze({
+            code: typeof cause?.code === 'string' ? cause.code : null,
+            message: typeof cause?.message === 'string' ? cause.message : null,
+            closeCode: Number.isInteger(cause?.closeCode) ? cause.closeCode : null,
+            closeReason: typeof cause?.closeReason === 'string' && cause.closeReason !== '' ? cause.closeReason : null,
+            at: Date.now(),
+            recoveryCount: (this._lastRecoveryCause?.recoveryCount ?? 0) + 1
+        })
         this._setState({
             status: 'recovering',
             available: true,
@@ -956,14 +976,9 @@ export class SyncOutputController {
 
     _scheduleRecoveryAttempt(generation) {
         if (!this._isRecoveryCurrent(generation)) return
-        if (this._recoveryAttempts >= RECOVERY_DELAYS_MS.length) {
-            this._finishRecovery(
-                outputError('SYNC_RECOVERY_EXHAUSTED', 'Sync recovery budget was exhausted'),
-                { exhausted: true }
-            )
-            return
-        }
-        const delay = RECOVERY_DELAYS_MS[this._recoveryAttempts]
+        const delay = this._recoveryAttempts < RECOVERY_DELAYS_MS.length
+            ? RECOVERY_DELAYS_MS[this._recoveryAttempts]
+            : RECOVERY_SUSTAINED_DELAY_MS
         let timerId
         timerId = this._setTimeout(() => {
             this._clearTimeout(timerId)
@@ -976,7 +991,7 @@ export class SyncOutputController {
     async _runRecoveryAttempt(generation) {
         if (!this._isRecoveryCurrent(generation)) return
         this._recoveryAttempts++
-        const context = this._recoveryContext
+        let context = this._recoveryContext
         const resources = {
             passiveClient: null,
             client: null,
@@ -985,10 +1000,11 @@ export class SyncOutputController {
             removeSink: null
         }
         this._recoveryResources = resources
+        let credential
 
         try {
             this._assertRecoveryCurrent(generation)
-            this._assertRecoveryRendererIdentity(context)
+            context = this._adoptRecoveryRendererIdentity(context)
 
             resources.passiveClient = await this._connectionProvider.createClient({})
             this._assertRecoveryCurrent(generation)
@@ -1011,8 +1027,9 @@ export class SyncOutputController {
             resources.passiveClient = null
 
             this._assertRecoveryCurrent(generation)
-            this._assertRecoveryRendererIdentity(context)
-            resources.client = await this._connectionProvider.createClient({ token: this._token })
+            context = this._adoptRecoveryRendererIdentity(context)
+            credential = this._currentCredential()
+            resources.client = await this._connectionProvider.createClient({ token: credential?.token })
             this._assertRecoveryCurrent(generation)
             if (!resources.client || typeof resources.client.connect !== 'function' ||
                 typeof resources.client.createSender !== 'function' ||
@@ -1022,7 +1039,7 @@ export class SyncOutputController {
             const welcome = await resources.client.connect()
             this._assertRecoveryCurrent(generation)
             this._assertRecoveryProvider(welcome, context.providerIds)
-            this._assertRecoveryRendererIdentity(context)
+            context = this._adoptRecoveryRendererIdentity(context)
 
             resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
             if (!resources.queue || typeof resources.queue.close !== 'function') {
@@ -1038,7 +1055,7 @@ export class SyncOutputController {
             })
             this._assertRecoveryCurrent(generation)
             validateSender(resources.sender)
-            this._assertRecoveryRendererIdentity(context)
+            context = this._adoptRecoveryRendererIdentity(context)
 
             let configuredDescriptor = context.descriptor
             let sinkGeneration = null
@@ -1057,7 +1074,7 @@ export class SyncOutputController {
                 )
             }
             this._assertRecoveryCurrent(generation)
-            this._assertRecoveryRendererIdentity(context)
+            context = this._adoptRecoveryRendererIdentity(context)
             if (!descriptorsMatch(configuredDescriptor, context.descriptor)) {
                 throw rendererReplacedError()
             }
@@ -1099,13 +1116,9 @@ export class SyncOutputController {
             this._cleanupRecoveryResources(resources)
             if (!this._isRecoveryCurrent(generation) || error === RECOVERY_CANCELLED) return
             if (isRetryableRecoveryError(error)) {
-                if (this._recoveryAttempts < RECOVERY_DELAYS_MS.length) {
-                    this._scheduleRecoveryAttempt(generation)
-                } else {
-                    this._finishRecovery(error, { exhausted: true })
-                }
+                this._scheduleRecoveryAttempt(generation)
             } else {
-                this._finishRecovery(error)
+                this._finishRecovery(error, credential)
             }
         } finally {
             if (this._recoveryResources === resources) this._recoveryResources = null
@@ -1125,14 +1138,19 @@ export class SyncOutputController {
         }
     }
 
-    _assertRecoveryRendererIdentity(context) {
+    _adoptRecoveryRendererIdentity(context) {
         try {
             const canvas = this._getCanvas()
             const descriptor = this._readDescriptor(canvas)
-            if (this._renderer.pipeline !== context.pipeline || canvas !== context.canvas ||
-                !descriptorsMatch(descriptor, context.descriptor)) {
+            if (this._renderer.pipeline !== context.pipeline || canvas !== context.canvas) {
                 throw rendererReplacedError()
             }
+            if (descriptorsMatch(descriptor, context.descriptor)) return context
+            const adopted = Object.freeze({ ...context, descriptor })
+            // Later attempts must start from the geometry that is live now, not
+            // from the one captured before the close.
+            if (this._recoveryContext === context) this._recoveryContext = adopted
+            return adopted
         } catch (error) {
             if (error?.code === 'SYNC_RENDERER_REPLACED') throw error
             throw rendererReplacedError({ cause: error })
@@ -1179,7 +1197,7 @@ export class SyncOutputController {
         }
     }
 
-    _finishRecovery(error, { exhausted = false } = {}) {
+    _finishRecovery(error, credential) {
         this._recoveryGeneration++
         this._clearRecoveryTimer()
         this._clearRecoveryProbationTimer()
@@ -1187,18 +1205,13 @@ export class SyncOutputController {
         this._recoveryResources = null
         this._recoveryContext = null
         this._recoveryAttempts = 0
-        if (error?.code === 'SYNC_AUTHENTICATION') this._token = undefined
+        if (error?.code === 'SYNC_AUTHENTICATION') this._clearCredential(credential)
         this._setState({
             status: 'error',
             available: error?.code !== 'SYNC_UNAVAILABLE',
             connected: false,
             senderName: null,
-            error: exhausted
-                ? publicError(
-                    'SYNC_RECOVERY_EXHAUSTED',
-                    'Sync output could not recover after three attempts; connect and start again'
-                )
-                : fixedRecoveryError(error)
+            error: fixedRecoveryError(error)
         })
     }
 
@@ -1293,6 +1306,23 @@ export class SyncOutputController {
         }
     }
 
+    _currentCredential() {
+        return this._credentialStore?.current() ?? this._credential
+    }
+
+    _publishCredential(token) {
+        if (this._credentialStore) return this._credentialStore.publish(token)
+        this._credential = Object.freeze({ token })
+        return this._credential
+    }
+
+    _clearCredential(credential) {
+        if (this._credentialStore) return this._credentialStore.clear(credential)
+        if (!credential || credential !== this._credential) return false
+        this._credential = undefined
+        return true
+    }
+
     _setState(next) {
         if (this._disposed) return
         const state = { ...this._state, ...next }
@@ -1311,7 +1341,8 @@ export class SyncOutputController {
 const PROVIDER_NAMES = Object.freeze({
     syphon: 'Syphon',
     spout: 'Spout',
-    ndi: 'NDI'
+    ndi: 'NDI',
+    camera: 'Sync Camera'
 })
 
 const ERROR_STATUS_MESSAGES = Object.freeze({
@@ -1324,12 +1355,11 @@ const ERROR_STATUS_MESSAGES = Object.freeze({
     SYNC_PAIRING_DURABILITY: 'Sync could not confirm durable pairing storage. Resolve its storage warning and connect again.',
     SYNC_PAIRING_ORIGIN_LIMIT: 'Sync has reached its paired-origin limit. Revoke an old origin and connect again.',
     SYNC_TIMEOUT: 'Sync did not respond in time. Check the companion and try again.',
-    SYNC_PROVIDER_UNAVAILABLE: 'Sync has no available output provider. Enable Syphon, Spout, or NDI and reconnect.',
+    SYNC_PROVIDER_UNAVAILABLE: 'Sync has no available output provider. Enable an output provider in Sync and reconnect.',
     SYNC_PROVIDER_REPLACED: 'Sync output providers changed. Reconnect before starting the sender again.',
     SYNC_RENDERER_UNAVAILABLE: 'The active Noisemaker renderer does not expose the Sync output seam.',
     SYNC_EXPORT_UNAVAILABLE: 'The active graphics backend cannot export frames for Sync.',
     SYNC_AUTHENTICATION: 'Sync rejected this pairing. Connect again to pair this origin.',
-    SYNC_RECOVERY_EXHAUSTED: 'Sync could not recover the output after three attempts. Reconnect and start again.',
     SYNC_SENDER_CLOSED: 'The Sync sender closed unexpectedly. Reconnect to create a new sender.',
     SYNC_SENDER_LOST: 'The Sync sender connection was lost. Visualize is trying to recover it.',
     SYNC_RENDERER_REPLACED: 'The graphics backend or context changed. Reconnect before restarting the sender.',
@@ -1421,7 +1451,8 @@ function statusMessage(state) {
     }
 }
 
-export function deriveSyncOutputView(state = {}) {
+export function deriveSyncOutputView(state = {}, { policy = { status: 'unknown' } } = {}) {
+    const policyBlocked = policy.status === 'blocked' && !['sending', 'recovering', 'stopping'].includes(state.status)
     const providerIds = Array.isArray(state.providerIds)
         ? state.providerIds.filter((id) => typeof id === 'string' && id.length > 0)
         : []
@@ -1431,7 +1462,8 @@ export function deriveSyncOutputView(state = {}) {
     const stats = state.stats || EMPTY_STATS
 
     return Object.freeze({
-        action: actionForState(state),
+        policyBlocked,
+        action: policyBlocked ? Object.freeze({ ...ACTIONS.connect, disabled: true }) : actionForState(state),
         stateLabel: stateLabel(state),
         live: state.status === 'sending',
         nameDisabled: ['checking', 'starting', 'sending', 'recovering', 'stopping'].includes(state.status),
@@ -1439,7 +1471,7 @@ export function deriveSyncOutputView(state = {}) {
             ? providerIds.map((id) => PROVIDER_NAMES[id] || id).join(', ')
             : 'No provider',
         format: width && height ? `${width}×${height} · ${fps} fps` : `—×— · ${fps} fps`,
-        status: statusMessage(state),
+        status: policyBlocked ? 'The embedding page must allow loopback-network access for Sync. Open this app in its own tab or ask the embedding page to allow access.' : statusMessage(state),
         counters: Object.freeze({
             sent: finiteCounter(stats.sent),
             gpuBusy: finiteCounter(stats.droppedBusy),
