@@ -183,10 +183,10 @@
     <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-    <div id="mobile-guard" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--hf-surface,#111);color:var(--hf-on-surface,#eee);font-family:var(--hf-font-family,Nunito,sans-serif);flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;gap:1.5rem">
-        <img src="/img/visualize.png" alt="" style="width:64px;height:64px;border-radius:12px">
+    <div id="mobile-guard" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--hf-bg-base);color:var(--hf-text-normal);font-family:var(--hf-font-family);flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2rem;gap:1.5rem">
+        <img src="/img/visualize.png" alt="" style="width:64px;height:64px;border-radius:var(--hf-radius-lg)">
         <p style="font-size:1.25rem;line-height:1.5;max-width:28ch">Sorry, Visualize is not intended for mobile devices.</p>
-        <p style="font-size:1rem;opacity:.75;line-height:1.5;max-width:32ch">Try <a href="https://noisedeck.app" style="color:var(--hf-primary,#7af)">Noisedeck.app</a>, our video synth that runs almost anywhere.</p>
+        <p style="font-size:1rem;opacity:.75;line-height:1.5;max-width:32ch">Try <a href="https://noisedeck.app" style="color:var(--hf-link-color, var(--hf-accent))">Noisedeck.app</a>, our video synth that runs almost anywhere.</p>
     </div>
     <script>
     (function(){
@@ -239,20 +239,20 @@
         <main class="stage">
             <div class="deck deck-a" data-deck="A">
                 <div class="deck-head">
-                    <button class="deck-osc-count" data-deck="A" id="deck-a-osc-count" title="Oscillator count for rebind (click to cycle 0–4)">
+                    <button class="deck-osc-count tooltip" data-deck="A" id="deck-a-osc-count" data-title="Oscillator count for rebind (click to cycle 0–4)" title="Oscillator count for rebind (click to cycle 0–4)">
                         <span class="icon">waves</span>
                         <span class="osc-value">×0</span>
                     </button>
                     <div class="deck-head-actions">
-                        <button class="deck-rebind-eq" data-deck="A" title="Reshuffle audio bindings (E)"><span class="icon">graphic_eq</span></button>
-                        <button class="deck-rebind-midi" data-deck="A" title="Reshuffle MIDI bindings (M)"><span class="icon">piano</span></button>
-                        <button class="deck-bandpass" data-deck="A" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
-                        <button class="deck-edit-toggle" data-deck="A" title="Edit DSL"><span class="icon">code</span></button>
-                        <button class="deck-load-random" data-deck="A" title="Load random program"><span class="icon">shuffle</span></button>
+                        <button class="deck-rebind-eq tooltip" data-deck="A" data-title="Reshuffle audio bindings (E)" title="Reshuffle audio bindings (E)"><span class="icon">graphic_eq</span></button>
+                        <button class="deck-rebind-midi tooltip" data-deck="A" data-title="Reshuffle MIDI bindings (M)" title="Reshuffle MIDI bindings (M)"><span class="icon">piano</span></button>
+                        <button class="deck-bandpass tooltip" data-deck="A" data-title="Bandpass: EQ rebind stays in this program's bands" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
+                        <button class="deck-edit-toggle tooltip" data-deck="A" data-title="Edit DSL" title="Edit DSL"><span class="icon">code</span></button>
+                        <button class="deck-load-random tooltip" data-deck="A" data-title="Load random program (Q)" title="Load random program (Q)"><span class="icon">shuffle</span></button>
                     </div>
                 </div>
                 <div class="deck-head-row2">
-                    <button class="deck-density" data-deck="A" id="deck-a-density" title="Render zoom (click to cycle 100/75/50/25%)">
+                    <button class="deck-density tooltip" data-deck="A" id="deck-a-density" data-title="Render zoom (click to cycle 100/75/50/25%)" title="Render zoom (click to cycle 100/75/50/25%)">
                         <span class="icon">zoom_in</span>
                         <span class="density-value">100%</span>
                     </button>
@@ -306,12 +306,12 @@
                     <div class="main-fx-overlay" id="main-fx-overlay"></div>
                 </div>
                 <div class="main-fx">
-                    <button class="fx-button" data-fx="strobe" title="Strobe on beat (1) — may trigger photosensitive epilepsy">strobe</button>
-                    <button class="fx-button" data-fx="invert" title="Invert colors (2)">invert</button>
-                    <button class="fx-button" data-fx="bw" title="Black &amp; white (3)">b&amp;w</button>
-                    <button class="fx-button" data-fx="zoom" title="Beat-synced zoom (4)">zoom</button>
-                    <button class="fx-button" data-fx="freeze" title="Freeze frame (5)">freeze</button>
-                    <button class="fx-button" data-fx="flash" title="Flash white (6)">flash</button>
+                    <button type="button" class="fx-button tooltip" data-fx="strobe" aria-pressed="false" data-state="off" data-title="Strobe on beat (1) — may trigger photosensitive epilepsy" title="Strobe on beat (1) — may trigger photosensitive epilepsy">strobe</button>
+                    <button type="button" class="fx-button tooltip" data-fx="invert" aria-pressed="false" data-state="off" data-title="Invert colors (2)" title="Invert colors (2)">invert</button>
+                    <button type="button" class="fx-button tooltip" data-fx="bw" aria-pressed="false" data-state="off" data-title="Black &amp; white (3)" title="Black &amp; white (3)">b&amp;w</button>
+                    <button type="button" class="fx-button tooltip" data-fx="zoom" aria-pressed="false" data-state="off" data-title="Beat-synced zoom (4)" title="Beat-synced zoom (4)">zoom</button>
+                    <button type="button" class="fx-button tooltip" data-fx="freeze" aria-pressed="false" data-state="off" data-title="Freeze frame (5)" title="Freeze frame (5)">freeze</button>
+                    <button type="button" class="fx-button tooltip" data-fx="flash" data-title="Flash white (6)" title="Flash white (6)">flash</button>
                 </div>
 
                 <div class="mixer-controls" id="mixer-controls" hidden></div>
@@ -319,20 +319,20 @@
 
             <div class="deck deck-b" data-deck="B">
                 <div class="deck-head">
-                    <button class="deck-osc-count" data-deck="B" id="deck-b-osc-count" title="Oscillator count for rebind (click to cycle 0–4)">
+                    <button class="deck-osc-count tooltip" data-deck="B" id="deck-b-osc-count" data-title="Oscillator count for rebind (click to cycle 0–4)" title="Oscillator count for rebind (click to cycle 0–4)">
                         <span class="icon">waves</span>
                         <span class="osc-value">×0</span>
                     </button>
                     <div class="deck-head-actions">
-                        <button class="deck-rebind-eq" data-deck="B" title="Reshuffle audio bindings (Shift+E)"><span class="icon">graphic_eq</span></button>
-                        <button class="deck-rebind-midi" data-deck="B" title="Reshuffle MIDI bindings (Shift+M)"><span class="icon">piano</span></button>
-                        <button class="deck-bandpass" data-deck="B" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
-                        <button class="deck-edit-toggle" data-deck="B" title="Edit DSL"><span class="icon">code</span></button>
-                        <button class="deck-load-random" data-deck="B" title="Load random program"><span class="icon">shuffle</span></button>
+                        <button class="deck-rebind-eq tooltip" data-deck="B" data-title="Reshuffle audio bindings (Shift+E)" title="Reshuffle audio bindings (Shift+E)"><span class="icon">graphic_eq</span></button>
+                        <button class="deck-rebind-midi tooltip" data-deck="B" data-title="Reshuffle MIDI bindings (Shift+M)" title="Reshuffle MIDI bindings (Shift+M)"><span class="icon">piano</span></button>
+                        <button class="deck-bandpass tooltip" data-deck="B" data-title="Bandpass: EQ rebind stays in this program's bands" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
+                        <button class="deck-edit-toggle tooltip" data-deck="B" data-title="Edit DSL" title="Edit DSL"><span class="icon">code</span></button>
+                        <button class="deck-load-random tooltip" data-deck="B" data-title="Load random program (W)" title="Load random program (W)"><span class="icon">shuffle</span></button>
                     </div>
                 </div>
                 <div class="deck-head-row2">
-                    <button class="deck-density" data-deck="B" id="deck-b-density" title="Render zoom (click to cycle 100/75/50/25%)">
+                    <button class="deck-density tooltip" data-deck="B" id="deck-b-density" data-title="Render zoom (click to cycle 100/75/50/25%)" title="Render zoom (click to cycle 100/75/50/25%)">
                         <span class="icon">zoom_in</span>
                         <span class="density-value">100%</span>
                     </button>
@@ -374,7 +374,7 @@
                 <div class="controls-center">
                     <div class="xfader-wrap">
                         <span class="xfader-label-a">A</span>
-                        <input id="crossfader" type="range" min="0" max="1" step="0.001" value="0" class="xfader">
+                        <input id="crossfader" type="range" min="0" max="1" step="0.001" value="0" class="xfader tooltip" aria-label="Crossfader" data-title="Crossfader (←/→ 5%, Shift+←/→ 1%)" title="Crossfader (←/→ 5%, Shift+←/→ 1%)">
                         <span class="xfader-label-b">B</span>
                     </div>
                     <div class="xfader-quick">
@@ -388,9 +388,9 @@
                             </select-dropdown>
                         </div>
                         <div class="xfader-cuts">
-                            <button class="quick-cut" id="cut-a" title="Cut to A (Z)"><span class="icon">first_page</span></button>
-                            <button class="quick-cut" id="auto-fade" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
-                            <button class="quick-cut" id="cut-b" title="Cut to B (C)"><span class="icon">last_page</span></button>
+                            <button class="quick-cut tooltip" id="cut-a" data-title="Cut to A (Z)" title="Cut to A (Z)"><span class="icon">first_page</span></button>
+                            <button class="quick-cut tooltip" id="auto-fade" data-title="Auto-fade (X)" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
+                            <button class="quick-cut tooltip" id="cut-b" data-title="Cut to B (C)" title="Cut to B (C)"><span class="icon">last_page</span></button>
                         </div>
                         <div class="xfader-fade xfader-fade-right">
                             <span class="xfader-fade-label">fade time</span>
@@ -467,7 +467,7 @@
 
                 <span class="status-divider"></span>
 
-                <button id="automix-toggle" class="status-pill status-toggle status-automix" data-state="off" title="Auto-VJ — cycle through library">
+                <button id="automix-toggle" class="status-pill status-toggle status-automix tooltip" data-state="off" data-title="Auto-VJ — cycle through library (Space)" title="Auto-VJ — cycle through library (Space)">
                     <span class="status-icon icon">autorenew</span>
                     <span class="status-text">auto-vj</span>
                 </button>
@@ -483,11 +483,11 @@
 
                 <span class="status-divider"></span>
 
-                <button id="scenes-open" class="status-pill" title="Scenes (save/recall full state)">
+                <button id="scenes-open" class="status-pill tooltip" data-title="Scenes — save/recall full state (Shift+S)" title="Scenes — save/recall full state (Shift+S)">
                     <span class="status-icon icon">bookmark</span>
                     <span class="status-text">scenes</span>
                 </button>
-                <button id="record-toggle" class="status-pill record-button" data-state="off" title="Record main output">
+                <button id="record-toggle" class="status-pill record-button tooltip" data-state="off" data-title="Record main output (R)" title="Record main output (R)">
                     <span class="record-dot"></span>
                     <span class="status-text">rec</span>
                     <span class="record-time" id="record-time">0:00</span>
@@ -498,7 +498,7 @@
         <div class="settings-drawer" id="settings-drawer" aria-hidden="true">
             <div class="settings-head">
                 <h2>settings</h2>
-                <button class="icon-button" id="settings-close" aria-label="Close settings"><span class="icon">close</span></button>
+                <button class="icon-button tooltip" id="settings-close" aria-label="Close settings" data-title="Close settings (Esc)" title="Close settings (Esc)"><span class="icon">close</span></button>
             </div>
 
             <section class="settings-section">
@@ -594,12 +594,14 @@
                     <div><kbd>F</kbd> fullscreen main</div>
                     <div><kbd>S</kbd> settings</div>
                     <div><kbd>R</kbd> toggle record</div>
-                    <div><kbd>Z / X / C</kbd> cut A / auto / cut B</div>
-                    <div><kbd>← / →</kbd> nudge crossfader</div>
-                    <div><kbd>1–6</kbd> main FX</div>
-                    <div><kbd>Q / W</kbd> random load A / B</div>
+                    <div><kbd>Z</kbd> / <kbd>X</kbd> / <kbd>C</kbd> cut A / auto / cut B</div>
+                    <div><kbd>←</kbd> / <kbd>→</kbd> nudge crossfader</div>
+                    <div><kbd>1</kbd>–<kbd>6</kbd> main FX</div>
+                    <div><kbd>Q</kbd> / <kbd>W</kbd> random load A / B</div>
+                    <div><kbd>E</kbd> / <kbd>Shift</kbd>+<kbd>E</kbd> rebind EQ A / B</div>
+                    <div><kbd>M</kbd> / <kbd>Shift</kbd>+<kbd>M</kbd> rebind MIDI A / B</div>
                     <div><kbd>Shift</kbd>+<kbd>S</kbd> scenes</div>
-                    <div><kbd>Shift</kbd>+<kbd>1–9</kbd> recall scene</div>
+                    <div><kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>9</kbd> recall scene</div>
                     <div><kbd>Esc</kbd> close drawer / exit fullscreen</div>
                 </div>
             </section>
@@ -616,7 +618,7 @@
         <div class="settings-drawer" id="scenes-drawer" aria-hidden="true">
             <div class="settings-head">
                 <h2>scenes</h2>
-                <button class="icon-button" id="scenes-close" aria-label="Close scenes"><span class="icon">close</span></button>
+                <button class="icon-button tooltip" id="scenes-close" aria-label="Close scenes" data-title="Close scenes (Esc)" title="Close scenes (Esc)"><span class="icon">close</span></button>
             </div>
             <section class="settings-section">
                 <h3>save current state</h3>

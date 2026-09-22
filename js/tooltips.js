@@ -21,11 +21,21 @@
  * Native `title=` is removed during migration so the browser doesn't
  * also pop its own (delayed, unstyled) tooltip on top of handfish's.
  */
-import { initializeTooltips } from 'handfish'
+let _initializeTooltips = null
+try {
+    const hf = await import('handfish')
+    _initializeTooltips = hf.initializeTooltips
+} catch {
+    // In Node.js or environments where bare specifier 'handfish' is unmapped
+}
 
 export function setupTooltips() {
-    initializeTooltips()
-    migrateBelow(document.body)
+    if (typeof _initializeTooltips === 'function') {
+        _initializeTooltips()
+    }
+    if (typeof document !== 'undefined' && document.body) {
+        migrateBelow(document.body)
+    }
 }
 
 export function migrateBelow(root) {
@@ -48,6 +58,11 @@ export function setTooltip(el, text) {
     if (el.hasAttribute('title')) el.removeAttribute('title')
 }
 
+export function getTooltip(el) {
+    if (!el) return ''
+    return el.dataset?.title || el.getAttribute?.('title') || el.getAttribute?.('aria-label') || ''
+}
+
 function _migrate(el) {
     const text = el.getAttribute('title')
     if (!text) return
@@ -55,3 +70,4 @@ function _migrate(el) {
     el.removeAttribute('title')
     el.classList.add('tooltip')
 }
+

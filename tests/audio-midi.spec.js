@@ -306,5 +306,78 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     expect(barWidth).not.toBeNull()
     expect(parseFloat(barWidth)).toBeGreaterThan(60)
 
+    // ─── Scenario 4: audio sensitivity persistence ─────────────────────
+    // Move sensitivity slider to 2.8 and verify display and localStorage update
+    await page.evaluate(() => {
+        const input = document.getElementById('audio-sensitivity')
+        if (input) {
+            input.value = '2.8'
+            input.dispatchEvent(new Event('input', { bubbles: true }))
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+        }
+    })
+
+    const midSens = await page.evaluate(() => {
+        const input = document.getElementById('audio-sensitivity')
+        const val = document.getElementById('audio-sensitivity-val')
+        const stored = JSON.parse(localStorage.getItem('visualize.audio.v1') || '{}')
+        return {
+            slider: input?.value,
+            text: val?.textContent,
+            audioSens: window.__visualize?.audio?.sensitivity,
+            storedSens: stored?.sensitivity
+        }
+    })
+    expect(midSens.slider).toBe('2.8')
+    expect(midSens.text).toBe('2.8×')
+    expect(midSens.audioSens).toBe(2.8)
+    expect(midSens.storedSens).toBe(2.8)
+
+    // Reload page and confirm sensitivity restores to both audio analyzer and slider UI
+    await page.reload()
+    await page.click('#boot-start')
+    await page.waitForFunction(() =>
+        !!window.__visualize?.audio && !!window.__visualize?.midi,
+        null, { timeout: 30_000 })
+
+    await page.click('#settings-toggle')
+    const reloadedSens = await page.evaluate(() => {
+        const input = document.getElementById('audio-sensitivity')
+        const val = document.getElementById('audio-sensitivity-val')
+        return {
+            slider: input?.value,
+            text: val?.textContent,
+            audioSens: window.__visualize?.audio?.sensitivity
+        }
+    })
+    expect(reloadedSens.slider).toBe('2.8')
+    expect(reloadedSens.text).toBe('2.8×')
+    expect(reloadedSens.audioSens).toBe(2.8)
+
+    // Programmatic setSensitivity updates slider, label, and persists
+    await page.evaluate(() => {
+        window.__visualize.audio.setSensitivity(3.5)
+    })
+    await page.waitForFunction(() => {
+        const stored = JSON.parse(localStorage.getItem('visualize.audio.v1') || '{}')
+        return stored.sensitivity === 3.5
+    }, null, { timeout: 2000 })
+
+    const programmaticSens = await page.evaluate(() => {
+        const input = document.getElementById('audio-sensitivity')
+        const val = document.getElementById('audio-sensitivity-val')
+        const stored = JSON.parse(localStorage.getItem('visualize.audio.v1') || '{}')
+        return {
+            slider: input?.value,
+            text: val?.textContent,
+            audioSens: window.__visualize?.audio?.sensitivity,
+            storedSens: stored?.sensitivity
+        }
+    })
+    expect(programmaticSens.slider).toBe('3.5')
+    expect(programmaticSens.text).toBe('3.5×')
+    expect(programmaticSens.audioSens).toBe(3.5)
+    expect(programmaticSens.storedSens).toBe(3.5)
+
     await context.close()
 })
