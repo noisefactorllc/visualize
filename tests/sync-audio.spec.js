@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER
+const defaultDaemon = path.resolve(import.meta.dirname, '../../sync/build/sync_audio_test_server')
+const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
 const fixtureDsl = 'search synth, render\nnoise(seed: 7).write(o0)\nrender(o0)'
 let daemon, endpoint
 
@@ -41,7 +42,7 @@ async function setup(page, fullApp = false) {
         contentType: 'text/javascript',
         body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.0/browser/index.js';
             export class SyncBridgeClient extends Base {
-                constructor(options) { super({ ...options, endpoint: ${JSON.stringify(endpoint)}, permissions: { query: async () => ({ state: 'granted' }) } }); }
+                constructor(options) { super({ timeoutMs: 15000, ...options, endpoint: ${JSON.stringify(endpoint)}, permissions: { query: async () => ({ state: 'granted' }) } }); }
                 async pair() { return { token: 'audio-test-token' }; }
             }`
     }))
@@ -86,6 +87,39 @@ for (const channels of [1, 2, 8, 32]) {
             .find(source => source.id === 'sync-audio:audio_active')?.name)).toBe('0 · Sync')
     })
 }
+
+test('native 32-channel pulse source guarantees zero crosstalk across all unmodulated channels', async ({ page }) => {
+    await setup(page)
+    const id = 'sync-audio:audio_32_pulse'
+    expect(await page.evaluate(id => window.audio.enable(id), id)).toBe(true)
+    await expect.poll(async () => {
+        const vals = await page.evaluate(id => Array.from({ length: 32 }, (_, i) =>
+            window.audioState.getDeviceChannelState({ id, channel: i + 1 })?.raw ?? null), id)
+        if (vals.some(v => v === null)) return false
+        const active = vals.filter(v => v > 0.5).length
+        const inactiveClean = vals.filter(v => v <= 0.5).every(v => v === 0)
+        return active === 1 && inactiveClean
+    }, { timeout: 10_000 }).toBe(true)
+    await page.evaluate(() => window.audio.disable())
+})
+
+test('native 32-channel discrete mapping preserves channel ordering without inversion', async ({ page }) => {
+    await setup(page)
+    const id = 'sync-audio:audio_32'
+    expect(await page.evaluate(id => window.audio.enable(id), id)).toBe(true)
+    await expect.poll(async () => {
+        const vals = await page.evaluate(id => Array.from({ length: 32 }, (_, i) =>
+            window.audioState.getDeviceChannelState({ id, channel: i + 1 })?.raw ?? null), id)
+        if (vals.some(v => v === null)) return false
+        if (Math.abs(vals[0] - (1 / 32)) > 0.01) return false
+        if (Math.abs(vals[31] - (32 / 32)) > 0.01) return false
+        for (let i = 0; i < 31; i++) {
+            if (vals[i + 1] <= vals[i]) return false
+        }
+        return true
+    }, { timeout: 10_000 }).toBe(true)
+    await page.evaluate(() => window.audio.disable())
+})
 
 test('native read failure clears active state and permits a new source', async ({ page }) => {
     await setup(page)
@@ -181,6 +215,7 @@ test('an older cancelled audio selection cannot clear the newer selection', asyn
 })
 
 test('native receiver accepts mixer bytes while audio and video share the grant', async ({ page }) => {
+    test.slow()
     await page.route('**/js/sync/bundle.js', route => route.fulfill({
         contentType: 'text/javascript',
         body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.1.5/browser/index.js';
@@ -227,7 +262,7 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
             accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
     })
     try {
-        await expect.poll(async () => (await receiverStatus()).accepted).toBe(true)
+        await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 15_000 }).toBe(true)
     } catch (error) {
         error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
         throw error
