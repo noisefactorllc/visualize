@@ -91,3 +91,60 @@ test('index.html mobile guard adheres to Handfish token conventions', () => {
     assert.match(guardSubtree, /var\(--hf-radius-lg\)/)
     assert.match(guardSubtree, /var\(--hf-link-color,\s*var\(--hf-accent\)\)/)
 })
+
+test('audio band meters maintain high contrast and accessibility semantics across themes', () => {
+    const cssPath = resolve(process.cwd(), 'css/app.css')
+    const rawCss = readFileSync(cssPath, 'utf8')
+    const htmlPath = resolve(process.cwd(), 'index.html')
+    const html = readFileSync(htmlPath, 'utf8')
+
+    // Track trough has defined border, background, and radius tokens
+    assert.match(rawCss, /\.audio-band\s*\{[^}]*background:\s*var\(--hf-bg-base\)/)
+    assert.match(rawCss, /\.audio-band\s*\{[^}]*border:\s*var\(--hf-border-width\)\s+solid\s+var\(--hf-border\)/)
+    assert.match(rawCss, /\.audio-band\s*\{[^}]*border-radius:\s*var\(--hf-radius-sm\)/)
+
+    // Audio band fills use Handfish semantic color tokens
+    assert.match(rawCss, /\.audio-band\.low\s+b\s*\{[^}]*background:\s*var\(--hf-blue\)/)
+    assert.match(rawCss, /\.audio-band\.mid\s+b\s*\{[^}]*background:\s*var\(--hf-accent\)/)
+    assert.match(rawCss, /\.audio-band\.high\s+b\s*\{[^}]*background:\s*var\(--hf-red\)/)
+
+    // index.html carries accessible role and descriptive band labels
+    assert.match(html, /<span\s+class="main-meter"\s+role="group"\s+aria-label="Audio level meters:[^"]*">/)
+    assert.match(html, /id="meter-low"[^>]*role="img"[^>]*title="Low \/ Bass \(0–200 Hz\)"[^>]*aria-label="Low band audio meter"/)
+    assert.match(html, /id="meter-mid"[^>]*role="img"[^>]*title="Mid \(200–2000 Hz\)"[^>]*aria-label="Mid band audio meter"/)
+    assert.match(html, /id="meter-high"[^>]*role="img"[^>]*title="High \/ Treble \(2000\+ Hz\)"[^>]*aria-label="High band audio meter"/)
+})
+
+test('native range sliders and speed faders maintain high-contrast track boundaries and distinct thumb rings', () => {
+    const cssPath = resolve(process.cwd(), 'css/app.css')
+    const rawCss = readFileSync(cssPath, 'utf8')
+
+    // Track trough uses structured background and border token for contrast across light and dark themes
+    assert.match(rawCss, /input\[type="range"\]:not\(\.slider\)\s*\{[^}]*border:\s*var\(--hf-border-width\)\s+solid\s+var\(--hf-border-subtle\)/)
+    assert.match(rawCss, /input\[type="range"\]:not\(\.slider\)\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--hf-accent\)\s+15%,\s*var\(--hf-bg-base\)\)/)
+
+    // Slider thumb has distinct contrast ring separating thumb from track and background
+    assert.match(rawCss, /input\[type="range"\]:not\(\.slider\)::-webkit-slider-thumb\s*\{[^}]*border:\s*2px\s+solid\s+var\(--hf-bg-surface\)/)
+    assert.match(rawCss, /input\[type="range"\]:not\(\.slider\)::-moz-range-thumb\s*\{[^}]*border:\s*2px\s+solid\s+var\(--hf-bg-surface\)/)
+
+    // Active dragging state sets grabbing cursor on both WebKit and Gecko
+    assert.match(rawCss, /input\[type="range"\]:not\(\.slider\):active::-moz-range-thumb\s*\{[^}]*cursor:\s*grabbing;/)
+})
+
+test('program card tiles maintain readable contrast over shader previews across themes', () => {
+    const cssPath = resolve(process.cwd(), 'css/app.css')
+    const rawCss = readFileSync(cssPath, 'utf8')
+
+    // Scrim overlay uses high-contrast bottom-up gradient and backdrop blur
+    assert.match(rawCss, /\.program-card\s+\.pc-overlay\s*\{[^}]*backdrop-filter:\s*blur\(2px\)/)
+
+    // Program title and tagline use solid semantic text tokens
+    assert.match(rawCss, /\.program-card\s+\.pc-title\s*\{[^}]*color:\s*var\(--hf-text-bright\)/)
+    assert.match(rawCss, /\.program-card\s+\.pc-tagline\s*\{[^}]*color:\s*var\(--hf-text-normal\)/)
+
+    // Program load buttons use solid elevated background token rather than raw translucent mix
+    assert.match(rawCss, /\.program-card\s+\.pc-load\s*\{[^}]*background:\s*var\(--hf-bg-elevated\)/)
+    assert.match(rawCss, /\.program-card\s+\.pc-load\s*\{[^}]*border:\s*var\(--hf-border-width\)\s+solid\s+var\(--hf-border-subtle\)/)
+    assert.match(rawCss, /\.program-card\s+\.pc-load:hover\s*\{[^}]*background:\s*var\(--hf-accent\)/)
+})
+

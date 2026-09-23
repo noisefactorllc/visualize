@@ -417,9 +417,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .program-card.pc-thumb-failed .pc-thumb-img { display: none; }
 
 /* Overlay: title / tagline / load-buttons floated over the thumb with
-   a bottom-up dark gradient so labels stay legible regardless of how
-   bright the program renders. Pointer events pass through except for
-   the buttons (re-enabled below) so dragging the card stays easy. */
+   a bottom-up high-contrast scrim gradient and backdrop blur so labels
+   and controls stay crisp and legible regardless of whether the shader
+   preview underneath is bright, dark, or busy. Pointer events pass through
+   except for the buttons (re-enabled below) so dragging the card stays easy. */
 .program-card .pc-overlay {
     position: absolute;
     inset: 0;
@@ -430,9 +431,12 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     color: var(--hf-text-bright);
     pointer-events: none;
     background: linear-gradient(to top,
-        color-mix(in srgb, var(--hf-bg-base) 85%, transparent) 0%,
-        color-mix(in srgb, var(--hf-bg-base) 55%, transparent) 40%,
-        transparent 75%);
+        color-mix(in srgb, var(--hf-bg-base) 92%, transparent) 0%,
+        color-mix(in srgb, var(--hf-bg-base) 75%, transparent) 45%,
+        color-mix(in srgb, var(--hf-bg-base) 35%, transparent) 75%,
+        transparent 100%);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
 }
 
 .program-card .pc-title {
@@ -440,7 +444,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-weight: var(--hf-weight-semibold);
     line-height: 1.15;
     color: var(--hf-text-bright);
-    text-shadow: 0 1px 2px color-mix(in srgb, var(--hf-bg-base) 70%, transparent);
+    text-shadow: 0 1px 2px color-mix(in srgb, var(--hf-bg-base) 80%, transparent);
     overflow: hidden;
     text-overflow: ellipsis;
     display: -webkit-box;
@@ -453,7 +457,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     margin-top: 1px;
     font-size: 9px;
     line-height: 1.1;
-    color: color-mix(in srgb, var(--hf-text-bright) 80%, transparent);
+    color: var(--hf-text-normal);
     text-shadow: 0 1px 1px color-mix(in srgb, var(--hf-bg-base) 80%, transparent);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -486,9 +490,9 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .program-card .pc-load {
     flex: 1;
     appearance: none;
-    background: color-mix(in srgb, var(--hf-text-bright) 14%, transparent);
-    border: 1px solid color-mix(in srgb, var(--hf-text-bright) 22%, transparent);
-    color: var(--hf-text-bright);
+    background: var(--hf-bg-elevated);
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    color: var(--hf-text-normal);
     border-radius: var(--hf-radius-sm);
     padding: 2px 0;
     font-size: 10px;
@@ -496,12 +500,12 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-family: var(--hf-font-family-mono);
     line-height: 1;
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
-    text-shadow: 0 1px 1px color-mix(in srgb, var(--hf-bg-base) 60%, transparent);
+    transition: var(--hf-transition-color), var(--hf-transition-border), var(--hf-transition-bg);
 }
 .program-card .pc-load:hover {
-    background: color-mix(in srgb, var(--hf-text-bright) 28%, transparent);
-    border-color: color-mix(in srgb, var(--hf-text-bright) 55%, transparent);
+    background: var(--hf-accent);
+    border-color: var(--hf-accent);
+    color: var(--hf-bg-base);
 }
 
 /* Per-card Auto-VJ include checkbox. Sits before the A/B load
@@ -1229,9 +1233,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     flex: 1;
     height: 10px;
     background: var(--hf-bg-base);
-    border-radius: 3px;
+    border-radius: var(--hf-radius-sm);
     overflow: hidden;
-    border: var(--hf-border-width) solid var(--hf-border-subtle);
+    border: var(--hf-border-width) solid var(--hf-border);
+    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--hf-border) 60%, transparent);
 }
 
 .audio-band b {
@@ -1529,16 +1534,18 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 }
 
 /* Speed slider styling — exact copy of noisedeck mixer.css
-   .mixer-slider-container input[type="range"] rules. */
+   .mixer-slider-container input[type="range"] rules, hardened for
+   high-contrast theme visibility. */
 input[type="range"]:not(.slider) {
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
     height: 0.5rem;
-    background: color-mix(in srgb, var(--hf-accent) 15%, transparent 85%);
+    background: color-mix(in srgb, var(--hf-accent) 15%, var(--hf-bg-base));
+    border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-sm);
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease;
     margin: 0;
 }
 input[type="range"]:not(.slider):focus-visible {
@@ -1546,7 +1553,8 @@ input[type="range"]:not(.slider):focus-visible {
     outline-offset: var(--hf-focus-ring-offset);
 }
 input[type="range"]:not(.slider):hover {
-    background: color-mix(in srgb, var(--hf-accent) 22%, transparent 78%);
+    background: color-mix(in srgb, var(--hf-accent) 22%, var(--hf-bg-base));
+    border-color: var(--hf-border-hover);
 }
 input[type="range"]:not(.slider)::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -1556,13 +1564,14 @@ input[type="range"]:not(.slider)::-webkit-slider-thumb {
     border-radius: var(--hf-radius-full);
     background: var(--hf-accent);
     cursor: pointer;
-    border: 2px solid var(--hf-accent);
+    border: 2px solid var(--hf-bg-surface);
     box-shadow: var(--hf-shadow-sm);
     transition: all 0.15s ease;
 }
 input[type="range"]:not(.slider):hover::-webkit-slider-thumb {
     background: color-mix(in srgb, var(--hf-accent) 85%, var(--hf-text-bright) 15%);
-    box-shadow: var(--hf-shadow);
+    border-color: var(--hf-bg-surface);
+    box-shadow: var(--hf-shadow), 0 0 0 1px var(--hf-border-focus);
 }
 input[type="range"]:not(.slider)::-moz-range-thumb {
     width: 0.875rem;
@@ -1570,15 +1579,19 @@ input[type="range"]:not(.slider)::-moz-range-thumb {
     border-radius: var(--hf-radius-full);
     background: var(--hf-accent);
     cursor: pointer;
-    border: 2px solid var(--hf-accent);
+    border: 2px solid var(--hf-bg-surface);
     box-shadow: var(--hf-shadow-sm);
     transition: all 0.15s ease;
 }
 input[type="range"]:not(.slider):hover::-moz-range-thumb {
     background: color-mix(in srgb, var(--hf-accent) 85%, var(--hf-text-bright) 15%);
-    box-shadow: var(--hf-shadow);
+    border-color: var(--hf-bg-surface);
+    box-shadow: var(--hf-shadow), 0 0 0 1px var(--hf-border-focus);
 }
-input[type="range"]:not(.slider):active::-webkit-slider-thumb { cursor: grabbing; }
+input[type="range"]:not(.slider):active::-webkit-slider-thumb,
+input[type="range"]:not(.slider):active::-moz-range-thumb {
+    cursor: grabbing;
+}
 
 .big-toggle {
     appearance: none;
