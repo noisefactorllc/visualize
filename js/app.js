@@ -42,6 +42,12 @@ import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { calculateCrossfadeNudge } from './crossfader.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
 import { getUserEffectsManager } from './userEffects.js'
+import {
+    handleEscapeKey,
+    isDrawerOpen,
+    lockFullscreenEscape,
+    unlockFullscreenEscape
+} from './drawerEscape.js'
 import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer, the Seance logo graphic (for the go-online
@@ -1512,15 +1518,24 @@ async function boot() {
     $('about-btn').addEventListener('click', () => aboutDialog.show())
     $('go-online-btn').addEventListener('click', () => $('seance-dialog')?.show())
     document.addEventListener('fullscreenchange', () => {
-        document.getElementById('app').classList.toggle('fullscreen-main', !!document.fullscreenElement)
+        const inFullscreen = !!document.fullscreenElement
+        document.getElementById('app').classList.toggle('fullscreen-main', inFullscreen)
+        if (inFullscreen) {
+            lockFullscreenEscape()
+        } else {
+            unlockFullscreenEscape()
+        }
     })
 
     function toggleFullscreen() {
         const app = document.getElementById('app')
         if (!document.fullscreenElement) {
             app.classList.add('fullscreen-main')
-            app.requestFullscreen?.().catch(() => app.classList.remove('fullscreen-main'))
+            app.requestFullscreen?.()
+                .then(() => lockFullscreenEscape())
+                .catch(() => app.classList.remove('fullscreen-main'))
         } else {
+            unlockFullscreenEscape()
             document.exitFullscreen?.()
             app.classList.remove('fullscreen-main')
         }
@@ -1553,16 +1568,22 @@ async function boot() {
         el.textContent = fellBack ? `active: ${label} (WebGPU unavailable)` : `active: ${label}`
     }
     function openSettings() {
+        if (typeof closeScenesDrawer === 'function') closeScenesDrawer()
         drawer.setAttribute('aria-hidden', 'false')
         refreshAudioDevices()
         refreshActiveRenderer()
     }
-    function closeSettings() { drawer.setAttribute('aria-hidden', 'true') }
+    function closeSettings({ restoreFocus = false } = {}) {
+        const wasOpen = drawer.getAttribute('aria-hidden') === 'false'
+        drawer.setAttribute('aria-hidden', 'true')
+        if (wasOpen && (restoreFocus || drawer.contains(document.activeElement))) {
+            $('settings-toggle')?.focus?.()
+        }
+    }
     $('settings-toggle').addEventListener('click', () => {
-        const open = drawer.getAttribute('aria-hidden') !== 'false'
-        if (open) openSettings(); else closeSettings()
+        if (isDrawerOpen(drawer)) closeSettings({ restoreFocus: true }); else openSettings()
     })
-    $('settings-close').addEventListener('click', closeSettings)
+    $('settings-close').addEventListener('click', () => closeSettings({ restoreFocus: true }))
 
     // User effects panel — import + delete affordances. The list
     // re-renders from IndexedDB on each onChange so the operator's
@@ -2174,24 +2195,35 @@ async function boot() {
         window.__visualize.takeSnapshot = () => Scenes.snapshot(snapshotAccessors())
         window.__visualize.applySnapshot = (snap) => Scenes.apply(snap, applyAccessors())
         window.__visualize.renameScene = (oldName, newName) => scenes.rename(oldName, newName)
+        window.__visualize.openSettings = openSettings
+        window.__visualize.closeSettings = closeSettings
+        window.__visualize.openScenesDrawer = openScenesDrawer
+        window.__visualize.closeScenesDrawer = closeScenesDrawer
+        window.__visualize.toggleFullscreen = toggleFullscreen
     }
 
     scenes.onChange(() => renderScenes())
     renderScenes()
 
     function openScenesDrawer() {
+        if (typeof closeSettings === 'function') closeSettings()
         scenesDrawer.setAttribute('aria-hidden', 'false')
     }
 
-    function closeScenesDrawer() {
+    function closeScenesDrawer({ restoreFocus = false } = {}) {
+        const wasOpen = scenesDrawer.getAttribute('aria-hidden') === 'false'
+        const hadFocus = restoreFocus || scenesDrawer.contains(document.activeElement)
         editingSceneName = null
         scenesDrawer.setAttribute('aria-hidden', 'true')
         renderScenes()
+        if (wasOpen && hadFocus) {
+            $('scenes-open')?.focus?.()
+        }
     }
 
     function toggleScenesDrawer() {
-        if (scenesDrawer.getAttribute('aria-hidden') === 'false') {
-            closeScenesDrawer()
+        if (isDrawerOpen(scenesDrawer)) {
+            closeScenesDrawer({ restoreFocus: true })
         } else {
             openScenesDrawer()
         }
@@ -2201,7 +2233,7 @@ async function boot() {
         toggleScenesDrawer()
     })
     $('scenes-close').addEventListener('click', () => {
-        closeScenesDrawer()
+        closeScenesDrawer({ restoreFocus: true })
     })
     $('scene-save').addEventListener('click', () => {
         const name = sceneNameInput.value
@@ -2216,7 +2248,14 @@ async function boot() {
         toast(`saved: ${name.trim()}`)
     })
     sceneNameInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') $('scene-save').click()
+        if (e.key === 'Enter') {
+            $('scene-save').click()
+        } else if (e.key === 'Escape') {
+            e.preventDefault()
+            e.stopPropagation()
+            sceneNameInput.blur()
+            closeScenesDrawer({ restoreFocus: true })
+        }
     })
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
@@ -2255,7 +2294,7 @@ async function boot() {
             case 'f':
                 toggleFullscreen(); break
             case 's':
-                if (drawer.getAttribute('aria-hidden') === 'false') closeSettings(); else openSettings()
+                if (isDrawerOpen(drawer)) closeSettings({ restoreFocus: true }); else openSettings()
                 break
             case 'r':
                 recorder.toggle(); break
@@ -2329,13 +2368,15 @@ async function boot() {
                 break
             }
             case 'escape':
-                if (drawer.getAttribute('aria-hidden') === 'false') {
-                    closeSettings()
-                } else if (scenesDrawer.getAttribute('aria-hidden') === 'false') {
-                    closeScenesDrawer()
-                } else if (document.fullscreenElement) {
-                    document.exitFullscreen?.()
-                }
+                handleEscapeKey({
+                    settingsDrawer: drawer,
+                    closeSettings: () => closeSettings({ restoreFocus: true }),
+                    scenesDrawer,
+                    closeScenesDrawer: () => closeScenesDrawer({ restoreFocus: true }),
+                    isFullscreen: !!document.fullscreenElement,
+                    exitFullscreen: () => document.exitFullscreen?.().catch?.(() => {}),
+                    event: e
+                })
                 break
         }
     })

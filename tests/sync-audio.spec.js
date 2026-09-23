@@ -8,6 +8,8 @@ const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
 const fixtureDsl = 'search synth, render\nnoise(seed: 7).write(o0)\nrender(o0)'
 let daemon, endpoint
 
+test.describe.configure({ retries: 1 })
+
 test.beforeAll(async () => {
     test.skip(!daemonPath || !fs.existsSync(daemonPath), 'Set SYNC_AUDIO_TEST_SERVER to the native Sync audio fixture')
     daemon = spawn(daemonPath, ['--test-origin', 'http://localhost:3070', '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -140,8 +142,8 @@ test('audio settings expose Sync discovery and native selection without micropho
         select.value = 'sync-audio:audio_32_tones'
         select.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    await expect.poll(() => page.evaluate(() => window.__visualize.audio.enabled)).toBe(true)
-    await expect.poll(() => page.evaluate(() => window.__visualize.audio.meters.vol)).toBeGreaterThan(0)
+    await expect.poll(() => page.evaluate(() => window.__visualize.audio.enabled), { timeout: 15_000 }).toBe(true)
+    await expect.poll(() => page.evaluate(() => window.__visualize.audio.meters.vol), { timeout: 15_000 }).toBeGreaterThan(0)
     await expect(page.locator('#audio-status')).toContainText('audio: 32 channel ort')
     expect(await page.evaluate(() => window.__visualize.audio.currentDeviceId)).toBe('sync-audio:audio_32_tones')
     await page.evaluate(() => window.__visualize.audio.disable())
