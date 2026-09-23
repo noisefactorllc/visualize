@@ -4,7 +4,8 @@ const HEADER_BYTES = 64
 const MAX_ACCESS_UNIT_BYTES = 8 * 1024 * 1024
 const PACING_DELAY_MS = 60
 const MIN_WRITE_GAP_MS = 16
-const MAX_PENDING_FRAMES = 12
+export const MAX_PENDING_FRAMES = 12
+export const WARN_THROTTLE_MS = 1000
 const ENCODE_TIMEOUT_MS = 2000
 
 function outputError(code, message, cause) {
@@ -26,7 +27,7 @@ export function supportsH264CanvasOutput(welcome) {
 }
 
 export class SyncH264CanvasSender {
-    static async create({ client, name, canvas, descriptor, clock = performance }) {
+    static async create({ client, name, canvas, descriptor, clock = performance, logger = globalThis.console }) {
         if (typeof client?.createH264StreamSender !== 'function') {
             throw outputError('SYNC_CAPABILITY', 'Sync SDK does not support H.264 output')
         }
@@ -48,7 +49,7 @@ export class SyncH264CanvasSender {
         const transport = await client.createH264StreamSender(name)
         let sender
         try {
-            sender = new SyncH264CanvasSender({ transport, canvas, descriptor, clock, config })
+            sender = new SyncH264CanvasSender({ transport, canvas, descriptor, clock, config, logger })
             await sender.ready
             await sender.warmup()
             return sender
@@ -59,11 +60,12 @@ export class SyncH264CanvasSender {
         }
     }
 
-    constructor({ transport, canvas, descriptor, clock, config }) {
+    constructor({ transport, canvas, descriptor, clock, config, logger = globalThis.console }) {
         this._transport = transport
         this._canvas = canvas
         this._descriptor = descriptor
         this._clock = clock
+        this._logger = logger
         this._closed = false
         this._closing = false
         this._flushed = false
@@ -71,12 +73,20 @@ export class SyncH264CanvasSender {
         this._nextSequence = 1
         this._nextWrite = 1
         this._lastWriteAt = -Infinity
+        this._lastDropWarnAt = -Infinity
         this._pending = new Map()
         this._timer = null
         this._writing = false
         this._keyframeNeeded = true
-        this._diagnostics = { maxPending: 0, maxEncodeLatencyMs: 0,
-            maxWriteLatencyMs: 0, maxEncoderQueue: 0, encoded: 0 }
+        this._diagnostics = {
+            maxPending: 0,
+            maxEncodeLatencyMs: 0,
+            maxWriteLatencyMs: 0,
+            maxEncoderQueue: 0,
+            encoded: 0,
+            droppedBackpressure: 0,
+            dropWarnings: 0
+        }
         this.stats = { accepted: 0, droppedBusy: 0, droppedBackpressure: 0, sent: 0, failed: 0 }
         this.closed = new Promise((resolve, reject) => {
             this._resolveClosed = resolve
@@ -167,6 +177,25 @@ export class SyncH264CanvasSender {
         this._rejectWarmup = null
     }
 
+    get diagnostics() {
+        return { ...this._diagnostics }
+    }
+
+    _warnFrameDrop(timestamp) {
+        try {
+            const now = Number.isFinite(timestamp) ? timestamp : this._clock.now()
+            if (now - this._lastDropWarnAt < WARN_THROTTLE_MS) return
+            this._lastDropWarnAt = now
+            this._diagnostics.dropWarnings++
+            const message = `[SyncOutput] Frame queue full (${this._pending.size}/${MAX_PENDING_FRAMES}); dropping frame due to network backpressure (${this.stats.droppedBackpressure} dropped)`
+            if (typeof this._logger?.warn === 'function') {
+                this._logger.warn(message)
+            }
+        } catch {
+            // Non-blocking: diagnostic warning issues must never interrupt the render pipeline.
+        }
+    }
+
     configure(descriptor) {
         if (descriptor.width !== this._descriptor.width ||
             descriptor.height !== this._descriptor.height || descriptor.fps !== this._descriptor.fps) {
@@ -179,7 +208,9 @@ export class SyncH264CanvasSender {
         if (this._closed || this._closing) return false
         if (this._pending.size >= MAX_PENDING_FRAMES) {
             this.stats.droppedBackpressure++
+            this._diagnostics.droppedBackpressure = this.stats.droppedBackpressure
             this._keyframeNeeded = true
+            this._warnFrameDrop(timestamp)
             return false
         }
         const sequence = this._nextSequence++

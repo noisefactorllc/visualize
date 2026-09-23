@@ -861,3 +861,21 @@ test('blocked iframe explains delegation while a live or recovering output remai
         assert.equal(view.action.disabled, false)
     }
 })
+
+test('SyncOutputController accepts and retains injected logger', () => {
+    const customLogger = { warn() {}, error() {}, info() {} }
+    const defaultController = new syncOutput.SyncOutputController({
+        renderer: {},
+        getCanvas: () => ({}),
+        connectionProvider: { createClient: () => ({}) }
+    })
+    assert.equal(defaultController._logger, globalThis.console)
+
+    const customController = new syncOutput.SyncOutputController({
+        renderer: {},
+        getCanvas: () => ({}),
+        connectionProvider: { createClient: () => ({}) },
+        logger: customLogger
+    })
+    assert.equal(customController._logger, customLogger)
+})
