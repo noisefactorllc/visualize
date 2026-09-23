@@ -319,6 +319,15 @@ test('publishes the Visualize mixer renderer through a bounded Sync sender sink'
     await controller.stop()
     assert.equal(controller.state.status, 'ready')
     assert.equal(controller.state.connected, false)
+    assert.deepEqual(controller.state.stats, {
+        accepted: 2,
+        droppedBusy: 1,
+        droppedBackpressure: 3,
+        sent: 1,
+        failed: 0
+    })
+    fixture.sender.stats.sent = 99
+    assert.equal(controller.state.stats.sent, 1)
     assert.ok(fixture.events.includes('sink removed'))
     assert.ok(fixture.events.includes('sender close'))
     assert.ok(fixture.events.includes('client close'))

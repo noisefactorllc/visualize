@@ -1,5 +1,6 @@
 import { SyncBridgeClient } from './sync/bundle.js'
 import { syncCredentialStore } from './sync/credentials.js'
+import { SyncH264CanvasSender, supportsH264CanvasOutput } from './syncH264CanvasSender.js'
 
 const MAX_SENDER_NAME_BYTES = 64
 const RGBA8_BYTES_PER_PIXEL = 4
@@ -660,8 +661,9 @@ export class SyncOutputController {
             if (!this._client || !this._welcome) {
                 throw outputError('SYNC_NOT_CONNECTED', 'Connect Sync before starting an output')
             }
-            if (typeof this._renderer?.createFrameExportQueue !== 'function' ||
-                typeof this._renderer?.addSink !== 'function') {
+            const compressed = supportsH264CanvasOutput(this._welcome)
+            if (typeof this._renderer?.addSink !== 'function' ||
+                (!compressed && typeof this._renderer?.createFrameExportQueue !== 'function')) {
                 throw outputError(
                     'SYNC_RENDERER_UNAVAILABLE',
                     'This renderer does not support Sync output'
@@ -694,22 +696,28 @@ export class SyncOutputController {
             })
 
             const rendererIdentity = this._captureRendererIdentity(liveCanvas, descriptor)
-            resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
-            if (!resources.queue) {
-                throw outputError(
-                    'SYNC_EXPORT_UNAVAILABLE',
-                    'The active renderer backend cannot export frames'
-                )
-            }
-            if (typeof resources.queue.close !== 'function') {
-                throw outputError('SYNC_EXPORT_UNAVAILABLE', 'Renderer returned an invalid export queue')
-            }
+            if (compressed) {
+                resources.sender = await SyncH264CanvasSender.create({
+                    client: this._client, name, canvas: liveCanvas, descriptor, clock: this._clock
+                })
+            } else {
+                resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+                if (!resources.queue) {
+                    throw outputError(
+                        'SYNC_EXPORT_UNAVAILABLE',
+                        'The active renderer backend cannot export frames'
+                    )
+                }
+                if (typeof resources.queue.close !== 'function') {
+                    throw outputError('SYNC_EXPORT_UNAVAILABLE', 'Renderer returned an invalid export queue')
+                }
 
-            resources.sender = await this._client.createSender(name, {
-                exportQueue: resources.queue,
-                maxBufferedFrames: 1,
-                clock: this._clock
-            })
+                resources.sender = await this._client.createSender(name, {
+                    exportQueue: resources.queue,
+                    maxBufferedFrames: 1,
+                    clock: this._clock
+                })
+            }
             this._assertLifecycleCurrent(lifecycleGeneration)
             validateSender(resources.sender)
             this._assertRendererIdentity(rendererIdentity)
@@ -798,6 +806,7 @@ export class SyncOutputController {
         } catch (error) {
             if (!firstError) firstError = error
         }
+        const finalStats = this._copyStats(sender.stats)
 
         const clientError = this._releaseClient()
         if (!firstError && clientError) firstError = clientError
@@ -810,6 +819,7 @@ export class SyncOutputController {
                 status: 'error',
                 connected: false,
                 senderName: null,
+                stats: finalStats,
                 error: publicError(code, firstError.message)
             })
             throw firstError
@@ -820,6 +830,7 @@ export class SyncOutputController {
             available: true,
             connected: false,
             senderName: null,
+            stats: finalStats,
             error: null
         })
         return this._state
@@ -1041,18 +1052,25 @@ export class SyncOutputController {
             this._assertRecoveryProvider(welcome, context.providerIds)
             context = this._adoptRecoveryRendererIdentity(context)
 
-            resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
-            if (!resources.queue || typeof resources.queue.close !== 'function') {
-                throw outputError(
-                    'SYNC_EXPORT_UNAVAILABLE',
-                    'The active renderer backend cannot export frames'
-                )
+            if (supportsH264CanvasOutput(welcome)) {
+                resources.sender = await SyncH264CanvasSender.create({
+                    client: resources.client, name: context.senderName,
+                    canvas: context.canvas, descriptor: context.descriptor, clock: this._clock
+                })
+            } else {
+                resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+                if (!resources.queue || typeof resources.queue.close !== 'function') {
+                    throw outputError(
+                        'SYNC_EXPORT_UNAVAILABLE',
+                        'The active renderer backend cannot export frames'
+                    )
+                }
+                resources.sender = await resources.client.createSender(context.senderName, {
+                    exportQueue: resources.queue,
+                    maxBufferedFrames: 1,
+                    clock: this._clock
+                })
             }
-            resources.sender = await resources.client.createSender(context.senderName, {
-                exportQueue: resources.queue,
-                maxBufferedFrames: 1,
-                clock: this._clock
-            })
             this._assertRecoveryCurrent(generation)
             validateSender(resources.sender)
             context = this._adoptRecoveryRendererIdentity(context)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createSyncAudioInput } from '../js/sync/audioInput.js'
+import { createSyncAudioInput, syncAudioBufferFrames } from '../js/sync/audioInput.js'
 import { createSyncCredentialStore } from '../js/sync/credentials.js'
 
 const welcome = { capabilities: { providers: [{ id: 'audio', available: true, selected: true }] } }
@@ -91,4 +91,14 @@ test('late discovery failure cannot invalidate a newer successful inventory', as
     rejectFirst(new Error('old connection failed'))
     await older
     assert.equal(audio.getSyncAudioDevices()[0].connected, true)
+})
+
+test('Sync audio holds 120 ms before playback and reserves 60 ms of burst headroom', { timeout: 1000 }, () => {
+    for (const rate of [8000, 44100, 48000, 384000]) {
+        const { capacity, prefill, maxQueuedFrames } = syncAudioBufferFrames(rate)
+        assert.ok(prefill >= Math.ceil(rate * 0.12))
+        assert.ok(maxQueuedFrames >= prefill)
+        assert.ok(maxQueuedFrames - prefill >= Math.min(Math.ceil(rate * 0.06), capacity - prefill))
+        assert.ok(capacity <= 65536)
+    }
 })

@@ -6,6 +6,13 @@ export function isSyncAudioSource(id) {
     return typeof id === 'string' && id.startsWith(SYNC_AUDIO_PREFIX)
 }
 
+export function syncAudioBufferFrames(sampleRate) {
+    const capacity = Math.max(4096, Math.min(65536, Math.ceil(sampleRate * 0.25)))
+    const prefill = Math.min(capacity, Math.ceil(sampleRate * 0.12))
+    const maxQueuedFrames = Math.min(capacity, Math.ceil(sampleRate * 0.18))
+    return { capacity, prefill, maxQueuedFrames }
+}
+
 export function createSyncAudioInput({
     Client = SyncBridgeClient,
     credentialStore = syncCredentialStore,
@@ -166,11 +173,11 @@ export function createSyncAudioInput({
             if (context.sampleRate !== format.sampleRate) throw new Error('Sync audio sample rate is unsupported')
             await context.audioWorklet.addModule(workletUrl)
             signal?.throwIfAborted()
-            const maxQueuedFrames = Math.max(1, Math.min(4096, Math.floor(context.sampleRate * 0.012)))
+            const bufferFrames = syncAudioBufferFrames(context.sampleRate)
             node = new AudioWorkletNode(context, 'sync-audio-bridge', {
                 numberOfInputs: 0, numberOfOutputs: 1,
                 outputChannelCount: [format.channelCount],
-                processorOptions: { channelCount: format.channelCount, capacity: 4096, prefill: 512, maxQueuedFrames }
+                processorOptions: { channelCount: format.channelCount, ...bufferFrames }
             })
             // Keep the capture graph running for band-only consumers too.
             sink = context.createGain()
