@@ -55,6 +55,7 @@ async function captureLiveState(page) {
                 densityMode: state.deckDensity.A.mode,
                 rebindOriginal: decks.A.rebind.originalDsl,
                 rebindBandpass: decks.A.rebind.bandpass,
+                rebindOscillatorCount: decks.A.rebind.oscillatorCount,
                 rebindOverrides: JSON.parse(JSON.stringify(decks.A.rebind.overrides))
             },
             B: {
@@ -65,6 +66,7 @@ async function captureLiveState(page) {
                 densityMode: state.deckDensity.B.mode,
                 rebindOriginal: decks.B.rebind.originalDsl,
                 rebindBandpass: decks.B.rebind.bandpass,
+                rebindOscillatorCount: decks.B.rebind.oscillatorCount,
                 rebindOverrides: JSON.parse(JSON.stringify(decks.B.rebind.overrides))
             },
             xfade: state.crossfade,
@@ -92,6 +94,7 @@ function diffStates(before, after, label) {
         cmp(`decks.${id}.densityMode`, before[id].densityMode, after[id].densityMode)
         cmp(`decks.${id}.rebindOriginal`, before[id].rebindOriginal, after[id].rebindOriginal)
         cmp(`decks.${id}.rebindBandpass`, before[id].rebindBandpass, after[id].rebindBandpass)
+        cmp(`decks.${id}.rebindOscillatorCount`, before[id].rebindOscillatorCount, after[id].rebindOscillatorCount)
         cmp(`decks.${id}.rebindOverrides`, before[id].rebindOverrides, after[id].rebindOverrides)
     }
     cmp('xfade', before.xfade, after.xfade)

@@ -65,10 +65,11 @@ export function validateSceneName(name, currentName = null, existingScenes = [])
 /** Snapshot a deck's rebind state. Overrides are pure AST nodes —
  *  JSON-clone is safe (no functions, no cycles). */
 function cloneRebind(rebind) {
-    if (!rebind) return { originalDsl: '', bandpass: true, overrides: {} }
+    if (!rebind) return { originalDsl: '', bandpass: true, oscillatorCount: 0, overrides: {} }
     return {
         originalDsl: rebind.originalDsl || '',
         bandpass: rebind.bandpass !== false,
+        oscillatorCount: Math.max(0, Math.min(4, (rebind.oscillatorCount ?? 0) | 0)),
         overrides: JSON.parse(JSON.stringify(rebind.overrides || {}))
     }
 }
@@ -255,6 +256,7 @@ export class Scenes {
                 // just put back).
                 if (d.rebind) {
                     decks[id].rebind.bandpass = d.rebind.bandpass !== false
+                    decks[id].rebind.oscillatorCount = Math.max(0, Math.min(4, (d.rebind.oscillatorCount ?? 0) | 0))
                     decks[id].rebind.overrides = JSON.parse(JSON.stringify(d.rebind.overrides || {}))
                     if (Object.keys(decks[id].rebind.overrides).length > 0) {
                         const { regenerateDsl } = await import('./rebind.js')

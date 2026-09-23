@@ -302,3 +302,70 @@ test('rebind: bandpass off allows non-home bands across rolls', async ({ browser
         await context.close()
     }
 })
+
+test('rebind: rebinding audio bands on Deck A does not wipe existing oscillator configurations on Deck B', async ({ browser }) => {
+    const { context, page } = await bootAndLoad(browser, 'Bass Bloom')
+    try {
+        // Load Mid Mirror into Deck B
+        await page.evaluate(async () => {
+            const resp = await fetch('data/programs.json', { cache: 'no-cache' })
+            const programs = await resp.json()
+            const p = programs.find(x => x.title === 'Mid Mirror')
+            await window.__visualize.decks.B.load(p.dsl, p.title)
+            window.__visualize.__currentProgramB = p
+        })
+
+        // Configure Deck B with oscillatorCount = 4 and roll rebindEq on Deck B
+        const bSetup = await page.evaluate(async () => {
+            const deckB = window.__visualize.decks.B
+            const progB = window.__visualize.__currentProgramB
+            deckB.rebind.oscillatorCount = 4
+            const ok = await window.__visualize.rebind.rebindEq(deckB, progB)
+            return {
+                ok,
+                oscCount: deckB.rebind.oscillatorCount,
+                hasOscDsl: deckB._currentDsl.includes('osc('),
+                overridesCount: Object.keys(deckB.rebind.overrides).length,
+                initialOverrides: JSON.parse(JSON.stringify(deckB.rebind.overrides)),
+                dslB: deckB._currentDsl
+            }
+        })
+        expect(bSetup.ok).toBe(true)
+        expect(bSetup.oscCount).toBe(4)
+        expect(bSetup.hasOscDsl).toBe(true)
+        expect(bSetup.overridesCount).toBeGreaterThan(0)
+
+        // Now rebind Deck A with EQ (audio bands, oscillatorCount = 0)
+        const aResult = await page.evaluate(async () => {
+            const deckA = window.__visualize.decks.A
+            const progA = window.__visualize.__currentProgram
+            deckA.rebind.oscillatorCount = 0
+            const ok = await window.__visualize.rebind.rebindEq(deckA, progA)
+            return {
+                ok,
+                hasAudioDsl: deckA._currentDsl.includes('audio(')
+            }
+        })
+        expect(aResult.ok).toBe(true)
+        expect(aResult.hasAudioDsl).toBe(true)
+
+        // Verify Deck B's oscillator configurations and overrides remain completely intact
+        const bAfter = await page.evaluate(() => {
+            const deckB = window.__visualize.decks.B
+            return {
+                oscCount: deckB.rebind.oscillatorCount,
+                hasOscDsl: deckB._currentDsl.includes('osc('),
+                overridesCount: Object.keys(deckB.rebind.overrides).length,
+                currentOverrides: JSON.parse(JSON.stringify(deckB.rebind.overrides)),
+                dslB: deckB._currentDsl
+            }
+        })
+        expect(bAfter.oscCount).toBe(4)
+        expect(bAfter.hasOscDsl).toBe(true)
+        expect(bAfter.overridesCount).toBe(bSetup.overridesCount)
+        expect(bAfter.currentOverrides).toEqual(bSetup.initialOverrides)
+        expect(bAfter.dslB).toBe(bSetup.dslB)
+    } finally {
+        await context.close()
+    }
+})
