@@ -141,3 +141,125 @@ test('crossfader arrow keys: 5% standard nudge and 1% fine shift nudge', async (
         await context.close()
     }
 })
+
+test('crossfader sustained hold accelerates repeat nudges and resets cleanly on keyup', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        await page.evaluate(() => {
+            const xf = document.getElementById('crossfader')
+            xf.value = '0'
+            xf.dispatchEvent(new Event('input', { bubbles: true }))
+        })
+
+        const getXfade = () => page.evaluate(() => ({
+            stateVal: window.__visualize.state.crossfade,
+            domVal: parseFloat(document.getElementById('crossfader').value),
+            repeatCount: window.__visualize.xfadeNudgeTracker.repeatCount
+        }))
+
+        // Initial single tap: exactly 0.05, repeatCount 0
+        await page.evaluate(() => {
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'ArrowRight',
+                code: 'ArrowRight',
+                repeat: false,
+                bubbles: true
+            }))
+        })
+        let current = await getXfade()
+        expect(current.stateVal).toBeCloseTo(0.05, 4)
+        expect(current.repeatCount).toBe(0)
+
+        // Sustained hold simulated via keydown repeat events
+        // Dispatch 4 repeat keydown events for ArrowRight
+        for (let i = 1; i <= 4; i++) {
+            await page.evaluate(() => {
+                document.dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'ArrowRight',
+                    code: 'ArrowRight',
+                    repeat: true,
+                    bubbles: true
+                }))
+            })
+        }
+
+        current = await getXfade()
+        expect(current.repeatCount).toBe(4)
+        // At repeat 4: initial (0.05), repeat 1 (0.10), repeat 2 (0.15), repeat 3 (0.20), repeat 4 (0.20 + 0.0625 = 0.2625)
+        expect(current.stateVal).toBeCloseTo(0.2625, 4)
+
+        // Keyup event resets repeatCount immediately
+        await page.evaluate(() => {
+            document.dispatchEvent(new KeyboardEvent('keyup', {
+                key: 'ArrowRight',
+                code: 'ArrowRight',
+                bubbles: true
+            }))
+        })
+
+        current = await getXfade()
+        expect(current.repeatCount).toBe(0)
+
+        // Subsequent single tap steps by exactly 0.05 baseline again (no lingering acceleration)
+        await page.evaluate(() => {
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'ArrowRight',
+                code: 'ArrowRight',
+                repeat: false,
+                bubbles: true
+            }))
+        })
+        current = await getXfade()
+        expect(current.stateVal).toBeCloseTo(0.3125, 4)
+        expect(current.repeatCount).toBe(0)
+    } finally {
+        await context.close()
+    }
+})
+
+test('crossfader focus lock prevention and Home/End deck cuts', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const getXfade = () => page.evaluate(() => ({
+            stateVal: window.__visualize.state.crossfade,
+            domVal: parseFloat(document.getElementById('crossfader').value)
+        }))
+
+        // 1. Home and End keys cut to Deck A (0) and Deck B (1)
+        await page.keyboard.press('End')
+        let current = await getXfade()
+        expect(current.stateVal).toBe(1)
+        expect(current.domVal).toBe(1)
+
+        await page.keyboard.press('Home')
+        current = await getXfade()
+        expect(current.stateVal).toBe(0)
+        expect(current.domVal).toBe(0)
+
+        // 2. Escape blurs focused crossfader (prevents focus lock)
+        await page.focus('#crossfader')
+        let isFocused = await page.evaluate(() => document.activeElement?.id === 'crossfader')
+        expect(isFocused).toBe(true)
+
+        await page.keyboard.press('Escape')
+        isFocused = await page.evaluate(() => document.activeElement?.id === 'crossfader')
+        expect(isFocused).toBe(false)
+
+        // 3. Focusing a button (e.g. #cut-a) does not lock arrow keys
+        await page.focus('#cut-a')
+        let activeTag = await page.evaluate(() => document.activeElement?.id)
+        expect(activeTag).toBe('cut-a')
+
+        await page.keyboard.press('ArrowRight')
+        current = await getXfade()
+        expect(current.stateVal).toBeCloseTo(0.05, 4)
+
+        // 4. Focusing a non-crossfader slider (#speed-a) and pressing End does not cut crossfader
+        await page.focus('#speed-a')
+        await page.keyboard.press('End')
+        current = await getXfade()
+        expect(current.stateVal).toBeCloseTo(0.05, 4)
+    } finally {
+        await context.close()
+    }
+})

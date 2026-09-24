@@ -39,7 +39,7 @@ import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
-import { calculateCrossfadeNudge } from './crossfader.js'
+import { calculateCrossfadeNudge, CrossfadeNudgeTracker } from './crossfader.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
 import { getUserEffectsManager, isQuotaExceededError } from './userEffects.js'
 import {
@@ -437,6 +437,8 @@ async function boot() {
     // boot races (initial deck compile, etc.) can't strand the test
     // waiting for a handle. Other entries (scheduler, autoMix, ...)
     // are attached below once they're constructed.
+    const xfadeNudgeTracker = new CrossfadeNudgeTracker()
+
     window.__visualize = {
         audio,
         midi,
@@ -447,6 +449,7 @@ async function boot() {
         mixer,
         syncOutputController,
         syncOutputDialog,
+        get xfadeNudgeTracker() { return xfadeNudgeTracker },
         get autoXfade() { return autoXfade },
         get autoMix() { return autoMix },
         toggleFx: (fx, forceState) => toggleFx(fx, null, forceState)
@@ -659,6 +662,7 @@ async function boot() {
 
     xfaderEl.addEventListener('input', (e) => {
         cancelXfadeAnimation()
+        xfadeNudgeTracker.reset()
         state.crossfade = parseFloat(e.target.value)
         compositor.setCrossfade(state.crossfade)
         updateLiveIndicator()
@@ -666,6 +670,7 @@ async function boot() {
     })
     $('cut-a').addEventListener('click', () => {
         cancelXfadeAnimation()
+        xfadeNudgeTracker.reset()
         state.crossfade = 0
         compositor.setCrossfade(0)
         xfaderEl.value = '0'
@@ -674,6 +679,7 @@ async function boot() {
     })
     $('cut-b').addEventListener('click', () => {
         cancelXfadeAnimation()
+        xfadeNudgeTracker.reset()
         state.crossfade = 1
         compositor.setCrossfade(1)
         xfaderEl.value = '1'
@@ -681,6 +687,7 @@ async function boot() {
         autoMix.noteUserOverride()
     })
     $('auto-fade').addEventListener('click', () => {
+        xfadeNudgeTracker.reset()
         const target = state.crossfade < 0.5 ? 1 : 0
         animateXfade(target, state.fadeDurSec)
     })
@@ -1754,6 +1761,7 @@ async function boot() {
     registerMidiControls(midi, {
         crossfader: (v01) => {
             cancelXfadeAnimation()
+            xfadeNudgeTracker.reset()
             state.crossfade = v01
             compositor.setCrossfade(v01)
             xfaderEl.value = String(v01)
@@ -2314,6 +2322,24 @@ async function boot() {
                 loadProgram('B', p)
                 break
             }
+            case 'home': {
+                if (e.metaKey || e.altKey || e.ctrlKey) return
+                if (e.target?.tagName === 'INPUT' && e.target.type === 'range' && e.target !== xfaderEl) {
+                    return
+                }
+                e.preventDefault()
+                $('cut-a').click()
+                break
+            }
+            case 'end': {
+                if (e.metaKey || e.altKey || e.ctrlKey) return
+                if (e.target?.tagName === 'INPUT' && e.target.type === 'range' && e.target !== xfaderEl) {
+                    return
+                }
+                e.preventDefault()
+                $('cut-b').click()
+                break
+            }
             case 'arrowleft':
             case 'arrowright': {
                 if (e.metaKey) return
@@ -2327,7 +2353,11 @@ async function boot() {
                 if (e.altKey || e.ctrlKey) return
                 e.preventDefault()
                 cancelXfadeAnimation()
-                state.crossfade = calculateCrossfadeNudge(state.crossfade, key === 'arrowleft' ? 'left' : 'right', { shiftKey: e.shiftKey })
+                const { value } = xfadeNudgeTracker.nudge(state.crossfade, key === 'arrowleft' ? 'left' : 'right', {
+                    shiftKey: e.shiftKey,
+                    repeat: Boolean(e.repeat)
+                })
+                state.crossfade = value
                 compositor.setCrossfade(state.crossfade)
                 xfaderEl.value = String(state.crossfade)
                 updateLiveIndicator()
@@ -2341,7 +2371,11 @@ async function boot() {
                     e.preventDefault()
                     if (e.altKey || e.ctrlKey) return
                     cancelXfadeAnimation()
-                    state.crossfade = calculateCrossfadeNudge(state.crossfade, key === 'arrowdown' ? 'left' : 'right', { shiftKey: e.shiftKey })
+                    const { value } = xfadeNudgeTracker.nudge(state.crossfade, key === 'arrowdown' ? 'left' : 'right', {
+                        shiftKey: e.shiftKey,
+                        repeat: Boolean(e.repeat)
+                    })
+                    state.crossfade = value
                     compositor.setCrossfade(state.crossfade)
                     xfaderEl.value = String(state.crossfade)
                     updateLiveIndicator()
@@ -2368,6 +2402,7 @@ async function boot() {
                 break
             }
             case 'escape': {
+                xfadeNudgeTracker.reset()
                 const getOpenDialogs = () => document.querySelectorAll('dialog[open], [role="dialog"][aria-modal="true"]:not([aria-hidden="true"])')
                 const action = handleEscapeKey({
                     dialog: () => getOpenDialogs().length > 0,
@@ -2390,10 +2425,23 @@ async function boot() {
                 })
                 if (action && isTextInput) {
                     e.target?.blur?.()
+                } else if (!action && document.activeElement && document.activeElement !== document.body) {
+                    document.activeElement.blur?.()
                 }
                 break
             }
         }
+    })
+
+    document.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase()
+        if (key === 'arrowleft' || key === 'arrowright' || key === 'arrowup' || key === 'arrowdown') {
+            xfadeNudgeTracker.reset()
+        }
+    })
+    window.addEventListener('blur', () => xfadeNudgeTracker.reset())
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) xfadeNudgeTracker.reset()
     })
 
     // Initial load: random into both decks. Serialize (not Promise.all) —
