@@ -16,6 +16,15 @@ function outputError(code, message, cause) {
     return error
 }
 
+// Encoder warmup and frame encoding time out under heavy GPU or thermal
+// load, and the load passes. The controller recovers from these by
+// rebuilding the sender instead of stopping the output.
+function encoderTimeoutError(message) {
+    const error = outputError('SYNC_ENCODING_FAILED', message)
+    error.transient = true
+    return error
+}
+
 export function supportsH264CanvasOutput(welcome) {
     if (typeof globalThis.VideoEncoder !== 'function' ||
         typeof globalThis.VideoFrame !== 'function' ||
@@ -171,8 +180,8 @@ export class SyncH264CanvasSender {
         try {
             await Promise.race([
                 completion,
-                new Promise((_, reject) => { timeout = setTimeout(() => reject(outputError(
-                    'SYNC_ENCODING_FAILED', 'H.264 hardware encoder warmup timed out')), 5000) })
+                new Promise((_, reject) => { timeout = setTimeout(() => reject(encoderTimeoutError(
+                    'H.264 hardware encoder warmup timed out')), 5000) })
             ])
         } finally { clearTimeout(timeout) }
         this._resolveWarmup = null
@@ -291,7 +300,7 @@ export class SyncH264CanvasSender {
         if (!next) return
         const age = this._clock.now() - next.capturedAt
         if (age > ENCODE_TIMEOUT_MS) {
-            this._fail(outputError('SYNC_ENCODING_FAILED', 'H.264 frame encoding timed out'))
+            this._fail(encoderTimeoutError('H.264 frame encoding timed out'))
             return
         }
         const delay = next.frame ? Math.max(0, next.due - this._clock.now(),

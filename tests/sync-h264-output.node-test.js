@@ -304,4 +304,50 @@ test('defers renderer draws while three submitted frames await the encoder', {
     await sender.closed
 })
 
+test('marks a frame stuck past the encode deadline as a transient failure', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        postMessage(message) {
+            if (message.type !== 'frame') super.postMessage(message)
+        }
+    }
+    const transport = transportFixture()
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Stalled', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    sender.submit(1, performance.now() - 2500)
+    await assert.rejects(sender.closed, error => {
+        assert.equal(error.code, 'SYNC_ENCODING_FAILED')
+        assert.equal(error.message, 'H.264 frame encoding timed out')
+        assert.equal(error.transient, true)
+        return true
+    })
+})
 
+test('marks an encoder warmup timeout as a transient failure', {
+    timeout: 10000
+}, async () => {
+    installEncoder()
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        postMessage(message) {
+            if (message.type !== 'finishWarmup') super.postMessage(message)
+        }
+    }
+    const transport = transportFixture()
+    await assert.rejects(SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Cold', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    }), error => {
+        assert.equal(error.code, 'SYNC_ENCODING_FAILED')
+        assert.equal(error.message, 'H.264 hardware encoder warmup timed out')
+        assert.equal(error.transient, true)
+        return true
+    })
+})

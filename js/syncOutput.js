@@ -207,6 +207,12 @@ function descriptorsMatch(left, right) {
 }
 
 function isRetryableRecoveryError(error) {
+    // One frame stuck past the encode deadline under heavy GPU load used to
+    // end the output until the user reconnected. Measured 2026-09-24 with a
+    // second 4K renderer on the GPU: the sender closed nine seconds in and the
+    // output stayed dark for the rest of the ten-minute run. Encoder warmup
+    // timed out under the same load, so a rebuild can fail the same way.
+    if (error?.code === 'SYNC_ENCODING_FAILED' && error.transient === true) return true
     if (error?.code === 'SYNC_UNAVAILABLE' || error?.code === 'SYNC_TIMEOUT' ||
         error?.code === 'SYNC_LIFECYCLE') {
         return true
@@ -701,32 +707,51 @@ export class SyncOutputController {
             })
 
             const rendererIdentity = this._captureRendererIdentity(liveCanvas, descriptor)
-            if (compressed) {
-                resources.sender = await SyncH264CanvasSender.create({
-                    client: this._client,
-                    name,
-                    canvas: liveCanvas,
-                    descriptor,
-                    clock: this._clock,
-                    logger: this._logger
-                })
-            } else {
-                resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
-                if (!resources.queue) {
-                    throw outputError(
-                        'SYNC_EXPORT_UNAVAILABLE',
-                        'The active renderer backend cannot export frames'
-                    )
-                }
-                if (typeof resources.queue.close !== 'function') {
-                    throw outputError('SYNC_EXPORT_UNAVAILABLE', 'Renderer returned an invalid export queue')
-                }
+            const maxAttempts = 3
+            for (let attempt = 1; ; attempt++) {
+                try {
+                    this._assertLifecycleCurrent(lifecycleGeneration)
+                    this._assertRendererIdentity(rendererIdentity)
+                    if (compressed) {
+                        resources.sender = await SyncH264CanvasSender.create({
+                            client: this._client,
+                            name,
+                            canvas: liveCanvas,
+                            descriptor,
+                            clock: this._clock,
+                            logger: this._logger
+                        })
+                    } else {
+                        resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+                        if (!resources.queue) {
+                            throw outputError(
+                                'SYNC_EXPORT_UNAVAILABLE',
+                                'The active renderer backend cannot export frames'
+                            )
+                        }
+                        if (typeof resources.queue.close !== 'function') {
+                            throw outputError('SYNC_EXPORT_UNAVAILABLE', 'Renderer returned an invalid export queue')
+                        }
 
-                resources.sender = await this._client.createSender(name, {
-                    exportQueue: resources.queue,
-                    maxBufferedFrames: 1,
-                    clock: this._clock
-                })
+                        resources.sender = await this._client.createSender(name, {
+                            exportQueue: resources.queue,
+                            maxBufferedFrames: 1,
+                            clock: this._clock
+                        })
+                    }
+                    break
+                } catch (error) {
+                    if (resources.queue && typeof resources.queue.close === 'function') {
+                        try { resources.queue.close() } catch {}
+                        resources.queue = null
+                    }
+                    if (attempt < maxAttempts && isRetryableRecoveryError(error)) {
+                        const delay = RECOVERY_DELAYS_MS[attempt - 1] ?? 1000
+                        await new Promise(resolve => this._setTimeout(resolve, delay))
+                        continue
+                    }
+                    throw error
+                }
             }
             this._assertLifecycleCurrent(lifecycleGeneration)
             validateSender(resources.sender)
