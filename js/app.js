@@ -2264,8 +2264,8 @@ async function boot() {
         const tag = e.target?.tagName
         const isTextInput = tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable ||
             (tag === 'INPUT' && !['range', 'button', 'submit', 'checkbox', 'radio', 'file'].includes((e.target?.type || 'text').toLowerCase()))
-        if (isTextInput) return
         const key = e.key.toLowerCase()
+        if (isTextInput && key !== 'escape') return
 
         // Shift+S toggles scenes drawer; Shift+1..9 recalls scene.
         // Check e.code (layout-independent) for digits because Shift+1
@@ -2367,11 +2367,13 @@ async function boot() {
                 btn?.click()
                 break
             }
-            case 'escape':
-                handleEscapeKey({
-                    dialog: () => !!document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]:not([aria-hidden="true"])'),
+            case 'escape': {
+                const getOpenDialogs = () => document.querySelectorAll('dialog[open], [role="dialog"][aria-modal="true"]:not([aria-hidden="true"])')
+                const action = handleEscapeKey({
+                    dialog: () => getOpenDialogs().length > 0,
                     closeDialog: () => {
-                        const openDialog = document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]:not([aria-hidden="true"])')
+                        const openDialogs = getOpenDialogs()
+                        const openDialog = openDialogs[openDialogs.length - 1]
                         if (openDialog && typeof openDialog.close === 'function') {
                             openDialog.close()
                         } else if (openDialog) {
@@ -2386,7 +2388,11 @@ async function boot() {
                     exitFullscreen: () => document.exitFullscreen?.().catch?.(() => {}),
                     event: e
                 })
+                if (action && isTextInput) {
+                    e.target?.blur?.()
+                }
                 break
+            }
         }
     })
 
@@ -2559,6 +2565,7 @@ function setupUserEffectsPanel(userEffects, renderer) {
         if (installed.length === 0) {
             const empty = document.createElement('p')
             empty.className = 'settings-hint user-effect-empty'
+            empty.setAttribute('role', 'listitem')
             empty.textContent = 'no user effects installed yet'
             listEl.appendChild(empty)
             return

@@ -39,6 +39,10 @@ export function isDialogOpen(el) {
     if (typeof el === 'function') return Boolean(el())
     if (typeof el.isOpen === 'function') return Boolean(el.isOpen())
     if (typeof el.hasAttribute === 'function' && el.hasAttribute('open')) return true
+    if (typeof el.getAttribute === 'function') {
+        const role = el.getAttribute('role')
+        if ((role === 'dialog' || role === 'alertdialog') && el.getAttribute('aria-hidden') !== 'true') return true
+    }
     return Boolean(el.open)
 }
 

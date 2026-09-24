@@ -192,3 +192,59 @@ test('escape priority in fullscreen: dismisses open drawer without exiting fulls
         await context.close()
     }
 })
+
+test('escape priority with modal dialog in fullscreen: dismisses dialog without exiting fullscreen', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const app = page.locator('#app')
+        const dialog = page.locator('#sync-output-dialog')
+        const nameInput = page.locator('#sync-output-name')
+
+        // Mock fullscreen state on document to simulate live fullscreen reliably
+        await page.evaluate(() => {
+            window.__exitFullscreenCalls = 0
+            let mockFullscreen = true
+
+            Object.defineProperty(document, 'fullscreenElement', {
+                configurable: true,
+                get: () => mockFullscreen ? document.getElementById('app') : null
+            })
+
+            document.exitFullscreen = async () => {
+                window.__exitFullscreenCalls++
+                mockFullscreen = false
+                document.getElementById('app')?.classList.remove('fullscreen-main')
+                document.dispatchEvent(new Event('fullscreenchange'))
+            }
+
+            document.getElementById('app')?.classList.add('fullscreen-main')
+            document.dispatchEvent(new Event('fullscreenchange'))
+        })
+
+        await expect(app).toHaveClass(/\bfullscreen-main\b/)
+
+        // Open dialog directly via showModal() and focus text input inside it
+        await page.evaluate(() => {
+            const el = document.getElementById('sync-output-dialog')
+            el.showModal()
+            document.getElementById('sync-output-name').focus()
+        })
+        await expect(dialog).toHaveAttribute('open', '')
+
+        // Verify nameInput is focused
+        await expect(nameInput).toBeFocused()
+
+        // Press Escape while focused on the input inside dialog
+        await page.keyboard.press('Escape')
+
+        // Dialog must be closed
+        await expect(dialog).not.toHaveAttribute('open', '')
+
+        // Fullscreen remains active!
+        await expect(app).toHaveClass(/\bfullscreen-main\b/)
+        const exitCalls = await page.evaluate(() => window.__exitFullscreenCalls)
+        expect(exitCalls).toBe(0)
+    } finally {
+        await context.close()
+    }
+})

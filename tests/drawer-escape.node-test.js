@@ -280,6 +280,17 @@ test('isDialogOpen: accurately detects dialog state', () => {
     // Query function
     assert.equal(isDialogOpen(() => true), true)
     assert.equal(isDialogOpen(() => false), false)
+
+    // ARIA dialog element
+    assert.equal(isDialogOpen({
+        getAttribute: attr => attr === 'role' ? 'dialog' : null
+    }), true)
+    assert.equal(isDialogOpen({
+        getAttribute: attr => attr === 'role' ? 'alertdialog' : null
+    }), true)
+    assert.equal(isDialogOpen({
+        getAttribute: attr => attr === 'role' ? 'dialog' : (attr === 'aria-hidden' ? 'true' : null)
+    }), false)
 })
 
 test('handleEscapeKey: Dialog open dismisses dialog without exiting fullscreen', () => {
