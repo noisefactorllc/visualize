@@ -256,11 +256,9 @@ test.describe('user effects', () => {
         await expect(page.locator('.user-effect-row[data-id="user/persisty"]')).toBeVisible({ timeout: 10_000 })
 
         // And it's back in the library's user section.
-        const titles = await page.$$eval(
-            '.lib-section[data-category="user"] .program-card',
-            els => els.map(el => el.dataset.title)
-        )
-        expect(titles).toContain('Persisty')
+        await expect(
+            page.locator('.lib-section[data-category="user"] .program-card[data-title="Persisty"]')
+        ).toBeVisible({ timeout: 10_000 })
     })
 
     test('share-loader: ?code= with bundled effect installs + persists', async ({ page }) => {

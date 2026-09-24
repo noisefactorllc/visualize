@@ -64,7 +64,7 @@ export function isQuotaExceededError(err) {
     if (err.code === 22 || err.code === 1014) return true
     const msg = String(err.message || err).toLowerCase()
     if (
-        /\bquotas?\b/i.test(msg) ||
+        (msg.includes('quota') && !msg.includes('quotat')) ||
         msg.includes('storage limit') ||
         msg.includes('disk is full') ||
         msg.includes('database is full')
@@ -153,6 +153,7 @@ class UserEffectsManager {
                 }
             }
         })
+        return this._openPromise
     }
 
     /** Read every stored record. Records: { id, name, files, uploadedAt }. */
