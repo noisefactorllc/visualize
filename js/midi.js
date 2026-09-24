@@ -273,13 +273,17 @@ export class SharedMidi {
     }
 
     clearAssignment(controlId) {
+        if (this._learningControlId === controlId) this.cancelLearn()
         delete this._assignments[controlId]
+        this._resetRuntime(controlId)
         this._saveAssignments()
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
     }
 
     clearAllAssignments() {
+        if (this._learningControlId) this.cancelLearn()
         this._assignments = {}
+        for (const id of this._controlRuntime.keys()) this._resetRuntime(id)
         this._saveAssignments()
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
     }
@@ -390,6 +394,9 @@ export class SharedMidi {
             return
         }
 
+        // Channel voice messages (CC, Note on/off) require status, number, and value
+        if (data.length < 3) return
+
         // CC
         if (status === 0xB0) {
             const cc = data[1]
@@ -438,12 +445,15 @@ export class SharedMidi {
 
             const info = this._controlHandlers.get(controlId)
             if (!info) continue
+
+            // Continuous controls only respond to CC axes, ignoring note messages
+            if (info.kind === 'continuous' && inputKind === 'note') continue
+
             const rt = this._controlRuntime.get(controlId)
                 || { prevOn: false, engaged: false, armSide: null, lastWritten: null }
 
-            const norm = normalizeCcValue(raw, asg.min ?? 0, asg.max ?? 127, !!asg.invert)
-
             if (info.kind === 'continuous') {
+                const norm = normalizeCcValue(raw, asg.min ?? 0, asg.max ?? 127, !!asg.invert)
                 let current
                 if (info.getValue) {
                     try {
@@ -471,12 +481,14 @@ export class SharedMidi {
                 }
                 this._fireActivity(controlId, { value01: norm, engaged: rt.engaged, pickup: !rt.engaged, armSide: rt.armSide })
             } else {
-                const on = (inputKind === 'note') ? !!noteOn : (norm >= 0.5)
+                const isNote = inputKind === 'note'
+                const norm = isNote ? 0 : normalizeCcValue(raw, asg.min ?? 0, asg.max ?? 127, !!asg.invert)
+                const on = isNote ? !!noteOn : (norm >= 0.5)
                 const edge = computeEdgeToggle(rt.prevOn, on)
                 rt.prevOn = edge.nextOn
                 if (edge.fire) info.handler()
                 this._fireActivity(controlId, {
-                    value01: (inputKind === 'note') ? (noteOn ? 1 : 0) : norm,
+                    value01: isNote ? (noteOn ? 1 : 0) : norm,
                     engaged: true, pickup: false,
                 })
             }
@@ -528,14 +540,18 @@ export class SharedMidi {
     _captureNote(channel, note) {
         const id = this._learningControlId
         if (!id) return
-        this._assignments[id] = { kind: 'note', ch: channel, note, min: 0, max: 127, invert: false }
+        const info = this._controlHandlers.get(id)
+        if (info && info.kind === 'continuous') return
+        const n = Math.max(0, Math.min(127, Math.round(Number(note) || 0)))
+        const ch = Math.max(0, Math.min(15, Math.round(Number(channel) || 0)))
+        this._assignments[id] = { kind: 'note', ch, note: n, min: 0, max: 127, invert: false }
         this._learningControlId = null
         this._learningCapture = null
         if (this._learnCommitTimer) { clearTimeout(this._learnCommitTimer); this._learnCommitTimer = null }
         this._saveAssignments()
         this._resetRuntime(id)
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
-        this._notify(`learned: ${id} ← note ${note} ch ${channel + 1}`)
+        this._notify(`learned: ${id} ← note ${n} ch ${ch + 1}`)
     }
 
     _commitLearn() {
