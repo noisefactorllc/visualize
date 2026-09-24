@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 const syncOutput = await import('../js/syncOutput.js')
+const { SyncH264CanvasSender } = await import('../js/syncH264CanvasSender.js')
 
 function deferred() {
     let resolve
@@ -17,11 +18,11 @@ async function flushMicrotasks(turns = 4) {
     for (let turn = 0; turn < turns; turn++) await Promise.resolve()
 }
 
-function welcome(providerIds = ['syphon']) {
+function welcome(providerIds = ['syphon'], version = '0.2.19') {
     return {
         type: 'welcome',
         protocolVersion: 1,
-        version: '0.2.19',
+        version,
         instanceId: 'sync-test',
         capabilities: {
             send: true,
@@ -900,5 +901,60 @@ test('passes the sender backlog signal through the renderer sink', async () => {
     delete fixture.sender.deferRender
     assert.equal(fixture.attachedSink.deferRender(), false)
     await controller.stop()
+})
+
+test('SyncOutputController forwards injected logger to SyncH264CanvasSender.create', async () => {
+    const original = {
+        encoder: globalThis.VideoEncoder,
+        frame: globalThis.VideoFrame,
+        stream: globalThis.WebSocketStream,
+        create: SyncH264CanvasSender.create
+    }
+    const canvas = { width: 1920, height: 1080 }
+    const fixture = createFixture()
+    let capturedOptions
+    const customLogger = { warn() {}, error() {}, info() {} }
+    try {
+        globalThis.VideoEncoder = class VideoEncoder {}
+        globalThis.VideoFrame = class VideoFrame {}
+        globalThis.WebSocketStream = class WebSocketStream {}
+        SyncH264CanvasSender.create = async (options) => {
+            capturedOptions = options
+            return fixture.sender
+        }
+        let clientIndex = 0
+        const clients = [
+            {
+                async pair() { return { protocolVersion: 1, token: 'a'.repeat(64) } },
+                close() {}
+            },
+            {
+                async connect() { return welcome(['syphon'], '0.2.87') },
+                async createSender() { return fixture.sender },
+                close() {}
+            }
+        ]
+        const controller = new syncOutput.SyncOutputController({
+            renderer: fixture.renderer,
+            getCanvas: () => canvas,
+            connectionProvider: { createClient: () => clients[clientIndex++] },
+            logger: customLogger,
+            clock: { timeOrigin: 1_700_000_000_000 },
+            setInterval: () => 1,
+            clearInterval: () => {},
+            setTimeout: () => 2,
+            clearTimeout: () => {}
+        })
+
+        await controller.connect()
+        await controller.start('Logger forwarding test')
+        assert.equal(capturedOptions?.logger, customLogger)
+        await controller.stop()
+    } finally {
+        globalThis.VideoEncoder = original.encoder
+        globalThis.VideoFrame = original.frame
+        globalThis.WebSocketStream = original.stream
+        SyncH264CanvasSender.create = original.create
+    }
 })
 
