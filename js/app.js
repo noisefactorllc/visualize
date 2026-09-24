@@ -41,7 +41,7 @@ import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { calculateCrossfadeNudge } from './crossfader.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
-import { getUserEffectsManager } from './userEffects.js'
+import { getUserEffectsManager, isQuotaExceededError } from './userEffects.js'
 import {
     handleEscapeKey,
     isDrawerOpen,
@@ -2548,19 +2548,39 @@ function setupUserEffectsPanel(userEffects, renderer) {
         const file = fileInput.files?.[0]
         fileInput.value = ''   // allow re-importing the same file
         if (!file) return
+        importBtn.disabled = true
         setStatus(`installing ${file.name}…`, 'busy')
         try {
             const { name } = await userEffects.uploadFromZip(file, renderer)
             setStatus(`installed user/${name}`, 'ok')
         } catch (err) {
-            const msg = err?.message || String(err)
+            const isQuota = isQuotaExceededError(err)
+            let msg = err?.message || String(err)
+            if (isQuota) {
+                msg = `storage quota exceeded — delete unused user effects or free disk space to import "${file.name}"`
+            }
             setStatus(`import failed: ${msg}`, 'error')
             console.error('[userEffects] upload error:', err)
+        } finally {
+            importBtn.disabled = false
         }
     })
 
     const renderList = async () => {
-        const installed = await userEffects.listInstalled()
+        let installed
+        try {
+            installed = await userEffects.listInstalled()
+        } catch (err) {
+            console.error('[userEffects] listInstalled failed:', err)
+            listEl.innerHTML = ''
+            const errorRow = document.createElement('p')
+            errorRow.className = 'settings-hint user-effect-empty'
+            errorRow.dataset.kind = 'error'
+            errorRow.setAttribute('role', 'listitem')
+            errorRow.textContent = 'could not load user effects (storage unavailable)'
+            listEl.appendChild(errorRow)
+            return
+        }
         listEl.innerHTML = ''
         if (installed.length === 0) {
             const empty = document.createElement('p')

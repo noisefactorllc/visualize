@@ -24,13 +24,56 @@
  * CDN).
  */
 
-import { Effect, unregisterEffect } from './noisemaker/bundle.js'
+import { clearCache as clearThumbnailCache } from './thumbnailCache.js'
+
+let _Effect = null
+let _unregisterEffect = null
+
+async function loadBundle() {
+    if (_Effect && _unregisterEffect) {
+        return { Effect: _Effect, unregisterEffect: _unregisterEffect }
+    }
+    const mod = await import('./noisemaker/bundle.js')
+    _Effect = mod.Effect
+    _unregisterEffect = mod.unregisterEffect
+    return { Effect: _Effect, unregisterEffect: _unregisterEffect }
+}
+
+export function setBundleDependencies(deps = {}) {
+    if (deps.Effect) _Effect = deps.Effect
+    if (deps.unregisterEffect) _unregisterEffect = deps.unregisterEffect
+}
 
 const DB_NAME = 'visualize-user-effects'
 const DB_VERSION = 1
 const EFFECTS_STORE = 'effects'
 
 const USER_NAMESPACE = 'user'
+
+const MAX_PACKAGE_SIZE = 30 * 1024 * 1024               // 30MB zip package limit
+const MAX_TOTAL_UNCOMPRESSED_SIZE = 50 * 1024 * 1024    // 50MB uncompressed total limit
+const MAX_FILE_SIZE = 20 * 1024 * 1024                  // 20MB individual file limit
+
+/**
+ * Determine whether an error is caused by storage quota exhaustion across
+ * Chrome, Firefox, Safari, and other browsers/runtimes.
+ */
+export function isQuotaExceededError(err) {
+    if (!err) return false
+    if (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED') return true
+    if (err.code === 22 || err.code === 1014) return true
+    const msg = String(err.message || err).toLowerCase()
+    if (
+        /\bquotas?\b/i.test(msg) ||
+        msg.includes('storage limit') ||
+        msg.includes('disk is full') ||
+        msg.includes('database is full')
+    ) {
+        return true
+    }
+    if (err.cause && isQuotaExceededError(err.cause)) return true
+    return false
+}
 
 const PIPELINE_INPUT_TOKENS = new Set([
     'inputTex', 'inputTex3d', 'src',
@@ -47,21 +90,60 @@ function isJunkZipEntry(path) {
 }
 
 class UserEffectsManager {
-    constructor() {
-        this._db = null
+    constructor(options = {}) {
+        this._db = options.db || null
+        this._dbName = options.dbName || DB_NAME
+        this._dbVersion = options.dbVersion || DB_VERSION
+        this._clearThumbnailCache = options.clearThumbnailCache || clearThumbnailCache
         this._loadedIds = new Set()        // effect IDs we've registered this session
         this._renderers = new Set()        // strong refs — we iterate them on delete to flush _loadedEffects
         this._listeners = new Set()        // 'change' subscribers — settings UI re-renders, library re-renders
+        this._openPromise = null
     }
 
     // ── IndexedDB ────────────────────────────────────────────────────
 
     async _openDB() {
         if (this._db) return this._db
-        return new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, DB_VERSION)
-            req.onerror = () => reject(req.error)
-            req.onsuccess = () => { this._db = req.result; resolve(this._db) }
+        if (this._openPromise) return this._openPromise
+        if (typeof indexedDB === 'undefined') {
+            throw new Error('IndexedDB is not supported in this environment')
+        }
+        this._openPromise = new Promise((resolve, reject) => {
+            let req
+            try {
+                req = indexedDB.open(this._dbName, this._dbVersion)
+            } catch (err) {
+                this._openPromise = null
+                if (isQuotaExceededError(err)) {
+                    const qErr = new Error('storage quota exceeded: unable to open user effects database')
+                    qErr.name = 'QuotaExceededError'
+                    qErr.code = 22
+                    qErr.cause = err
+                    return reject(qErr)
+                }
+                return reject(err)
+            }
+            req.onerror = () => {
+                this._openPromise = null
+                const err = req.error
+                if (isQuotaExceededError(err)) {
+                    const qErr = new Error('storage quota exceeded: unable to open user effects database')
+                    qErr.name = 'QuotaExceededError'
+                    qErr.code = 22
+                    qErr.cause = err
+                    return reject(qErr)
+                }
+                reject(err || new Error('failed to open user effects database'))
+            }
+            req.onblocked = () => {
+                console.warn('[userEffects] indexedDB open blocked by other tabs')
+            }
+            req.onsuccess = () => {
+                this._openPromise = null
+                this._db = req.result
+                resolve(this._db)
+            }
             req.onupgradeneeded = (e) => {
                 const db = e.target.result
                 if (!db.objectStoreNames.contains(EFFECTS_STORE)) {
@@ -77,40 +159,115 @@ class UserEffectsManager {
     async getAll() {
         const db = await this._openDB()
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(EFFECTS_STORE, 'readonly')
-            const req = tx.objectStore(EFFECTS_STORE).getAll()
-            req.onsuccess = () => resolve(req.result || [])
-            req.onerror = () => reject(req.error)
+            try {
+                const tx = db.transaction(EFFECTS_STORE, 'readonly')
+                const store = tx.objectStore(EFFECTS_STORE)
+                const req = store.getAll()
+                req.onsuccess = () => resolve(req.result || [])
+                req.onerror = () => reject(req.error || tx.error)
+                tx.onerror = () => reject(tx.error || req.error)
+                tx.onabort = () => reject(tx.error || req.error || new DOMException('Transaction aborted', 'AbortError'))
+            } catch (err) {
+                reject(err)
+            }
         })
     }
 
     async _get(id) {
         const db = await this._openDB()
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(EFFECTS_STORE, 'readonly')
-            const req = tx.objectStore(EFFECTS_STORE).get(id)
-            req.onsuccess = () => resolve(req.result || null)
-            req.onerror = () => reject(req.error)
+            try {
+                const tx = db.transaction(EFFECTS_STORE, 'readonly')
+                const store = tx.objectStore(EFFECTS_STORE)
+                const req = store.get(id)
+                req.onsuccess = () => resolve(req.result || null)
+                req.onerror = () => reject(req.error || tx.error)
+                tx.onerror = () => reject(tx.error || req.error)
+                tx.onabort = () => reject(tx.error || req.error || new DOMException('Transaction aborted', 'AbortError'))
+            } catch (err) {
+                reject(err)
+            }
         })
     }
 
     async _put(record) {
         const db = await this._openDB()
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(EFFECTS_STORE, 'readwrite')
-            tx.objectStore(EFFECTS_STORE).put(record)
-            tx.oncomplete = () => resolve()
-            tx.onerror = () => reject(tx.error)
+            try {
+                const tx = db.transaction(EFFECTS_STORE, 'readwrite')
+                const store = tx.objectStore(EFFECTS_STORE)
+                const req = store.put(record)
+                req.onerror = () => {}
+                tx.oncomplete = () => resolve()
+                tx.onerror = () => reject(tx.error || req.error)
+                tx.onabort = () => reject(tx.error || req.error || new DOMException('Transaction aborted', 'AbortError'))
+            } catch (err) {
+                reject(err)
+            }
         })
+    }
+
+    _createQuotaError(name, cause) {
+        const msg = `storage quota exceeded: effect package "${name}" is too large for available browser storage. Delete unused effects or free disk space to import.`
+        const err = new Error(msg)
+        err.name = 'QuotaExceededError'
+        err.code = 22
+        if (cause) err.cause = cause
+        return err
+    }
+
+    /**
+     * Write an effect to IndexedDB with quota self-healing recovery.
+     * If storage quota is exhausted, evicts the ephemeral thumbnail cache
+     * and retries once before failing with an actionable QuotaExceededError.
+     */
+    async _putWithQuotaRecovery(record) {
+        try {
+            await this._put(record)
+        } catch (err) {
+            if (isQuotaExceededError(err)) {
+                console.warn(`[userEffects] storage quota exceeded while saving "${record.name}", evicting thumbnail cache...`)
+                let cacheCleared = false
+                try {
+                    await this._clearThumbnailCache()
+                    cacheCleared = true
+                } catch (cleanErr) {
+                    console.warn('[userEffects] failed to clear thumbnail cache:', cleanErr)
+                }
+
+                if (cacheCleared) {
+                    try {
+                        await this._put(record)
+                        console.info(`[userEffects] successfully saved "${record.name}" after evicting thumbnail cache`)
+                        return
+                    } catch (retryErr) {
+                        if (isQuotaExceededError(retryErr)) {
+                            throw this._createQuotaError(record.name, retryErr)
+                        }
+                        throw retryErr
+                    }
+                }
+
+                throw this._createQuotaError(record.name, err)
+            }
+            throw err
+        }
     }
 
     async _remove(id) {
         const db = await this._openDB()
         return new Promise((resolve, reject) => {
-            const tx = db.transaction(EFFECTS_STORE, 'readwrite')
-            tx.objectStore(EFFECTS_STORE).delete(id)
-            tx.oncomplete = () => resolve()
-            tx.onerror = () => reject(tx.error)
+            try {
+                const tx = db.transaction(EFFECTS_STORE, 'readwrite')
+                const store = tx.objectStore(EFFECTS_STORE)
+                const req = store.delete(id)
+                req.onerror = () => {}
+                tx.oncomplete = () => resolve()
+                tx.onerror = () => reject(tx.error || req.error)
+                tx.onabort = () => reject(tx.error || req.error || new DOMException('Transaction aborted', 'AbortError'))
+            } catch (err) {
+                reject(err)
+            }
         })
     }
 
@@ -133,9 +290,15 @@ class UserEffectsManager {
      * Parse a zip Blob/File and return { name, files }. `files` keys
      * are paths relative to the effect directory (e.g.
      * "definition.json", "glsl/main.glsl"). Throws on missing
-     * definition.json or missing GLSL.
+     * definition.json or missing GLSL, or if file/package size limits
+     * are exceeded.
      */
     async processZip(zipBlob) {
+        if (!zipBlob) throw new Error('no zip file provided')
+        if (typeof zipBlob.size === 'number' && zipBlob.size > MAX_PACKAGE_SIZE) {
+            throw new Error(`package exceeds maximum size limit (${Math.round(MAX_PACKAGE_SIZE / (1024 * 1024))}MB)`)
+        }
+
         const JSZipCtor = await loadJSZip()
         const zip = await JSZipCtor.loadAsync(zipBlob)
         const files = {}
@@ -161,6 +324,8 @@ class UserEffectsManager {
         }
 
         let hasGlsl = false
+        let totalUncompressedSize = 0
+
         for (const [path, entry] of Object.entries(zip.files)) {
             if (entry.dir) continue
             if (isJunkZipEntry(path)) continue
@@ -170,7 +335,30 @@ class UserEffectsManager {
             const isDef = rel === 'definition.json'
             const isHelp = rel === 'help.md'
             if (!isShader && !isDef && !isHelp) continue
-            files[rel] = await entry.async('text')
+
+            // Guard against zip bomb decompression before extracting
+            if (typeof entry._data?.uncompressedSize === 'number') {
+                if (entry._data.uncompressedSize > MAX_FILE_SIZE) {
+                    throw new Error(`file "${rel}" exceeds maximum size limit (${Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)`)
+                }
+                if (totalUncompressedSize + entry._data.uncompressedSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+                    throw new Error(`uncompressed package files exceed maximum size limit (${Math.round(MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024))}MB)`)
+                }
+            }
+
+            const text = await entry.async('text')
+            const byteSize = typeof Buffer !== 'undefined'
+                ? Buffer.byteLength(text, 'utf8')
+                : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(text).length : text.length)
+            if (byteSize > MAX_FILE_SIZE) {
+                throw new Error(`file "${rel}" exceeds maximum size limit (${Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)`)
+            }
+            totalUncompressedSize += byteSize
+            if (totalUncompressedSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+                throw new Error(`uncompressed package files exceed maximum size limit (${Math.round(MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024))}MB)`)
+            }
+
+            files[rel] = text
             if (rel.startsWith('glsl/') && rel.endsWith('.glsl')) hasGlsl = true
         }
 
@@ -213,8 +401,11 @@ class UserEffectsManager {
      * trips the `effectDef.asyncInit === Effect.prototype.asyncInit`
      * guard with "t.asyncInit is not a function".
      */
-    _buildInstance(definition, shaders) {
-        const instance = new Effect({
+    _buildInstance(definition, shaders, EffectClass = _Effect) {
+        if (!EffectClass) {
+            throw new Error('Effect class is not loaded')
+        }
+        const instance = new EffectClass({
             name: definition.name || definition.func,
             namespace: USER_NAMESPACE,
             func: definition.func || definition.name,
@@ -261,10 +452,11 @@ class UserEffectsManager {
      * renderer's _loadedEffects so the compiler won't try to fetch
      * this effect from the CDN).
      */
-    _registerWithRenderer(renderer, record) {
+    async _registerWithRenderer(renderer, record) {
+        const { Effect: EffectClass } = await loadBundle()
         const def = JSON.parse(record.files['definition.json'])
         const shaders = this._collectShaders(record.files)
-        const instance = this._buildInstance(def, shaders)
+        const instance = this._buildInstance(def, shaders, EffectClass)
         const effectName = def.func || def.name
         renderer.registerEffectsFromBundle({
             namespace: USER_NAMESPACE,
@@ -280,9 +472,17 @@ class UserEffectsManager {
      * loaded-effects cache so the next compile that references it
      * fails fast (rather than rendering against the stale instance).
      */
-    _unregisterFromRuntime(id) {
+    async _unregisterFromRuntime(id) {
         const [, effectName] = id.split('/')
         if (!effectName) return
+
+        let unregister
+        try {
+            const bundle = await loadBundle()
+            unregister = bundle.unregisterEffect
+        } catch {
+            unregister = _unregisterEffect
+        }
 
         // Mirror the 4 aliases CanvasRenderer.registerEffectWithRuntime
         // installs (line 1163-1166 of canvas.js): func, namespace.func,
@@ -296,7 +496,7 @@ class UserEffectsManager {
             `${USER_NAMESPACE}.${effectName}`,
         ]
         for (const key of aliases) {
-            try { unregisterEffect(key) } catch { /* engine may throw if absent */ }
+            try { unregister?.(key) } catch { /* engine may throw if absent */ }
         }
         for (const renderer of this._renderers) {
             renderer._loadedEffects?.delete(id)
@@ -317,7 +517,7 @@ class UserEffectsManager {
         const records = await this.getAll()
         for (const rec of records) {
             try {
-                this._registerWithRenderer(renderer, rec)
+                await this._registerWithRenderer(renderer, rec)
             } catch (err) {
                 console.error(`[userEffects] failed to register ${rec.id}:`, err)
             }
@@ -335,13 +535,18 @@ class UserEffectsManager {
 
     /**
      * Install a fresh effect from a zip blob. Validates, dedupes by id,
-     * persists to IndexedDB, registers with the renderer immediately so
-     * the operator can use it without a reload, and emits 'change'.
+     * persists to IndexedDB with quota self-healing recovery, registers
+     * with the renderer immediately so the operator can use it without a
+     * reload, and emits 'change'.
      *
-     * Returns { id, name } on success. Throws on duplicate or invalid
-     * package.
+     * Returns { id, name } on success. Throws on duplicate, invalid, or
+     * quota exceeded package.
      */
     async uploadFromZip(zipBlob, renderer) {
+        if (!zipBlob) throw new Error('no zip file provided')
+        if (typeof zipBlob.size === 'number' && zipBlob.size > MAX_PACKAGE_SIZE) {
+            throw new Error(`package exceeds maximum size limit (${Math.round(MAX_PACKAGE_SIZE / (1024 * 1024))}MB)`)
+        }
         const { name, files } = await this.processZip(zipBlob)
         const id = `${USER_NAMESPACE}/${name}`
 
@@ -351,8 +556,15 @@ class UserEffectsManager {
         }
 
         const record = { id, name, files, uploadedAt: Date.now() }
-        await this._put(record)
-        if (renderer) this._registerWithRenderer(renderer, record)
+        await this._putWithQuotaRecovery(record)
+        if (renderer) {
+            try {
+                await this._registerWithRenderer(renderer, record)
+            } catch (regErr) {
+                await this._remove(id).catch(() => {})
+                throw regErr
+            }
+        }
         this._emitChange()
         return { id, name }
     }
@@ -395,13 +607,55 @@ class UserEffectsManager {
             ...(payload.defaultProgram ? { defaultProgram: payload.defaultProgram } : {}),
         }
 
-        const files = { 'definition.json': JSON.stringify(definition, null, 2) }
+        const defJson = JSON.stringify(definition, null, 2)
+        const defByteLen = typeof Buffer !== 'undefined'
+            ? Buffer.byteLength(defJson, 'utf8')
+            : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(defJson).length : defJson.length)
+        if (defByteLen > MAX_FILE_SIZE) {
+            throw new Error(`definition.json exceeds maximum size limit (${Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)`)
+        }
+
+        const files = { 'definition.json': defJson }
+        let totalPayloadSize = defByteLen
+
         const shaders = payload.shaders || {}
         for (const [programName, prog] of Object.entries(shaders)) {
-            if (prog.glsl) files[`glsl/${programName}.glsl`] = prog.glsl
-            if (prog.wgsl) files[`wgsl/${programName}.wgsl`] = prog.wgsl
+            if (prog.glsl) {
+                const byteLen = typeof Buffer !== 'undefined'
+                    ? Buffer.byteLength(prog.glsl, 'utf8')
+                    : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(prog.glsl).length : prog.glsl.length)
+                if (byteLen > MAX_FILE_SIZE) {
+                    throw new Error(`shader "${programName}.glsl" exceeds maximum size limit`)
+                }
+                totalPayloadSize += byteLen
+                files[`glsl/${programName}.glsl`] = prog.glsl
+            }
+            if (prog.wgsl) {
+                const byteLen = typeof Buffer !== 'undefined'
+                    ? Buffer.byteLength(prog.wgsl, 'utf8')
+                    : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(prog.wgsl).length : prog.wgsl.length)
+                if (byteLen > MAX_FILE_SIZE) {
+                    throw new Error(`shader "${programName}.wgsl" exceeds maximum size limit`)
+                }
+                totalPayloadSize += byteLen
+                files[`wgsl/${programName}.wgsl`] = prog.wgsl
+            }
         }
-        if (payload.help) files['help.md'] = payload.help
+
+        if (payload.help) {
+            const helpByteLen = typeof Buffer !== 'undefined'
+                ? Buffer.byteLength(payload.help, 'utf8')
+                : (typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(payload.help).length : payload.help.length)
+            if (helpByteLen > MAX_FILE_SIZE) {
+                throw new Error(`help.md exceeds maximum size limit (${Math.round(MAX_FILE_SIZE / (1024 * 1024))}MB)`)
+            }
+            totalPayloadSize += helpByteLen
+            files['help.md'] = payload.help
+        }
+
+        if (totalPayloadSize > MAX_TOTAL_UNCOMPRESSED_SIZE) {
+            throw new Error(`uncompressed effect payload exceeds maximum size limit (${Math.round(MAX_TOTAL_UNCOMPRESSED_SIZE / (1024 * 1024))}MB)`)
+        }
 
         const id = `${USER_NAMESPACE}/${name}`
         const existing = await this._get(id)
@@ -410,14 +664,25 @@ class UserEffectsManager {
             // a shared composition that bundles effects we've already
             // installed isn't a hard error.
             if (renderer && !this._loadedIds.has(id)) {
-                this._registerWithRenderer(renderer, existing)
+                try {
+                    await this._registerWithRenderer(renderer, existing)
+                } catch (regErr) {
+                    console.warn(`[userEffects] failed to register existing effect "${id}" with renderer:`, regErr)
+                }
             }
             return { id, name, alreadyInstalled: true }
         }
 
         const record = { id, name, files, uploadedAt: Date.now() }
-        await this._put(record)
-        if (renderer) this._registerWithRenderer(renderer, record)
+        await this._putWithQuotaRecovery(record)
+        if (renderer) {
+            try {
+                await this._registerWithRenderer(renderer, record)
+            } catch (regErr) {
+                await this._remove(id).catch(() => {})
+                throw regErr
+            }
+        }
         this._emitChange()
         return { id, name }
     }
@@ -434,7 +699,7 @@ class UserEffectsManager {
         const existed = await this._get(id)
         if (!existed) return false
         await this._remove(id)
-        this._unregisterFromRuntime(id)
+        await this._unregisterFromRuntime(id)
         this._loadedIds.delete(id)
         this._emitChange()
         return true
@@ -446,7 +711,7 @@ class UserEffectsManager {
 // don't pay the ~100KB cost if the user never opens the importer.
 let _jszipPromise = null
 function loadJSZip() {
-    if (typeof window !== 'undefined' && window.JSZip) return Promise.resolve(window.JSZip)
+    if (typeof globalThis !== 'undefined' && globalThis.JSZip) return Promise.resolve(globalThis.JSZip)
     if (_jszipPromise) return _jszipPromise
     _jszipPromise = new Promise((resolve, reject) => {
         const script = document.createElement('script')
@@ -467,4 +732,14 @@ export function getUserEffectsManager() {
     return _manager
 }
 
-export { USER_NAMESPACE }
+export {
+    UserEffectsManager,
+    USER_NAMESPACE,
+    DB_NAME,
+    DB_VERSION,
+    EFFECTS_STORE,
+    MAX_PACKAGE_SIZE,
+    MAX_TOTAL_UNCOMPRESSED_SIZE,
+    MAX_FILE_SIZE,
+}
+

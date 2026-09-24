@@ -309,4 +309,95 @@ test.describe('user effects', () => {
         // ?code= cleared from URL after the loader finished.
         expect(new URL(page.url()).searchParams.has('code')).toBe(false)
     })
+
+    test('quota exceeded error displays actionable guidance in status message', async ({ page }) => {
+        test.slow()
+        await page.goto('/')
+        await page.click('#boot-start')
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.click('#settings-toggle')
+
+        // Simulate persistent quota exhaustion in userEffects manager
+        await page.evaluate(async () => {
+            const { getUserEffectsManager } = await import('./js/userEffects.js')
+            const mgr = getUserEffectsManager()
+            mgr._put = async () => {
+                const err = new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+                throw err
+            }
+        })
+
+        await importFixture(page, makeFixture('quotaBomb'))
+
+        const statusLocator = page.locator('#user-effect-status')
+        await expect(statusLocator).toBeVisible({ timeout: REGISTER_TIMEOUT })
+        await expect(statusLocator).toHaveAttribute('data-kind', 'error')
+        await expect(statusLocator).toContainText('storage quota exceeded — delete unused user effects or free disk space')
+    })
+
+    test('quota recovery clears thumbnail cache and succeeds', async ({ page }) => {
+        test.slow()
+        await page.goto('/')
+        await page.click('#boot-start')
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.click('#settings-toggle')
+
+        // Populate thumbnail cache first
+        await page.evaluate(async () => {
+            const { putCachedThumb } = await import('./js/thumbnailCache.js')
+            await putCachedThumb('test-hash-key', new Blob(['fake-thumb-webp'], { type: 'image/webp' }))
+        })
+
+        // Simulate first _put failing with QuotaExceededError, second succeeding
+        await page.evaluate(async () => {
+            const { getUserEffectsManager } = await import('./js/userEffects.js')
+            const mgr = getUserEffectsManager()
+            const realPut = mgr._put.bind(mgr)
+            let attempts = 0
+            mgr._put = async (rec) => {
+                attempts++
+                if (attempts === 1) {
+                    throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+                }
+                return realPut(rec)
+            }
+        })
+
+        await importFixture(page, makeFixture('recoveredFx'))
+
+        // The effect succeeds
+        await expect(page.locator('.user-effect-row[data-id="user/recoveredFx"]')).toBeVisible({ timeout: REGISTER_TIMEOUT })
+        await expect(page.locator('#user-effect-status')).toContainText('installed user/recoveredFx')
+
+        // Verify thumbnail cache was evicted to free quota
+        const cachedThumb = await page.evaluate(async () => {
+            const { getCachedThumb } = await import('./js/thumbnailCache.js')
+            return await getCachedThumb('test-hash-key')
+        })
+        expect(cachedThumb).toBeNull()
+    })
+
+    test('oversized zip package rejected with size limit error', async ({ page }) => {
+        test.slow()
+        await page.goto('/')
+        await page.click('#boot-start')
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.click('#settings-toggle')
+
+        // Trigger file change with a mock file with size > 30MB
+        await page.evaluate(() => {
+            const input = document.getElementById('user-effect-file')
+            const file = new File(['small content'], 'giantEffect.zip', { type: 'application/zip' })
+            Object.defineProperty(file, 'size', { value: 35 * 1024 * 1024 })
+            const dt = new DataTransfer()
+            dt.items.add(file)
+            input.files = dt.files
+            input.dispatchEvent(new Event('change', { bubbles: true }))
+        })
+
+        const statusLocator = page.locator('#user-effect-status')
+        await expect(statusLocator).toBeVisible({ timeout: REGISTER_TIMEOUT })
+        await expect(statusLocator).toHaveAttribute('data-kind', 'error')
+        await expect(statusLocator).toContainText('package exceeds maximum size limit (30MB)')
+    })
 })
