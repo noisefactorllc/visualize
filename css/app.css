@@ -156,6 +156,22 @@ select:focus-visible,
 }
 .vz-tempo .tempo-bar__bpm { font-size: var(--hf-size-sm); }
 .vz-tempo .tempo-bar__label { font-size: var(--hf-size-xs); }
+.vz-tempo .tempo-bar__tap {
+    position: relative;
+    min-width: 44px;
+    min-height: 44px;
+}
+.vz-tempo .tempo-bar__tap::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
+}
 
 /* MIDI-clock sync tint: when following incoming MIDI clock the BPM field +
    bpm label glow accent (app.js toggles .midi-sync on the tempo-bar). */
@@ -214,13 +230,25 @@ select:focus-visible,
 .status-pill[data-state="on"] .status-icon { color: var(--hf-green); }
 .status-pill[data-state="warn"] { color: var(--hf-red); border-color: color-mix(in srgb, var(--hf-red) 50%, transparent); }
 
-/* Audio/MIDI pills double as click-to-toggle buttons. */
+/* Audio/MIDI pills double as click-to-toggle buttons. Touch target enlarged to 44x44px. */
 button.status-pill {
     appearance: none;
     cursor: pointer;
     font: inherit;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
+    position: relative;
+}
+button.status-pill::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 button.status-pill:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
 button.status-pill:hover .status-icon { color: var(--hf-text-bright); }
@@ -715,7 +743,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .deck-head-actions {
     display: flex;
     align-items: center;
-    gap: var(--hf-space-1);
+    gap: var(--hf-space-2);
     justify-content: flex-end;
 }
 
@@ -745,6 +773,22 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-size: var(--hf-size-base);
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
+    position: relative;
+}
+.deck-load-random::after,
+.deck-edit-toggle::after,
+.deck-rebind-eq::after,
+.deck-rebind-midi::after,
+.deck-bandpass::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 .deck-load-random:hover,
 .deck-edit-toggle:hover,
@@ -1316,6 +1360,10 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-sm);
     padding: 6px 4px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     font-weight: var(--hf-weight-medium);
@@ -1773,11 +1821,28 @@ input[type="range"]:not(.slider):active::-moz-range-thumb {
     color: var(--hf-text-normal);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-sm);
-    padding: var(--hf-space-1) var(--hf-space-3);
+    padding: 0 var(--hf-space-3);
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     cursor: pointer;
     transition: var(--hf-transition-color), var(--hf-transition-border);
+    position: relative;
+}
+.quick-cut::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 
 .quick-cut:hover { border-color: var(--hf-accent); color: var(--hf-text-bright); }
@@ -2197,7 +2262,11 @@ kbd {
 }
 
 .scene-row .sr-meta { color: var(--hf-text-dim); font-size: var(--hf-size-xs); }
-.scene-row .sr-actions { display: flex; gap: var(--hf-space-1); }
+.scene-row .sr-actions {
+    display: flex;
+    gap: var(--hf-space-2);
+    align-items: center;
+}
 
 .scene-row .sr-actions button {
     appearance: none;
@@ -2209,11 +2278,26 @@ kbd {
     font-size: var(--hf-size-xs);
     font-family: inherit;
     cursor: pointer;
+    position: relative;
+}
+.scene-row .sr-actions button::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 44px;
+    min-height: 44px;
+    width: 100%;
+    height: 100%;
 }
 
 .scene-row .sr-actions button:hover { color: var(--hf-text-normal); border-color: var(--hf-border-hover); }
 .scene-row .sr-rename-save:hover { color: var(--hf-green); border-color: var(--hf-green); }
 .scene-row .sr-rename-cancel:hover { color: var(--hf-text-normal); border-color: var(--hf-border-hover); }
+.scene-row .sr-delete {
+    margin-left: var(--hf-space-2);
+}
 .scene-row .sr-delete:hover { color: var(--hf-red); border-color: var(--hf-red); }
 
 .scenes-empty {
