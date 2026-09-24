@@ -517,6 +517,11 @@ export class SyncOutputController {
             this._clearTimeout(resources.retryTimer)
             resources.retryTimer = null
         }
+        if (resources?.retryReject) {
+            const reject = resources.retryReject
+            resources.retryReject = null
+            reject(lifecycleError())
+        }
 
         const queue = resources?.queue
         if (resources) resources.queue = null
@@ -747,14 +752,20 @@ export class SyncOutputController {
                     break
                 } catch (error) {
                     if (resources.queue && typeof resources.queue.close === 'function') {
-                        try { resources.queue.close() } catch {}
+                        try {
+                            resources.queue.close()
+                        } catch {
+                            // Retry cleanup is best effort.
+                        }
                         resources.queue = null
                     }
                     if (error?.code !== 'SYNC_LIFECYCLE' && !this._disposed && attempt < maxAttempts && isRetryableRecoveryError(error)) {
                         const delay = RECOVERY_DELAYS_MS[attempt - 1] ?? 1000
-                        await new Promise(resolve => {
+                        await new Promise((resolve, reject) => {
+                            resources.retryReject = reject
                             resources.retryTimer = this._setTimeout(() => {
                                 resources.retryTimer = null
+                                resources.retryReject = null
                                 resolve()
                             }, delay)
                         })
