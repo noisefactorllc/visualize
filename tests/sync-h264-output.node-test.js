@@ -267,3 +267,41 @@ test('diagnostic frame drop warning is non-blocking even if logger throws', {
     }
 })
 
+test('defers renderer draws while three submitted frames await the encoder', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const held = []
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        postMessage(message) {
+            if (message.type === 'frame') held.push({ worker: this, timestamp: message.frame.timestamp })
+            else super.postMessage(message)
+        }
+    }
+    const transport = transportFixture()
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Backlog', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    const now = performance.now()
+    assert.equal(sender.deferRender(), false)
+    sender.submit(1, now)
+    sender.submit(2, now + 16.67)
+    assert.equal(sender.deferRender(), false)
+    sender.submit(3, now + 33.33)
+    assert.equal(sender.deferRender(), true)
+    const { worker, timestamp } = held.shift()
+    worker.onmessage({ data: { type: 'encoded', timestamp, payload: new Uint8Array([0, 0, 0, 1]).buffer } })
+    assert.equal(sender.deferRender(), false)
+    sender.close()
+    assert.equal(sender.deferRender(), false)
+    for (const frame of held) {
+        frame.worker.onmessage({ data: { type: 'encoded', timestamp: frame.timestamp,
+            payload: new Uint8Array([0, 0, 0, 1]).buffer } })
+    }
+    await sender.closed
+})
+
+

@@ -161,6 +161,9 @@ function createConfiguredSink(sender, onConfigured) {
         submit(texture, timestamp) {
             return sender.submit(texture, timestamp)
         },
+        deferRender() {
+            return typeof sender.deferRender === 'function' && sender.deferRender() === true
+        },
         close(options) {
             return sender.close(options)
         }

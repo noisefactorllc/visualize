@@ -879,3 +879,26 @@ test('SyncOutputController accepts and retains injected logger', () => {
     })
     assert.equal(customController._logger, customLogger)
 })
+
+test('passes the sender backlog signal through the renderer sink', async () => {
+    const fixture = createFixture()
+    let backlog = false
+    fixture.sender.deferRender = () => backlog
+    const canvas = { width: 1280, height: 720 }
+    const controller = new syncOutput.SyncOutputController({
+        renderer: fixture.renderer,
+        getCanvas: () => canvas,
+        connectionProvider: fixture.connectionProvider
+    })
+
+    await controller.connect()
+    await controller.start('Visualize Backlog')
+
+    assert.equal(fixture.attachedSink.deferRender(), false)
+    backlog = true
+    assert.equal(fixture.attachedSink.deferRender(), true)
+    delete fixture.sender.deferRender
+    assert.equal(fixture.attachedSink.deferRender(), false)
+    await controller.stop()
+})
+

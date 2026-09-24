@@ -5,6 +5,8 @@ const MAX_ACCESS_UNIT_BYTES = 8 * 1024 * 1024
 const PACING_DELAY_MS = 60
 const MIN_WRITE_GAP_MS = 16
 export const MAX_PENDING_FRAMES = 12
+// Skip renderer draws while this many submitted frames await the encoder.
+const ENCODE_BACKLOG_DEFER_FRAMES = 3
 export const WARN_THROTTLE_MS = 1000
 const ENCODE_TIMEOUT_MS = 2000
 
@@ -202,6 +204,20 @@ export class SyncH264CanvasSender {
             this._fail(outputError('SYNC_RENDERER_REPLACED',
                 'Output resolution changed; start Sync output again'))
         }
+    }
+
+    /**
+     * Ask the renderer to skip its next draw while the encoder has a backlog.
+     * When the OS caps the GPU clock, new render work otherwise keeps GPU
+     * priority and starves the encoder's input until output collapses.
+     */
+    deferRender() {
+        if (this._closed || this._closing) return false
+        let unencoded = 0
+        for (const pending of this._pending.values()) {
+            if (pending.frame === null && ++unencoded >= ENCODE_BACKLOG_DEFER_FRAMES) return true
+        }
+        return false
     }
 
     submit(_texture, timestamp) {
