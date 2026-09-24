@@ -513,6 +513,11 @@ export class SyncOutputController {
             // Continue releasing an unowned export queue.
         }
 
+        if (resources?.retryTimer) {
+            this._clearTimeout(resources.retryTimer)
+            resources.retryTimer = null
+        }
+
         const queue = resources?.queue
         if (resources) resources.queue = null
         try { queue?.close() } catch {
@@ -745,9 +750,14 @@ export class SyncOutputController {
                         try { resources.queue.close() } catch {}
                         resources.queue = null
                     }
-                    if (attempt < maxAttempts && isRetryableRecoveryError(error)) {
+                    if (error?.code !== 'SYNC_LIFECYCLE' && !this._disposed && attempt < maxAttempts && isRetryableRecoveryError(error)) {
                         const delay = RECOVERY_DELAYS_MS[attempt - 1] ?? 1000
-                        await new Promise(resolve => this._setTimeout(resolve, delay))
+                        await new Promise(resolve => {
+                            resources.retryTimer = this._setTimeout(() => {
+                                resources.retryTimer = null
+                                resolve()
+                            }, delay)
+                        })
                         continue
                     }
                     throw error
