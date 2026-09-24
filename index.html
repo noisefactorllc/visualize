@@ -546,8 +546,8 @@
                 </div>
                 <div class="midi-learn-list" id="midi-learn-list">
                     <h4>learn assignments</h4>
-                    <div class="midi-learn-rows" id="midi-learn-rows"></div>
-                    <button id="midi-learn-clear" class="ghost-button">clear all</button>
+                    <div class="midi-learn-rows" id="midi-learn-rows" role="list" aria-label="MIDI learn assignments"></div>
+                    <button id="midi-learn-clear" class="ghost-button" aria-label="Clear all MIDI learn assignments">clear all</button>
                 </div>
             </section>
 
@@ -579,10 +579,10 @@
                 <h3>user effects</h3>
                 <div class="settings-row user-effects-import-row">
                     <input type="file" id="user-effect-file" accept=".zip" hidden>
-                    <button id="user-effect-import" class="ghost-button">import .zip</button>
-                    <span id="user-effect-status" class="settings-hint">drop a portable effect zip to add custom shaders</span>
+                    <button id="user-effect-import" class="ghost-button" aria-label="Import custom effect (.zip)" title="Import custom effect (.zip)">import .zip</button>
+                    <span id="user-effect-status" class="settings-hint" role="status" aria-live="polite">drop a portable effect zip to add custom shaders</span>
                 </div>
-                <div id="user-effect-list" class="user-effect-list" aria-live="polite"></div>
+                <div id="user-effect-list" class="user-effects-list" role="list" aria-label="Installed user effects" aria-live="polite"></div>
                 <p class="settings-hint">
                     Upload a shader ZIP created with <a href="https://github.com/noisefactorllc/portable" target="_blank" rel="noopener">Portable</a>, <a href="https://foundry.noisedeck.app/" target="_blank" rel="noopener">Foundry</a>, or <a href="https://shade.noisedeck.app/" target="_blank" rel="noopener">Shade</a>
                 </p>

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
     isDrawerOpen,
+    isDialogOpen,
     handleEscapeKey,
     lockFullscreenEscape,
     unlockFullscreenEscape
@@ -257,4 +258,118 @@ test('lockFullscreenEscape and unlockFullscreenEscape: controls navigator keyboa
     await assert.doesNotReject(async () => {
         await lockFullscreenEscape(rejectingNav)
     })
+})
+
+test('isDialogOpen: accurately detects dialog state', () => {
+    assert.equal(isDialogOpen(null), false)
+    assert.equal(isDialogOpen(undefined), false)
+    assert.equal(isDialogOpen({}), false)
+
+    // DOM open property
+    assert.equal(isDialogOpen({ open: false }), false)
+    assert.equal(isDialogOpen({ open: true }), true)
+
+    // DOM hasAttribute('open')
+    assert.equal(isDialogOpen({ hasAttribute: attr => attr === 'open' }), true)
+    assert.equal(isDialogOpen({ hasAttribute: () => false }), false)
+
+    // Custom component with isOpen()
+    assert.equal(isDialogOpen({ isOpen: () => true }), true)
+    assert.equal(isDialogOpen({ isOpen: () => false }), false)
+
+    // Query function
+    assert.equal(isDialogOpen(() => true), true)
+    assert.equal(isDialogOpen(() => false), false)
+})
+
+test('handleEscapeKey: Dialog open dismisses dialog without exiting fullscreen', () => {
+    let dialogClosed = false
+    let fullscreenExited = false
+    const event = createMockEvent()
+
+    const action = handleEscapeKey({
+        dialog: () => true,
+        closeDialog: () => { dialogClosed = true },
+        isFullscreen: true,
+        exitFullscreen: () => { fullscreenExited = true },
+        event
+    })
+
+    assert.equal(action, 'dialog')
+    assert.equal(dialogClosed, true)
+    assert.equal(fullscreenExited, false, 'Fullscreen must NOT exit when dialog is dismissed')
+    assert.equal(event.defaultPrevented, true)
+    assert.equal(event.propagationStopped, true)
+})
+
+test('handleEscapeKey: Dialog has dismissal priority over settings and scenes drawers', () => {
+    let dialogOpen = true
+    let dialogClosed = false
+    const settingsDrawer = createMockDrawer(true)
+    const scenesDrawer = createMockDrawer(true)
+    let settingsClosed = false
+    let scenesClosed = false
+    let fullscreenExited = false
+
+    // 1st press: Dialog dismissed
+    const act1 = handleEscapeKey({
+        dialog: () => dialogOpen,
+        closeDialog: () => { dialogClosed = true; dialogOpen = false },
+        settingsDrawer,
+        closeSettings: () => { settingsClosed = true; settingsDrawer.setAttribute('aria-hidden', 'true') },
+        scenesDrawer,
+        closeScenesDrawer: () => { scenesClosed = true; scenesDrawer.setAttribute('aria-hidden', 'true') },
+        isFullscreen: true,
+        exitFullscreen: () => { fullscreenExited = true }
+    })
+    assert.equal(act1, 'dialog')
+    assert.equal(dialogClosed, true)
+    assert.equal(settingsClosed, false)
+    assert.equal(scenesClosed, false)
+    assert.equal(fullscreenExited, false)
+
+    // 2nd press: Settings drawer dismissed
+    const act2 = handleEscapeKey({
+        dialog: () => dialogOpen,
+        closeDialog: () => { dialogClosed = true },
+        settingsDrawer,
+        closeSettings: () => { settingsClosed = true; settingsDrawer.setAttribute('aria-hidden', 'true') },
+        scenesDrawer,
+        closeScenesDrawer: () => { scenesClosed = true; scenesDrawer.setAttribute('aria-hidden', 'true') },
+        isFullscreen: true,
+        exitFullscreen: () => { fullscreenExited = true }
+    })
+    assert.equal(act2, 'settings')
+    assert.equal(settingsClosed, true)
+    assert.equal(scenesClosed, false)
+    assert.equal(fullscreenExited, false)
+
+    // 3rd press: Scenes drawer dismissed
+    const act3 = handleEscapeKey({
+        dialog: () => dialogOpen,
+        closeDialog: () => { dialogClosed = true },
+        settingsDrawer,
+        closeSettings: () => { settingsClosed = true },
+        scenesDrawer,
+        closeScenesDrawer: () => { scenesClosed = true; scenesDrawer.setAttribute('aria-hidden', 'true') },
+        isFullscreen: true,
+        exitFullscreen: () => { fullscreenExited = true }
+    })
+    assert.equal(act3, 'scenes')
+    assert.equal(scenesClosed, true)
+    assert.equal(fullscreenExited, false)
+
+    // 4th press: Fullscreen exited
+    const act4 = handleEscapeKey({
+        dialog: () => dialogOpen,
+        closeDialog: () => { dialogClosed = true },
+        settingsDrawer,
+        closeSettings: () => { settingsClosed = true },
+        scenesDrawer,
+        closeScenesDrawer: () => { scenesClosed = true },
+        isFullscreen: true,
+        exitFullscreen: () => { fullscreenExited = true }
+    })
+    assert.equal(act4, 'fullscreen')
+    assert.equal(fullscreenExited, true)
 })

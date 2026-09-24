@@ -2369,6 +2369,15 @@ async function boot() {
             }
             case 'escape':
                 handleEscapeKey({
+                    dialog: () => !!document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]:not([aria-hidden="true"])'),
+                    closeDialog: () => {
+                        const openDialog = document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]:not([aria-hidden="true"])')
+                        if (openDialog && typeof openDialog.close === 'function') {
+                            openDialog.close()
+                        } else if (openDialog) {
+                            openDialog.setAttribute('aria-hidden', 'true')
+                        }
+                    },
                     settingsDrawer: drawer,
                     closeSettings: () => closeSettings({ restoreFocus: true }),
                     scenesDrawer,
@@ -2514,12 +2523,19 @@ function setupUserEffectsPanel(userEffects, renderer) {
     const listEl = $('user-effect-list')
     if (!importBtn || !fileInput || !listEl) return
 
+    listEl.setAttribute('role', 'list')
+    if (!listEl.getAttribute('aria-label')) {
+        listEl.setAttribute('aria-label', 'Installed user effects')
+    }
+
     const setStatus = (msg, kind = 'info') => {
         if (!statusEl) return
         statusEl.textContent = msg
         statusEl.dataset.kind = kind
     }
 
+    importBtn.setAttribute('aria-label', 'Import custom effect (.zip)')
+    importBtn.setAttribute('title', 'Import custom effect (.zip)')
     importBtn.addEventListener('click', () => fileInput.click())
 
     fileInput.addEventListener('change', async () => {
@@ -2551,6 +2567,7 @@ function setupUserEffectsPanel(userEffects, renderer) {
             const row = document.createElement('div')
             row.className = 'user-effect-row'
             row.dataset.id = eff.id
+            row.setAttribute('role', 'listitem')
 
             const label = document.createElement('span')
             label.className = 'user-effect-name'
@@ -2566,6 +2583,8 @@ function setupUserEffectsPanel(userEffects, renderer) {
             const del = document.createElement('button')
             del.className = 'ghost-button user-effect-delete'
             del.textContent = 'delete'
+            del.setAttribute('aria-label', `Delete custom effect ${eff.id}`)
+            del.setAttribute('title', `Delete ${eff.id}`)
             del.addEventListener('click', async () => {
                 if (!confirm(`Delete ${eff.id}? Programs that reference it will fail to compile until reinstall.`)) return
                 try {
@@ -2599,12 +2618,17 @@ function registerMidiControls(midi, controls) {
 function renderLearnRows(rows, midi) {
     const container = $('midi-learn-rows')
     if (!container) return
+    container.setAttribute('role', 'list')
+    if (!container.getAttribute('aria-label')) {
+        container.setAttribute('aria-label', 'MIDI learn assignments')
+    }
     container.innerHTML = ''
     renderLearnRows._bars = new Map()   // controlId -> { fill, row }
 
     for (const row of rows) {
         const div = document.createElement('div')
         div.className = 'midi-learn-row'
+        div.setAttribute('role', 'listitem')
         if (row.learning) div.classList.add('learning')
         if (row.conflict) div.classList.add('conflict')
 
@@ -2629,7 +2653,7 @@ function renderLearnRows(rows, midi) {
         const binding = document.createElement('span')
         binding.className = 'ml-cc'
         binding.textContent = bindingText
-        if (row.cc == null && row.note == null) binding.style.opacity = '0.5'
+        if (row.cc == null && row.note == null) binding.classList.add('unassigned')
 
         // Live value bar
         const barCell = document.createElement('span')
@@ -2658,27 +2682,36 @@ function renderLearnRows(rows, midi) {
         actions.className = 'ml-actions'
         if (row.learning) {
             const cancel = document.createElement('button')
+            cancel.className = 'ml-btn-cancel'
             cancel.textContent = '✕'
+            cancel.setAttribute('aria-label', `Cancel learn ${row.label}`)
             setTooltip(cancel, 'cancel learn')
             cancel.addEventListener('click', () => midi.cancelLearn())
             actions.appendChild(cancel)
         } else {
             const learn = document.createElement('button')
-            learn.textContent = (row.cc != null || row.note != null) ? '↻' : '◉'
-            setTooltip(learn, (row.cc != null || row.note != null) ? 'relearn' : 'learn')
+            learn.className = 'ml-btn-learn'
+            const isAssigned = row.cc != null || row.note != null
+            learn.textContent = isAssigned ? '↻' : '◉'
+            learn.setAttribute('aria-label', isAssigned ? `Relearn MIDI binding for ${row.label}` : `Learn MIDI binding for ${row.label}`)
+            setTooltip(learn, isAssigned ? 'relearn' : 'learn')
             learn.addEventListener('click', () => midi.startLearn(row.controlId))
             actions.appendChild(learn)
-            if (row.cc != null || row.note != null) {
+            if (isAssigned) {
                 // Edit (range/invert) — only meaningful for CC bindings
                 if (row.kind === 'cc') {
                     const edit = document.createElement('button')
+                    edit.className = 'ml-btn-edit'
                     edit.textContent = '⋯'
+                    edit.setAttribute('aria-label', `Edit range and invert for ${row.label}`)
                     setTooltip(edit, 'edit range / invert')
                     edit.addEventListener('click', () => div.classList.toggle('editing'))
                     actions.appendChild(edit)
                 }
                 const clear = document.createElement('button')
+                clear.className = 'ml-btn-unlearn'
                 clear.textContent = '✕'
+                clear.setAttribute('aria-label', `Clear MIDI assignment for ${row.label}`)
                 setTooltip(clear, 'clear')
                 clear.addEventListener('click', () => midi.clearAssignment(row.controlId))
                 actions.appendChild(clear)

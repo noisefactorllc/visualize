@@ -29,9 +29,25 @@ export function isDrawerOpen(el) {
 }
 
 /**
+ * Checks whether a dialog or modal element is currently open.
+ *
+ * @param {Element|Function|{open?: boolean, isOpen?: Function}} el
+ * @returns {boolean}
+ */
+export function isDialogOpen(el) {
+    if (!el) return false
+    if (typeof el === 'function') return Boolean(el())
+    if (typeof el.isOpen === 'function') return Boolean(el.isOpen())
+    if (typeof el.hasAttribute === 'function' && el.hasAttribute('open')) return true
+    return Boolean(el.open)
+}
+
+/**
  * Handles Escape key events according to strict priority order.
  *
  * @param {Object} options
+ * @param {Element|Function|{open?: boolean, isOpen?: Function}} [options.dialog]
+ * @param {Function} [options.closeDialog]
  * @param {Element|{getAttribute?: Function, isOpen?: Function}} [options.settingsDrawer]
  * @param {Function} [options.closeSettings]
  * @param {Element|{getAttribute?: Function, isOpen?: Function}} [options.scenesDrawer]
@@ -39,9 +55,11 @@ export function isDrawerOpen(el) {
  * @param {boolean} [options.isFullscreen=false]
  * @param {Function} [options.exitFullscreen]
  * @param {KeyboardEvent|{preventDefault?: Function, stopPropagation?: Function}} [options.event]
- * @returns {'settings'|'scenes'|'fullscreen'|null}
+ * @returns {'dialog'|'settings'|'scenes'|'fullscreen'|null}
  */
 export function handleEscapeKey({
+    dialog,
+    closeDialog,
     settingsDrawer,
     closeSettings,
     scenesDrawer,
@@ -50,7 +68,15 @@ export function handleEscapeKey({
     exitFullscreen,
     event,
 } = {}) {
-    // 1. Settings drawer has dismissal priority if open
+    // 1. Open dialog/modal has top dismissal priority
+    if (isDialogOpen(dialog)) {
+        event?.preventDefault?.()
+        event?.stopPropagation?.()
+        closeDialog?.()
+        return 'dialog'
+    }
+
+    // 2. Settings drawer has dismissal priority if open
     if (isDrawerOpen(settingsDrawer)) {
         event?.preventDefault?.()
         event?.stopPropagation?.()
@@ -58,7 +84,7 @@ export function handleEscapeKey({
         return 'settings'
     }
 
-    // 2. Scenes drawer has dismissal priority if open
+    // 3. Scenes drawer has dismissal priority if open
     if (isDrawerOpen(scenesDrawer)) {
         event?.preventDefault?.()
         event?.stopPropagation?.()
@@ -66,7 +92,7 @@ export function handleEscapeKey({
         return 'scenes'
     }
 
-    // 3. Fullscreen exit only fires when no drawer is open
+    // 4. Fullscreen exit only fires when no drawer or dialog is open
     if (isFullscreen) {
         event?.preventDefault?.()
         event?.stopPropagation?.()
