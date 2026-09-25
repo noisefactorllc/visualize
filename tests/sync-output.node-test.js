@@ -138,6 +138,7 @@ async function connectedRecoveryFixture({
     initial = senderFixture(),
     providerIds = ['syphon'],
     recoveryClients = [],
+    random = () => 0,
     timers = manualTimers()
 } = {}) {
     const stableRenderer = renderer || {
@@ -160,6 +161,7 @@ async function connectedRecoveryFixture({
     ]
     const calls = []
     const controller = new syncOutput.SyncOutputController({
+        random,
         renderer: stableRenderer,
         getCanvas: () => canvas,
         connectionProvider: {
@@ -272,7 +274,7 @@ test('publishes the Visualize mixer renderer through a bounded Sync sender sink'
     assert.equal(typeof syncOutput.SyncOutputController, 'function')
     const fixture = createFixture()
     const canvas = { width: 1280, height: 720 }
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: fixture.renderer,
         getCanvas: () => canvas,
         connectionProvider: fixture.connectionProvider,
@@ -337,7 +339,7 @@ test('publishes the Visualize mixer renderer through a bounded Sync sender sink'
 test('rejects an invalid Sync sender name before allocating renderer resources', async () => {
     assert.equal(typeof syncOutput.SyncOutputController, 'function')
     const fixture = createFixture()
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: fixture.renderer,
         getCanvas: () => ({ width: 1280, height: 720 }),
         connectionProvider: fixture.connectionProvider
@@ -381,7 +383,7 @@ test('connects when the operator acts as passive discovery becomes ready', async
             close() { events.push('client close') }
         }
     ]
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         connectionProvider: { createClient: () => clients.shift() }
     })
     let connectPromise
@@ -402,7 +404,7 @@ test('dispose closes an in-flight pairing client and prevents a late token from 
     const pendingPair = deferred()
     let pairingCloses = 0
     let authenticatedCreations = 0
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         connectionProvider: {
             createClient(options) {
                 if (Object.hasOwn(options, 'token')) {
@@ -432,7 +434,7 @@ test('dispose closes an in-flight pairing client and prevents a late token from 
 test('immediate dispose closes synchronously tracked client without yielding microtasks', async () => {
     const pendingPair = deferred()
     let pairingCloses = 0
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         connectionProvider: {
             createClient() {
                 return {
@@ -464,7 +466,7 @@ test('dispose closes an in-flight authenticated client and ignores its late welc
             close() { authenticatedCloses++ }
         }
     ]
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         connectionProvider: { createClient: () => clients.shift() }
     })
 
@@ -507,7 +509,7 @@ test('dispose releases a pending start queue and closes the late sender exactly 
             close() { clientCloses++ }
         }
     ]
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: {
             pipeline: {},
             createFrameExportQueue: () => ({ close() { queueCloses++ } }),
@@ -537,7 +539,7 @@ test('dispose releases a pending start queue and closes the late sender exactly 
 test('dispose tears down a live sender once and is idempotent', async () => {
     const fixture = createFixture()
     const canvas = { width: 1280, height: 720 }
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: fixture.renderer,
         getCanvas: () => canvas,
         connectionProvider: fixture.connectionProvider
@@ -857,7 +859,7 @@ test('video reuses the current audio credential without pairing and preserves ne
     }
     const options = []
     const pending = deferred()
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         connectionProvider: {
             credentialStore: store,
             createClient(value) {
@@ -890,14 +892,14 @@ test('blocked iframe explains delegation while a live or recovering output remai
 
 test('SyncOutputController accepts and retains injected logger', () => {
     const customLogger = { warn() {}, error() {}, info() {} }
-    const defaultController = new syncOutput.SyncOutputController({
+    const defaultController = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: {},
         getCanvas: () => ({}),
         connectionProvider: { createClient: () => ({}) }
     })
     assert.equal(defaultController._logger, globalThis.console)
 
-    const customController = new syncOutput.SyncOutputController({
+    const customController = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: {},
         getCanvas: () => ({}),
         connectionProvider: { createClient: () => ({}) },
@@ -911,7 +913,7 @@ test('passes the sender backlog signal through the renderer sink', async () => {
     let backlog = false
     fixture.sender.deferRender = () => backlog
     const canvas = { width: 1280, height: 720 }
-    const controller = new syncOutput.SyncOutputController({
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
         renderer: fixture.renderer,
         getCanvas: () => canvas,
         connectionProvider: fixture.connectionProvider
@@ -959,7 +961,7 @@ test('SyncOutputController forwards injected logger to SyncH264CanvasSender.crea
                 close() {}
             }
         ]
-        const controller = new syncOutput.SyncOutputController({
+        const controller = new syncOutput.SyncOutputController({ random: () => 0,
             renderer: fixture.renderer,
             getCanvas: () => canvas,
             connectionProvider: { createClient: () => clients[clientIndex++] },
@@ -1036,7 +1038,7 @@ test('a transient encoder warmup timeout during start retries and succeeds', asy
             }
         ]
         const canvas = { width: 1280, height: 720 }
-        const controller = new syncOutput.SyncOutputController({
+        const controller = new syncOutput.SyncOutputController({ random: () => 0,
             renderer: { pipeline: {}, addSink: () => () => sender.sender.close() },
             getCanvas: () => canvas,
             connectionProvider: { createClient: () => clients[clientIndex++] },
@@ -1099,7 +1101,7 @@ test('a persistent encoder warmup timeout during start fails after exhausting re
             }
         ]
         const canvas = { width: 1280, height: 720 }
-        const controller = new syncOutput.SyncOutputController({
+        const controller = new syncOutput.SyncOutputController({ random: () => 0,
             renderer: { pipeline: {}, addSink: () => () => {} },
             getCanvas: () => canvas,
             connectionProvider: { createClient: () => clients[clientIndex++] },
@@ -1169,7 +1171,7 @@ test('dispose during start retry cancels the retry timer and rejects with SYNC_L
             }
         ]
         const canvas = { width: 1280, height: 720 }
-        const controller = new syncOutput.SyncOutputController({
+        const controller = new syncOutput.SyncOutputController({ random: () => 0,
             renderer: { pipeline: {}, addSink: () => () => {} },
             getCanvas: () => canvas,
             connectionProvider: { createClient: () => clients[clientIndex++] },
@@ -1262,4 +1264,73 @@ test('initializes a fresh singleton when the previous instance has been disposed
     assert.notEqual(first, second)
     assert.equal(syncOutput.getSyncOutputController(), second)
     assert.equal(second.state.status, 'idle')
+})
+
+test('applyBackoffJitter keeps the exact base delay with a zero random source', () => {
+    for (const base of [250, 1000, 4000, 10_000]) {
+        assert.equal(syncOutput.applyBackoffJitter(base, () => 0), base)
+    }
+})
+
+test('applyBackoffJitter stays within +25% of the base delay', () => {
+    for (const base of [250, 1000, 4000, 10_000]) {
+        for (const sample of [0, 0.5, 0.999]) {
+            const delay = syncOutput.applyBackoffJitter(base, () => sample)
+            const spread = Math.round(base * 0.25)
+            assert.ok(delay >= base && delay <= base + spread,
+                `${delay} expected within [${base}, ${base + spread}]`)
+        }
+    }
+})
+
+test('applyBackoffJitter never shortens the base delay across a random sweep', () => {
+    let previous = 0
+    let sawVariation = false
+    for (let index = 0; index <= 10; index++) {
+        const delay = syncOutput.applyBackoffJitter(1000, () => index / 10)
+        assert.ok(delay >= 1000 && delay <= 1250)
+        if (previous && delay !== previous) sawVariation = true
+        previous = delay
+    }
+    assert.equal(sawVariation, true)
+})
+
+test('applyBackoffJitter guards against invalid delays and random sources', () => {
+    assert.equal(syncOutput.applyBackoffJitter(0, () => 0.9), 0)
+    assert.equal(syncOutput.applyBackoffJitter(-5, () => 0.9), 0)
+    assert.equal(syncOutput.applyBackoffJitter(Number.NaN, () => 0.9), 0)
+    // A non-function random source falls back to zero jitter.
+    assert.equal(syncOutput.applyBackoffJitter(1000, null), 1000)
+    assert.equal(syncOutput.applyBackoffJitter(1000, () => Number.NaN), 1000)
+})
+
+test('recovery backoff timers carry jitter while remaining within the ramp bounds', async () => {
+    const replacement = senderFixture()
+    const timers = manualTimers()
+    const fixture = await connectedRecoveryFixture({
+        random: () => 1,
+        timers,
+        recoveryClients: [
+            recoveryProbe({ available: false, code: 'SYNC_UNAVAILABLE' }),
+            recoveryConnection({ sender: replacement.sender })
+        ]
+    })
+
+    fixture.initial.completion.reject(senderLoss(1006))
+    await flushMicrotasks()
+    const scheduled = [...timers.timeouts.values()].map((timer) => timer.delay)
+    assert.equal(scheduled.length, 1)
+    const spread = Math.round(250 * 0.25)
+    assert.ok(scheduled[0] > 250 && scheduled[0] <= 250 + spread,
+        `jittered delay ${scheduled[0]} expected in (250, ${250 + spread}]`)
+    // The probe fails, so the next recovery attempt schedules again with the
+    // same deterministic random source above the base 1000ms ramp delay.
+    timers.fireTimeout(scheduled[0])
+    await flushMicrotasks(12)
+    assert.equal(fixture.controller.state.status, 'recovering')
+    const next = [...timers.timeouts.values()].map((timer) => timer.delay)
+    assert.equal(next.length, 1)
+    assert.ok(next[0] > 1000 && next[0] <= 1250,
+        `jittered delay ${next[0]} expected in (1000, 1250]`)
+    await fixture.controller.stop()
 })

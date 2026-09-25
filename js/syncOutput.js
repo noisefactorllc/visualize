@@ -10,6 +10,21 @@ const STOP_TIMEOUT_MS = 3000
 const RECOVERY_DELAYS_MS = Object.freeze([250, 1000, 4000])
 // Continue retryable transport recovery until stopped by the operator.
 const RECOVERY_SUSTAINED_DELAY_MS = 10_000
+// Up to +25% randomized jitter on recovery backoff delays so that multiple
+// visualizer instances recovering against one Sync companion do not retry in
+// a synchronized thundering herd.
+const BACKOFF_JITTER_FRACTION = 0.25
+
+export function applyBackoffJitter(delayMs, random = Math.random) {
+    const base = Math.max(0, delayMs)
+    if (!Number.isFinite(base)) return 0
+    const spread = Math.round(base * BACKOFF_JITTER_FRACTION)
+    if (spread <= 0) return base
+    const sample = typeof random === 'function' ? random() : 0
+    const bounded = Number.isFinite(sample) ? Math.min(Math.max(sample, 0), 1) : 0
+    return base + Math.ceil(bounded * spread)
+}
+
 const RECOVERY_PROBATION_MS = 60_000
 const RECOVERY_CANCELLED = Symbol('sync recovery cancelled')
 const textEncoder = new TextEncoder()
@@ -257,6 +272,7 @@ export class SyncOutputController {
         clearInterval: clearIntervalImplementation = globalThis.clearInterval,
         setTimeout: setTimeoutImplementation = globalThis.setTimeout,
         clearTimeout: clearTimeoutImplementation = globalThis.clearTimeout,
+        random = Math.random,
         onStateChange = () => {}
     } = {}) {
         if (!connectionProvider || typeof connectionProvider.createClient !== 'function') {
@@ -269,6 +285,7 @@ export class SyncOutputController {
         if (getDescriptor !== undefined && typeof getDescriptor !== 'function') {
             throw new TypeError('getDescriptor must be a function')
         }
+        if (typeof random !== 'function') throw new TypeError('random must be a function')
 
         this._renderer = renderer
         this._getCanvas = getCanvas
@@ -276,6 +293,7 @@ export class SyncOutputController {
         this._connectionProvider = connectionProvider
         this._clock = clock
         this._logger = logger
+        this._random = random
         this._setInterval = (...args) => Reflect.apply(setIntervalImplementation, globalThis, args)
         this._clearInterval = (...args) => Reflect.apply(clearIntervalImplementation, globalThis, args)
         this._setTimeout = (...args) => Reflect.apply(setTimeoutImplementation, globalThis, args)
@@ -769,7 +787,7 @@ export class SyncOutputController {
                         resources.queue = null
                     }
                     if (error?.code !== 'SYNC_LIFECYCLE' && !this._disposed && attempt < maxAttempts && isRetryableRecoveryError(error)) {
-                        const delay = RECOVERY_DELAYS_MS[attempt - 1] ?? 1000
+                        const delay = applyBackoffJitter(RECOVERY_DELAYS_MS[attempt - 1] ?? 1000, this._random)
                         await new Promise((resolve, reject) => {
                             resources.retryReject = reject
                             resources.retryTimer = this._setTimeout(() => {
@@ -1056,9 +1074,9 @@ export class SyncOutputController {
 
     _scheduleRecoveryAttempt(generation) {
         if (!this._isRecoveryCurrent(generation)) return
-        const delay = this._recoveryAttempts < RECOVERY_DELAYS_MS.length
+        const delay = applyBackoffJitter(this._recoveryAttempts < RECOVERY_DELAYS_MS.length
             ? RECOVERY_DELAYS_MS[this._recoveryAttempts]
-            : RECOVERY_SUSTAINED_DELAY_MS
+            : RECOVERY_SUSTAINED_DELAY_MS, this._random)
         let timerId
         timerId = this._setTimeout(() => {
             this._clearTimeout(timerId)
