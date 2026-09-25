@@ -99,20 +99,23 @@ test('audio band meters maintain high contrast and accessibility semantics acros
     const html = readFileSync(htmlPath, 'utf8')
 
     // Track trough has defined border, background, and radius tokens
+    assert.match(rawCss, /\.main-meter\s*\{[^}]*gap:\s*var\(--hf-space-1\)/)
+    assert.match(rawCss, /\.audio-band\s*\{[^}]*height:\s*var\(--hf-space-2\)/)
     assert.match(rawCss, /\.audio-band\s*\{[^}]*background:\s*var\(--hf-bg-base\)/)
     assert.match(rawCss, /\.audio-band\s*\{[^}]*border:\s*var\(--hf-border-width\)\s+solid\s+var\(--hf-border\)/)
     assert.match(rawCss, /\.audio-band\s*\{[^}]*border-radius:\s*var\(--hf-radius-sm\)/)
+    assert.match(rawCss, /\.audio-band\s*\{[^}]*box-shadow:[^}]*var\(--hf-border-subtle\)/)
 
     // Audio band fills use Handfish semantic color tokens
     assert.match(rawCss, /\.audio-band\.low\s+b\s*\{[^}]*background:\s*var\(--hf-blue\)/)
     assert.match(rawCss, /\.audio-band\.mid\s+b\s*\{[^}]*background:\s*var\(--hf-accent\)/)
     assert.match(rawCss, /\.audio-band\.high\s+b\s*\{[^}]*background:\s*var\(--hf-red\)/)
 
-    // index.html carries accessible role and descriptive band labels
+    // index.html carries accessible role and descriptive band labels with Handfish tooltips
     assert.match(html, /<span\s+class="main-meter"\s+role="group"\s+aria-label="Audio level meters:[^"]*">/)
-    assert.match(html, /id="meter-low"[^>]*role="img"[^>]*title="Low \/ Bass \(0–200 Hz\)"[^>]*aria-label="Low band audio meter"/)
-    assert.match(html, /id="meter-mid"[^>]*role="img"[^>]*title="Mid \(200–2000 Hz\)"[^>]*aria-label="Mid band audio meter"/)
-    assert.match(html, /id="meter-high"[^>]*role="img"[^>]*title="High \/ Treble \(2000\+ Hz\)"[^>]*aria-label="High band audio meter"/)
+    assert.match(html, /class="[^"]*\baudio-band\s+low\s+tooltip\b[^"]*"[^>]*id="meter-low"[^>]*data-title="Low \/ Bass \(0–200 Hz\)"/)
+    assert.match(html, /class="[^"]*\baudio-band\s+mid\s+tooltip\b[^"]*"[^>]*id="meter-mid"[^>]*data-title="Mid \(200–2000 Hz\)"/)
+    assert.match(html, /class="[^"]*\baudio-band\s+high\s+tooltip\b[^"]*"[^>]*id="meter-high"[^>]*data-title="High \/ Treble \(2000\+ Hz\)"/)
 })
 
 test('native range sliders and speed faders maintain high-contrast track boundaries and distinct thumb rings', () => {
@@ -147,4 +150,19 @@ test('program card tiles maintain readable contrast over shader previews across 
     assert.match(rawCss, /\.program-card\s+\.pc-load\s*\{[^}]*border:\s*var\(--hf-border-width\)\s+solid\s+var\(--hf-border-subtle\)/)
     assert.match(rawCss, /\.program-card\s+\.pc-load:hover\s*\{[^}]*background:\s*var\(--hf-accent\)/)
 })
+
+test('FX buttons and surface overlays follow Handfish spacing and z-index token discipline', () => {
+    const cssPath = resolve(process.cwd(), 'css/app.css')
+    const rawCss = readFileSync(cssPath, 'utf8')
+
+    // FX button padding adheres to Handfish spacing scale
+    assert.match(rawCss, /\.fx-button\s*\{[^}]*padding:\s*var\(--hf-space-1\)/)
+
+    // Overlays, sticky rails, and popovers strictly use Handfish z-index scale
+    assert.match(rawCss, /\.topbar\s*\{[^}]*z-index:\s*var\(--hf-z-sticky,\s*200\)/)
+    assert.match(rawCss, /\.toast\s*\{[^}]*z-index:\s*var\(--hf-z-popover,\s*600\)/)
+    assert.match(rawCss, /\.mixer-controls:has\(select-dropdown\.dropdown-open\)\s*\{[^}]*z-index:\s*var\(--hf-z-dropdown,\s*100\)/)
+    assert.match(rawCss, /#app\.fullscreen-main\s+\.main\s*\{[^}]*z-index:\s*var\(--hf-z-fixed,\s*300\)/)
+})
+
 

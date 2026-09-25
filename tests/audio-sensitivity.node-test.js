@@ -174,3 +174,27 @@ test('SharedAudio setSensitivity clamps to slider range [0.5, 4.0] and fires onS
     assert.equal(audio.sensitivity, 4.0)
     assert.equal(observed, 4.0)
 })
+
+test('SharedAudio disable resets meters and emits zeroed meters to onMeters listener', async () => {
+    const audio = new SharedAudio()
+    let lastMeters = null
+    audio.onMeters((m) => {
+        lastMeters = { ...m }
+    })
+    // Simulate non-zero meters while active
+    audio.meters.low = 0.8
+    audio.meters.mid = 0.5
+    audio.meters.high = 0.3
+    audio.meters.sub = 0.6
+    audio.meters.vol = 0.7
+
+    await audio.disable()
+
+    assert.equal(audio.meters.sub, 0)
+    assert.equal(audio.meters.low, 0)
+    assert.equal(audio.meters.mid, 0)
+    assert.equal(audio.meters.high, 0)
+    assert.equal(audio.meters.vol, 0)
+    assert.deepEqual(lastMeters, { sub: 0, low: 0, mid: 0, high: 0, vol: 0 })
+})
+

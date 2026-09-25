@@ -247,6 +247,7 @@ export class SharedAudio {
         this._timeDomainData = null
         this._enabled = false
         this.meters.sub = this.meters.low = this.meters.mid = this.meters.high = this.meters.vol = 0
+        if (this._onMeters) this._onMeters(this.meters)
         for (const state of this._audioStates.values()) {
             state.sub = 0; state.low = 0; state.mid = 0; state.high = 0; state.vol = 0
             state.spectrum?.fill?.(0)

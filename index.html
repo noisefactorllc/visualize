@@ -232,7 +232,7 @@
             <div class="library-grid" id="library-grid"></div>
             <div class="library-footer">
                 <span id="library-count">0 programs</span>
-                <button id="library-random" class="ghost-button" title="Load random into both decks"><span class="icon">shuffle</span> random</button>
+                <button id="library-random" class="ghost-button tooltip" data-title="Load random into both decks" title="Load random into both decks"><span class="icon">shuffle</span> random</button>
             </div>
         </aside>
 
@@ -284,9 +284,9 @@
                 <div class="main-head">
                     <span class="main-label">main</span>
                     <span class="main-meter" role="group" aria-label="Audio level meters: Low (0–200 Hz), Mid (200–2000 Hz), High (2000+ Hz)">
-                        <span class="audio-band low" id="meter-low" role="img" title="Low / Bass (0–200 Hz)" aria-label="Low band audio meter"><b></b></span>
-                        <span class="audio-band mid" id="meter-mid" role="img" title="Mid (200–2000 Hz)" aria-label="Mid band audio meter"><b></b></span>
-                        <span class="audio-band high" id="meter-high" role="img" title="High / Treble (2000+ Hz)" aria-label="High band audio meter"><b></b></span>
+                        <span class="audio-band low tooltip" id="meter-low" role="img" data-title="Low / Bass (0–200 Hz)" title="Low / Bass (0–200 Hz)" aria-label="Low band audio meter"><b></b></span>
+                        <span class="audio-band mid tooltip" id="meter-mid" role="img" data-title="Mid (200–2000 Hz)" title="Mid (200–2000 Hz)" aria-label="Mid band audio meter"><b></b></span>
+                        <span class="audio-band high tooltip" id="meter-high" role="img" data-title="High / Treble (2000+ Hz)" title="High / Treble (2000+ Hz)" aria-label="High band audio meter"><b></b></span>
                     </span>
                     <span class="main-res" id="main-res">1280×720</span>
                 </div>
@@ -294,8 +294,8 @@
                     <span class="mixer-effect-label">mixer effect</span>
                     <select-dropdown id="mixer-effect" class="mixer-select"></select-dropdown>
                     <div class="main-output-targets" aria-label="Output targets">
-                        <button id="output-window" class="main-output-btn icon-button" title="Open mirrored output window" aria-label="Open mirrored output window"><span class="icon">display_external_input</span></button>
-                        <button id="sync-output-open" class="main-output-btn sync-output-open" title="Send to Noisedeck Sync" aria-label="Send to Noisedeck Sync">
+                        <button id="output-window" class="main-output-btn icon-button tooltip" data-title="Open mirrored output window" title="Open mirrored output window" aria-label="Open mirrored output window"><span class="icon">display_external_input</span></button>
+                        <button id="sync-output-open" class="main-output-btn sync-output-open tooltip" data-title="Send to Noisedeck Sync" title="Send to Noisedeck Sync" aria-label="Send to Noisedeck Sync">
                             <span class="icon">cast_connected</span>
                             <span>sync</span>
                         </button>
@@ -395,7 +395,7 @@
                         <div class="xfader-fade xfader-fade-right">
                             <span class="xfader-fade-label">fade time</span>
                             <div class="xfader-fade-duration-wrap">
-                                <slider-value id="fade-duration" class="xfader-fade-duration" type="float" min="0.1" max="16" step="0.1" value="3" title="Fade time in seconds"></slider-value>
+                                <slider-value id="fade-duration" class="xfader-fade-duration tooltip" type="float" min="0.1" max="16" step="0.1" value="3" data-title="Fade time in seconds" title="Fade time in seconds"></slider-value>
                             </div>
                         </div>
                     </div>
@@ -415,27 +415,27 @@
                  columns; this row reads as one continuous status
                  rail under all three. -->
             <div class="status-bar">
-                <button class="status-pill status-toggle" id="audio-status" data-state="off" title="Toggle audio input">
+                <button class="status-pill status-toggle tooltip" id="audio-status" data-state="off" data-title="Toggle audio input" title="Toggle audio input">
                     <span class="status-icon icon">music_note</span>
                     <span class="status-text">audio off</span>
                 </button>
-                <button class="status-pill status-toggle" id="midi-status" data-state="off" title="Toggle MIDI">
+                <button class="status-pill status-toggle tooltip" id="midi-status" data-state="off" data-title="Toggle MIDI" title="Toggle MIDI">
                     <span class="status-icon icon">piano</span>
                     <span class="status-text">midi off</span>
                 </button>
-                <div class="status-pill" id="fps-status" title="Frames per second">
+                <div class="status-pill tooltip" id="fps-status" data-title="Frames per second" title="Frames per second">
                     <span class="status-icon icon">bolt</span>
                     <span class="status-text"><span id="fps-value">0</span> fps</span>
                 </div>
 
                 <span class="status-divider"></span>
 
-                <button id="automixer-toggle" class="status-pill status-toggle status-automixer" data-state="off" title="Auto-Mix — automate crossfader from a single source (mutually exclusive with Auto-VJ)">
+                <button id="automixer-toggle" class="status-pill status-toggle status-automixer tooltip" data-state="off" data-title="Auto-Mix — automate crossfader from a single source (mutually exclusive with Auto-VJ)" title="Auto-Mix — automate crossfader from a single source (mutually exclusive with Auto-VJ)">
                     <span class="status-icon icon">tune</span>
                     <span class="status-text">auto-mix</span>
                 </button>
-                <label class="status-field" title="Auto-Mix source">
-                    <span class="status-field-label">source</span>
+                <label class="status-field">
+                    <span class="status-field-label tooltip" data-title="Auto-Mix source" title="Auto-Mix source">source</span>
                     <select-dropdown id="automixer-source" value="osc:0">
                         <option value="osc:0">osc · sine</option>
                         <option value="osc:1">osc · tri</option>
@@ -471,8 +471,8 @@
                     <span class="status-icon icon">autorenew</span>
                     <span class="status-text">auto-vj</span>
                 </button>
-                <label class="status-field" title="Auto-VJ cycle length">
-                    <span class="status-field-label">cycle</span>
+                <label class="status-field">
+                    <span class="status-field-label tooltip" data-title="Auto-VJ cycle length" title="Auto-VJ cycle length">cycle</span>
                     <select-dropdown id="automix-bars" value="8">
                         <option value="1">1 bar</option>
                         <option value="2">2 bars</option>
@@ -579,7 +579,7 @@
                 <h3>user effects</h3>
                 <div class="settings-row user-effects-import-row">
                     <input type="file" id="user-effect-file" accept=".zip" hidden>
-                    <button id="user-effect-import" class="ghost-button" aria-label="Import custom effect (.zip)" title="Import custom effect (.zip)">import .zip</button>
+                    <button id="user-effect-import" class="ghost-button tooltip" data-title="Import custom effect (.zip)" aria-label="Import custom effect (.zip)" title="Import custom effect (.zip)">import .zip</button>
                     <span id="user-effect-status" class="settings-hint" role="status" aria-live="polite">drop a portable effect zip to add custom shaders</span>
                 </div>
                 <div id="user-effect-list" class="user-effects-list" role="list" aria-label="Installed user effects" aria-live="polite"></div>

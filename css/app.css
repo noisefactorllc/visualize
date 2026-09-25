@@ -102,7 +102,7 @@ select:focus-visible,
     grid-area: top;
     background: var(--hf-bg-surface);
     border-bottom: var(--hf-border-width) solid var(--hf-border-subtle);
-    z-index: 10;
+    z-index: var(--hf-z-sticky, 200);
     /* Roomier than the industrial default to seat the tempo-bar comfortably
        at music-desk distance; the row is --topbar-h (72px) tall. */
     padding: 0 var(--hf-space-4);
@@ -1286,18 +1286,18 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .main-meter {
     flex: 1;
     display: flex;
-    gap: 6px;
+    gap: var(--hf-space-1);
     align-items: center;
 }
 
 .audio-band {
     flex: 1;
-    height: 10px;
+    height: var(--hf-space-2);
     background: var(--hf-bg-base);
     border-radius: var(--hf-radius-sm);
     overflow: hidden;
     border: var(--hf-border-width) solid var(--hf-border);
-    box-shadow: inset 0 1px 2px color-mix(in srgb, var(--hf-border) 60%, transparent);
+    box-shadow: inset 0 0 0 1px var(--hf-border-subtle), inset 0 1px 2px color-mix(in srgb, var(--hf-border) 60%, transparent);
 }
 
 .audio-band b {
@@ -1376,7 +1376,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     color: var(--hf-text-dim);
     border: var(--hf-border-width) solid var(--hf-border-subtle);
     border-radius: var(--hf-radius-sm);
-    padding: 6px 4px;
+    padding: var(--hf-space-1);
     min-height: 44px;
     display: inline-flex;
     align-items: center;
@@ -2369,7 +2369,7 @@ kbd {
     opacity: 0;
     pointer-events: none;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 200;
+    z-index: var(--hf-z-popover, 600);
     box-shadow: var(--hf-shadow-md);
 }
 
@@ -2532,7 +2532,7 @@ kbd {
 #app.fullscreen-main .main {
     position: fixed;
     inset: 0;
-    z-index: 50;
+    z-index: var(--hf-z-fixed, 300);
     border-radius: 0;
     border: none;
     background: black;
@@ -2658,7 +2658,7 @@ kbd {
     overflow: visible;
 }
 .mixer-controls:has(select-dropdown.dropdown-open) {
-    z-index: 100;
+    z-index: var(--hf-z-dropdown, 100);
 }
 
 .mixer-control-disabled {
