@@ -309,7 +309,7 @@ export class SyncH264CanvasSender {
         this._timer = setTimeout(() => {
             this._timer = null
             void this._writeNext()
-        }, delay)
+        }, Math.ceil(delay))
     }
 
     async _writeNext() {
