@@ -94,6 +94,40 @@ test('spaces catch-up writes so the receiver does not see a frame burst', {
     assert.ok(transport.writes[2].at - transport.writes[1].at >= 15)
 })
 
+test('pacing timer delays are whole milliseconds so rounding cannot undershoot the write gap', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const transport = transportFixture()
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Paced', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    const realSetTimeout = globalThis.setTimeout
+    const scheduledDelays = []
+    globalThis.setTimeout = (callback, delay, ...rest) => {
+        if (typeof delay === 'number') scheduledDelays.push(delay)
+        return realSetTimeout(callback, delay, ...rest)
+    }
+    try {
+        const now = performance.now()
+        assert.equal(sender.submit(1, now), true)
+        assert.equal(sender.submit(2, now + 0.1), true)
+        sender.close()
+        await sender.closed
+    } finally {
+        globalThis.setTimeout = realSetTimeout
+    }
+    // The pacing delay is fractional by construction (clock drift leaves a
+    // sub-millisecond remainder of MIN_WRITE_GAP_MS); timer rounding must
+    // never truncate it below the 16ms minimum write gap.
+    assert.ok(scheduledDelays.length >= 1, 'expected at least one scheduled pacing timer')
+    for (const delay of scheduledDelays) {
+        assert.ok(Number.isInteger(delay), `pacing delay ${delay} must be an integer, not a truncated fraction`)
+    }
+})
+
 test('encodes presented canvas frames as paced, ordered H.264 protocol frames', {
     timeout: 5000
 }, async () => {
