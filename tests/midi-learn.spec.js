@@ -91,4 +91,76 @@ test('findConflicts: legacy assignment with no kind is treated as cc', () => {
         b: { kind: 'cc', ch: 1, cc: 7, min: 0, max: 127 },
     })
     expect(c.a.others).toEqual(['b'])
+    expect(c.a.key).toBe('cc:1:7')
+    expect(c.a.ch).toBe(1)
+    expect(c.a.num).toBe(7)
+})
+
+test('findConflicts: channel isolation ensures identical CC numbers on different channels do not collide', () => {
+    const c = findConflicts({
+        crossfader: { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 },
+        speedA:     { kind: 'cc', ch: 1, cc: 50, min: 0, max: 127 },
+        speedB:     { kind: 'cc', ch: 2, cc: 50, min: 0, max: 127 },
+    })
+    expect(c.crossfader).toBeUndefined()
+    expect(c.speedA).toBeUndefined()
+    expect(c.speedB).toBeUndefined()
+})
+
+test('browser: MIDI learn drawer highlights CC conflict and resolves via channel edit', async ({ browser }) => {
+    const context = await browser.newContext()
+    await context.addInitScript(() => {
+        localStorage.setItem(
+            'visualize.midi.learn.v1',
+            JSON.stringify({
+                crossfader: { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 },
+                speedA: { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 }
+            })
+        )
+    })
+
+    const page = await context.newPage()
+    await page.goto('/')
+    await page.click('#boot-start')
+
+    // Wait for boot to finish initializing
+    await page.waitForFunction(() => !!window.__visualize?.midi)
+
+    // Open settings drawer
+    await page.click('#btn-settings')
+    const conflictsBanner = page.locator('#midi-learn-conflicts')
+
+    // Conflict banner should be populated and visible
+    await expect(conflictsBanner).toBeVisible()
+    await expect(conflictsBanner).toContainText('2 assignments conflict on CC/channel')
+    expect(await conflictsBanner.getAttribute('data-count')).toBe('2')
+
+    // Both conflicting rows should be marked with .conflict and aria-invalid="true"
+    const conflictRows = page.locator('.midi-learn-row.conflict')
+    await expect(conflictRows).toHaveCount(2)
+    const invalidRows = page.locator('.midi-learn-row[aria-invalid="true"]')
+    await expect(invalidRows).toHaveCount(2)
+
+    // Conflict badge should be rendered with warning sign and role="img"
+    const badge = conflictRows.first().locator('.ml-conflict')
+    await expect(badge).toHaveText('⚠')
+    expect(await badge.getAttribute('role')).toBe('img')
+    expect(await badge.getAttribute('aria-label')).toContain('Conflict: shares CC 50 · ch 1')
+
+    // Open edit panel on the second row (speedA)
+    const editBtn = page.locator('.midi-learn-row').filter({ hasText: 'speed · a' }).locator('.ml-btn-edit')
+    await editBtn.click()
+
+    // Find channel input for speedA and change it from 1 to 2
+    const chInput = page.locator('input[type="number"][aria-label="speed · a ch"]')
+    await expect(chInput).toBeVisible()
+    await chInput.fill('2')
+    await chInput.dispatchEvent('change')
+
+    // Conflict should immediately clear!
+    await expect(conflictsBanner).toBeEmpty()
+    await expect(page.locator('.midi-learn-row.conflict')).toHaveCount(0)
+    await expect(page.locator('.midi-learn-row[aria-invalid="true"]')).toHaveCount(0)
+
+    await context.close()
 })

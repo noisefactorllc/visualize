@@ -114,7 +114,18 @@ export function findConflicts(assignments) {
     const out = {}
     for (const [key, ids] of byKey) {
         if (ids.length < 2) continue
-        for (const id of ids) out[id] = { key, others: ids.filter(x => x !== id) }
+        const [kind, chStr, numStr] = key.split(':')
+        const ch = Number(chStr)
+        const num = Number(numStr)
+        for (const id of ids) {
+            out[id] = {
+                key,
+                kind,
+                ch,
+                num,
+                others: ids.filter(x => x !== id),
+            }
+        }
     }
     return out
 }
@@ -531,9 +542,20 @@ export class SharedMidi {
         if (!this._learningCapture) {
             this._learningCapture = { ch: channel, cc, min: value, max: value }
             this._learnCommitTimer = setTimeout(() => this._commitLearn(), this._learnWindowMs)
+            if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
         } else if (this._learningCapture.ch === channel && this._learningCapture.cc === cc) {
-            if (value < this._learningCapture.min) this._learningCapture.min = value
-            if (value > this._learningCapture.max) this._learningCapture.max = value
+            let changed = false
+            if (value < this._learningCapture.min) {
+                this._learningCapture.min = value
+                changed = true
+            }
+            if (value > this._learningCapture.max) {
+                this._learningCapture.max = value
+                changed = true
+            }
+            if (changed && this._onLearnUpdate) {
+                this._onLearnUpdate(this.getLearnView())
+            }
         }
     }
 
@@ -550,8 +572,18 @@ export class SharedMidi {
         if (this._learnCommitTimer) { clearTimeout(this._learnCommitTimer); this._learnCommitTimer = null }
         this._saveAssignments()
         this._resetRuntime(id)
+
+        const conflicts = findConflicts(this._assignments)
+        const myConflict = conflicts[id]
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
-        this._notify(`learned: ${id} ← note ${n} ch ${ch + 1}`)
+
+        const label = info?.label || id
+        if (myConflict && myConflict.others?.length) {
+            const otherLabels = myConflict.others.map(oid => this._controlHandlers.get(oid)?.label || oid)
+            this._notify(`learned: ${label} ← note ${n} ch ${ch + 1} ⚠ conflict with ${otherLabels.join(', ')}`)
+        } else {
+            this._notify(`learned: ${label} ← note ${n} ch ${ch + 1}`)
+        }
     }
 
     _commitLearn() {
@@ -572,8 +604,18 @@ export class SharedMidi {
         }
         this._resetRuntime(id)
         this._saveAssignments()
+
+        const conflicts = findConflicts(this._assignments)
+        const myConflict = conflicts[id]
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
-        this._notify(`learned: ${id} ← CC ${cap.cc} ch ${cap.ch + 1} (${min}-${max})`)
+
+        const label = this._controlHandlers.get(id)?.label || id
+        if (myConflict && myConflict.others?.length) {
+            const otherLabels = myConflict.others.map(oid => this._controlHandlers.get(oid)?.label || oid)
+            this._notify(`learned: ${label} ← CC ${cap.cc} ch ${cap.ch + 1} (${min}-${max}) ⚠ conflict with ${otherLabels.join(', ')}`)
+        } else {
+            this._notify(`learned: ${label} ← CC ${cap.cc} ch ${cap.ch + 1} (${min}-${max})`)
+        }
     }
 
     /**
@@ -639,6 +681,45 @@ export class SharedMidi {
         if (this._onClockStatusChange) this._onClockStatusChange(status)
     }
 
+    setChannel(controlId, channel) {
+        const a = this._assignments[controlId]
+        if (!a) return
+        const val = Number(channel)
+        if (!Number.isFinite(val)) return
+        const ch = Math.max(0, Math.min(15, Math.round(val)))
+        if (a.ch === ch) return
+        a.ch = ch
+        this._saveAssignments()
+        this._resetRuntime(controlId)
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+    }
+
+    setCc(controlId, cc) {
+        const a = this._assignments[controlId]
+        if (!a || (a.kind && a.kind !== 'cc')) return
+        const val = Number(cc)
+        if (!Number.isFinite(val)) return
+        const num = Math.max(0, Math.min(127, Math.round(val)))
+        if (a.cc === num) return
+        a.cc = num
+        this._saveAssignments()
+        this._resetRuntime(controlId)
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+    }
+
+    setNote(controlId, note) {
+        const a = this._assignments[controlId]
+        if (!a || a.kind !== 'note') return
+        const val = Number(note)
+        if (!Number.isFinite(val)) return
+        const num = Math.max(0, Math.min(127, Math.round(val)))
+        if (a.note === num) return
+        a.note = num
+        this._saveAssignments()
+        this._resetRuntime(controlId)
+        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+    }
+
     setRange(controlId, min, max) {
         const a = this._assignments[controlId]
         if (!a) return
@@ -661,25 +742,44 @@ export class SharedMidi {
     }
 
     getLearnView() {
-        const conflicts = findConflicts(this._assignments)
+        const activeAssignments = { ...this._assignments }
+        if (this._learningControlId && this._learningCapture) {
+            activeAssignments[this._learningControlId] = {
+                kind: 'cc',
+                ch: this._learningCapture.ch,
+                cc: this._learningCapture.cc,
+                min: this._learningCapture.min,
+                max: this._learningCapture.max,
+            }
+        }
+        const conflicts = findConflicts(activeAssignments)
         const rows = []
         for (const [controlId, info] of this._controlHandlers.entries()) {
             const asg = this._assignments[controlId]
-            const conflict = conflicts[controlId] || null
+            let conflict = null
+            if (conflicts[controlId]) {
+                const conf = conflicts[controlId]
+                conflict = {
+                    ...conf,
+                    otherLabels: conf.others.map(oid => this._controlHandlers.get(oid)?.label || oid),
+                }
+            }
+            const isLearningThis = this._learningControlId === controlId
+            const cap = isLearningThis ? this._learningCapture : null
             rows.push({
                 controlId,
                 label: info.label,
                 controlKind: info.kind,
-                kind: asg ? (asg.kind || 'cc') : undefined,
-                ch: asg?.ch,
-                cc: asg?.cc,
+                kind: cap ? 'cc' : (asg ? (asg.kind || 'cc') : undefined),
+                ch: cap ? cap.ch : asg?.ch,
+                cc: cap ? cap.cc : asg?.cc,
                 note: asg?.note,
-                min: asg?.min,
-                max: asg?.max,
+                min: cap ? cap.min : asg?.min,
+                max: cap ? cap.max : asg?.max,
                 invert: !!asg?.invert,
                 conflict,
-                learning: this._learningControlId === controlId,
-                capturing: this._learningControlId === controlId && !!this._learningCapture,
+                learning: isLearningThis,
+                capturing: isLearningThis && !!cap,
             })
         }
         return rows

@@ -2699,6 +2699,23 @@ function renderLearnRows(rows, midi) {
     }
     container.innerHTML = ''
     renderLearnRows._bars = new Map()   // controlId -> { fill, row }
+    renderLearnRows._editing = renderLearnRows._editing || new Set()
+
+    // Conflict summary banner
+    const conflictContainer = $('midi-learn-conflicts')
+    if (conflictContainer) {
+        const conflictRows = rows.filter(r => r.conflict)
+        if (conflictRows.length > 0) {
+            const uniqueKeys = new Set(conflictRows.map(r => r.conflict.key))
+            const count = conflictRows.length
+            const bindingsWord = uniqueKeys.size === 1 ? 'binding' : 'bindings'
+            conflictContainer.textContent = `⚠ ${count} assignments conflict on CC/channel across ${uniqueKeys.size} shared ${bindingsWord}`
+            conflictContainer.setAttribute('data-count', String(count))
+        } else {
+            conflictContainer.textContent = ''
+            conflictContainer.removeAttribute('data-count')
+        }
+    }
 
     for (const row of rows) {
         const div = document.createElement('div')
@@ -2706,6 +2723,8 @@ function renderLearnRows(rows, midi) {
         div.setAttribute('role', 'listitem')
         if (row.learning) div.classList.add('learning')
         if (row.conflict) div.classList.add('conflict')
+        if (renderLearnRows._editing.has(row.controlId)) div.classList.add('editing')
+        if (row.cc == null && row.note == null) renderLearnRows._editing.delete(row.controlId)
 
         // Binding text
         let bindingText
@@ -2749,7 +2768,17 @@ function renderLearnRows(rows, midi) {
         badge.className = 'ml-conflict'
         if (row.conflict) {
             badge.textContent = '⚠'
-            setTooltip(badge, `shares ${row.conflict.key.replace('cc:', 'CC ').replace('note:', 'note ')} with ${row.conflict.others.join(', ')}`)
+            badge.setAttribute('role', 'img')
+            const othersText = row.conflict.otherLabels?.length
+                ? row.conflict.otherLabels.join(', ')
+                : row.conflict.others.join(', ')
+            const chNum = (row.conflict.ch != null ? row.conflict.ch : (row.ch ?? 0)) + 1
+            const kindName = (row.conflict.kind || row.kind || 'cc').toUpperCase()
+            const numVal = row.conflict.num ?? (row.kind === 'note' ? row.note : row.cc)
+            const desc = `Conflict: shares ${kindName} ${numVal} · ch ${chNum} with ${othersText}`
+            badge.setAttribute('aria-label', desc)
+            setTooltip(badge, desc)
+            div.setAttribute('aria-invalid', 'true')
         }
 
         // Actions
@@ -2773,54 +2802,115 @@ function renderLearnRows(rows, midi) {
             learn.addEventListener('click', () => midi.startLearn(row.controlId))
             actions.appendChild(learn)
             if (isAssigned) {
-                // Edit (range/invert) — only meaningful for CC bindings
-                if (row.kind === 'cc') {
-                    const edit = document.createElement('button')
-                    edit.className = 'ml-btn-edit'
-                    edit.textContent = '⋯'
-                    edit.setAttribute('aria-label', `Edit range and invert for ${row.label}`)
-                    setTooltip(edit, 'edit range / invert')
-                    edit.addEventListener('click', () => div.classList.toggle('editing'))
-                    actions.appendChild(edit)
-                }
+                // Edit (channel / CC / note / range / invert)
+                const edit = document.createElement('button')
+                edit.className = 'ml-btn-edit'
+                edit.textContent = '⋯'
+                const editDesc = row.kind === 'cc' ? `Edit channel, CC range and invert for ${row.label}` : `Edit channel and note for ${row.label}`
+                edit.setAttribute('aria-label', editDesc)
+                setTooltip(edit, row.kind === 'cc' ? 'edit channel / cc / range' : 'edit channel / note')
+                edit.addEventListener('click', () => {
+                    if (renderLearnRows._editing.has(row.controlId)) {
+                        renderLearnRows._editing.delete(row.controlId)
+                        div.classList.remove('editing')
+                    } else {
+                        renderLearnRows._editing.add(row.controlId)
+                        div.classList.add('editing')
+                    }
+                })
+                actions.appendChild(edit)
+
                 const clear = document.createElement('button')
                 clear.className = 'ml-btn-unlearn'
                 clear.textContent = '✕'
                 clear.setAttribute('aria-label', `Clear MIDI assignment for ${row.label}`)
                 setTooltip(clear, 'clear')
-                clear.addEventListener('click', () => midi.clearAssignment(row.controlId))
+                clear.addEventListener('click', () => {
+                    renderLearnRows._editing.delete(row.controlId)
+                    midi.clearAssignment(row.controlId)
+                })
                 actions.appendChild(clear)
             }
         }
 
         div.append(target, binding, barCell, badge, actions)
 
-        // Edit panel (range + invert), hidden until .editing
-        if (row.kind === 'cc' && (row.cc != null)) {
+        // Edit panel (channel, cc/note, range + invert), hidden until .editing
+        const isAssigned = row.cc != null || row.note != null
+        if (isAssigned) {
             const panel = document.createElement('div')
             panel.className = 'ml-edit-panel'
-            const mkNum = (label, val, on) => {
+            panel.setAttribute('role', 'group')
+            panel.setAttribute('aria-label', `MIDI parameters for ${row.label}`)
+
+            const mkNum = (label, val, min, max, on) => {
                 const wrap = document.createElement('label')
                 wrap.className = 'ml-edit-field'
                 const span = document.createElement('span')
                 span.textContent = label
                 const input = document.createElement('input')
-                input.type = 'number'; input.min = '0'; input.max = '127'
-                input.value = String(val ?? (label === 'min' ? 0 : 127))
+                input.type = 'number'
+                input.min = String(min)
+                input.max = String(max)
+                input.value = String(val ?? min)
+                input.setAttribute('aria-label', `${row.label} ${label}`)
                 input.addEventListener('change', on)
                 wrap.append(span, input)
                 return { wrap, input }
             }
-            let minVal = row.min ?? 0, maxVal = row.max ?? 127
-            const minF = mkNum('min', minVal, () => { minVal = Number(minF.input.value); midi.setRange(row.controlId, minVal, maxVal) })
-            const maxF = mkNum('max', maxVal, () => { maxVal = Number(maxF.input.value); midi.setRange(row.controlId, minVal, maxVal) })
-            const inv = document.createElement('label')
-            inv.className = 'ml-edit-field'
-            const invSpan = document.createElement('span'); invSpan.textContent = 'invert'
-            const invBox = document.createElement('input'); invBox.type = 'checkbox'; invBox.checked = !!row.invert
-            invBox.addEventListener('change', () => midi.setInvert(row.controlId, invBox.checked))
-            inv.append(invSpan, invBox)
-            panel.append(minF.wrap, maxF.wrap, inv)
+
+            // Channel (1..16 displayed, stored 0..15)
+            const chVal = (row.ch != null ? row.ch : 0) + 1
+            const chField = mkNum('ch', chVal, 1, 16, () => {
+                const newCh = Math.max(1, Math.min(16, Number(chField.input.value) || 1)) - 1
+                midi.setChannel(row.controlId, newCh)
+            })
+            panel.appendChild(chField.wrap)
+
+            if (row.kind === 'cc' && row.cc != null) {
+                // CC number (0..127)
+                const ccVal = row.cc ?? 0
+                const ccField = mkNum('cc', ccVal, 0, 127, () => {
+                    const newCc = Math.max(0, Math.min(127, Number(ccField.input.value) || 0))
+                    midi.setCc(row.controlId, newCc)
+                })
+                panel.appendChild(ccField.wrap)
+
+                // Min and Max (0..127)
+                let minVal = row.min ?? 0, maxVal = row.max ?? 127
+                const minF = mkNum('min', minVal, 0, 127, () => {
+                    minVal = Math.max(0, Math.min(127, Number(minF.input.value) || 0))
+                    midi.setRange(row.controlId, minVal, maxVal)
+                })
+                const maxF = mkNum('max', maxVal, 0, 127, () => {
+                    maxVal = Math.max(0, Math.min(127, Number(maxF.input.value) || 127))
+                    midi.setRange(row.controlId, minVal, maxVal)
+                })
+                panel.appendChild(minF.wrap)
+                panel.appendChild(maxF.wrap)
+
+                // Invert checkbox
+                const inv = document.createElement('label')
+                inv.className = 'ml-edit-field'
+                const invSpan = document.createElement('span')
+                invSpan.textContent = 'invert'
+                const invBox = document.createElement('input')
+                invBox.type = 'checkbox'
+                invBox.checked = !!row.invert
+                invBox.setAttribute('aria-label', `${row.label} invert`)
+                invBox.addEventListener('change', () => midi.setInvert(row.controlId, invBox.checked))
+                inv.append(invSpan, invBox)
+                panel.appendChild(inv)
+            } else if (row.kind === 'note' && row.note != null) {
+                // Note number (0..127)
+                const noteVal = row.note ?? 0
+                const noteField = mkNum('note', noteVal, 0, 127, () => {
+                    const newNote = Math.max(0, Math.min(127, Number(noteField.input.value) || 0))
+                    midi.setNote(row.controlId, newNote)
+                })
+                panel.appendChild(noteField.wrap)
+            }
+
             div.appendChild(panel)
         }
 

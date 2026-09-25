@@ -391,3 +391,199 @@ describe('SharedMidi Note Learn Lifecycle', () => {
         assert.equal(midi._learningControlId, null, 'clearAllAssignments should cancel active learn')
     })
 })
+
+describe('findConflicts helper & channel isolation', () => {
+    it('returns empty object when no conflicts exist', () => {
+        const c = findConflicts({
+            speedA: { kind: 'cc', ch: 0, cc: 20 },
+            speedB: { kind: 'cc', ch: 0, cc: 21 },
+            crossfader: { kind: 'cc', ch: 1, cc: 20 }, // same CC, different channel (isolated)
+        })
+        assert.deepEqual(c, {})
+    })
+
+    it('enforces channel isolation: same CC on different channels does NOT conflict', () => {
+        const c = findConflicts({
+            deckA_fader: { kind: 'cc', ch: 0, cc: 50 },
+            deckB_fader: { kind: 'cc', ch: 1, cc: 50 },
+            deckC_fader: { kind: 'cc', ch: 2, cc: 50 },
+        })
+        assert.deepEqual(c, {})
+    })
+
+    it('detects CC conflict on same channel with structured metadata', () => {
+        const c = findConflicts({
+            speedA: { kind: 'cc', ch: 0, cc: 50 },
+            crossfader: { kind: 'cc', ch: 0, cc: 50 },
+            solo: { kind: 'cc', ch: 0, cc: 10 },
+        })
+        assert.ok(c.speedA)
+        assert.ok(c.crossfader)
+        assert.equal(c.solo, undefined)
+
+        assert.equal(c.speedA.key, 'cc:0:50')
+        assert.equal(c.speedA.kind, 'cc')
+        assert.equal(c.speedA.ch, 0)
+        assert.equal(c.speedA.num, 50)
+        assert.deepEqual(c.speedA.others, ['crossfader'])
+
+        assert.equal(c.crossfader.key, 'cc:0:50')
+        assert.equal(c.crossfader.kind, 'cc')
+        assert.equal(c.crossfader.ch, 0)
+        assert.equal(c.crossfader.num, 50)
+        assert.deepEqual(c.crossfader.others, ['speedA'])
+    })
+
+    it('handles multiple conflicting controls on the same channel', () => {
+        const c = findConflicts({
+            c1: { kind: 'cc', ch: 3, cc: 77 },
+            c2: { kind: 'cc', ch: 3, cc: 77 },
+            c3: { kind: 'cc', ch: 3, cc: 77 },
+        })
+        assert.deepEqual(c.c1.others, ['c2', 'c3'])
+        assert.deepEqual(c.c2.others, ['c1', 'c3'])
+        assert.deepEqual(c.c3.others, ['c1', 'c2'])
+    })
+
+    it('does not conflate note and cc on the same channel and number', () => {
+        const c = findConflicts({
+            fxStrobe: { kind: 'note', ch: 0, note: 60 },
+            filterFreq: { kind: 'cc', ch: 0, cc: 60 },
+        })
+        assert.deepEqual(c, {})
+    })
+})
+
+describe('SharedMidi Conflict Highlighting & Channel Isolation in Learn Mode', () => {
+    function createTestMidi() {
+        const midi = new SharedMidi()
+        midi._enabled = true
+        return midi
+    }
+
+    it('getLearnView provides otherLabels for conflicting assignments', () => {
+        const midi = createTestMidi()
+        midi.registerControl('crossfader', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi.registerControl('speedA', { label: 'speed A', kind: 'continuous', handler: () => {} })
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 40, min: 0, max: 127 }
+        midi._assignments.speedA = { kind: 'cc', ch: 0, cc: 40, min: 0, max: 127 }
+
+        const rows = midi.getLearnView()
+        const cfRow = rows.find(r => r.controlId === 'crossfader')
+        const saRow = rows.find(r => r.controlId === 'speedA')
+
+        assert.ok(cfRow?.conflict)
+        assert.deepEqual(cfRow.conflict.others, ['speedA'])
+        assert.deepEqual(cfRow.conflict.otherLabels, ['speed A'])
+
+        assert.ok(saRow?.conflict)
+        assert.deepEqual(saRow.conflict.others, ['crossfader'])
+        assert.deepEqual(saRow.conflict.otherLabels, ['crossfader'])
+    })
+
+    it('detects conflict during live in-flight capture before commit', () => {
+        const midi = createTestMidi()
+        midi.registerControl('crossfader', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi.registerControl('speedA', { label: 'speed A', kind: 'continuous', handler: () => {} })
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 40, min: 0, max: 127 }
+
+        // Start learning speedA
+        midi.startLearn('speedA')
+        // User moves knob 40 on channel 0
+        midi._captureCc(0, 40, 64)
+
+        const rows = midi.getLearnView()
+        const cfRow = rows.find(r => r.controlId === 'crossfader')
+        const saRow = rows.find(r => r.controlId === 'speedA')
+
+        assert.ok(saRow.capturing, 'speedA should be in capturing state')
+        assert.equal(saRow.cc, 40)
+        assert.equal(saRow.ch, 0)
+        assert.ok(saRow.conflict, 'speedA should immediately flag conflict with crossfader')
+        assert.deepEqual(saRow.conflict.otherLabels, ['crossfader'])
+        assert.ok(cfRow.conflict, 'crossfader should also flag conflict during capture')
+
+        // Clean up commit timer
+        midi.cancelLearn()
+    })
+
+    it('notifies with warning when committing conflicting CC assignment', () => {
+        const midi = createTestMidi()
+        midi.registerControl('crossfader', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi.registerControl('speedA', { label: 'speed A', kind: 'continuous', handler: () => {} })
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 40, min: 0, max: 127 }
+
+        let notice = ''
+        midi._notify = (msg) => { notice = msg }
+
+        midi.startLearn('speedA')
+        midi._captureCc(0, 40, 64)
+        midi._commitLearn()
+
+        assert.match(notice, /⚠ conflict with crossfader/)
+    })
+
+    it('notifies with warning when committing conflicting Note assignment', () => {
+        const midi = createTestMidi()
+        midi.registerControl('fxStrobe', { label: 'fx · strobe', kind: 'momentary', handler: () => {} })
+        midi.registerControl('fxFlash', { label: 'fx · flash', kind: 'momentary', handler: () => {} })
+        midi._assignments.fxStrobe = { kind: 'note', ch: 1, note: 36, min: 0, max: 127 }
+
+        let notice = ''
+        midi._notify = (msg) => { notice = msg }
+
+        midi.startLearn('fxFlash')
+        midi._captureNote(1, 36)
+
+        assert.match(notice, /⚠ conflict with fx · strobe/)
+    })
+
+    it('setChannel isolates channel and clears conflict immediately', () => {
+        const midi = createTestMidi()
+        midi.registerControl('crossfader', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi.registerControl('speedA', { label: 'speed A', kind: 'continuous', handler: () => {} })
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 }
+        midi._assignments.speedA = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 }
+
+        // Initially in conflict
+        assert.ok(midi.getLearnView().find(r => r.controlId === 'speedA')?.conflict)
+
+        // Move speedA to channel 1 (channel isolation)
+        midi.setChannel('speedA', 1)
+        assert.equal(midi._assignments.speedA.ch, 1)
+
+        // Conflict is cleared on both controls
+        const rows = midi.getLearnView()
+        assert.equal(rows.find(r => r.controlId === 'speedA')?.conflict, null)
+        assert.equal(rows.find(r => r.controlId === 'crossfader')?.conflict, null)
+    })
+
+    it('setCc reassigns CC and resolves conflict', () => {
+        const midi = createTestMidi()
+        midi.registerControl('c1', { label: 'C1', kind: 'continuous', handler: () => {} })
+        midi.registerControl('c2', { label: 'C2', kind: 'continuous', handler: () => {} })
+        midi._assignments.c1 = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 }
+        midi._assignments.c2 = { kind: 'cc', ch: 0, cc: 50, min: 0, max: 127 }
+
+        assert.ok(midi.getLearnView().find(r => r.controlId === 'c2')?.conflict)
+
+        midi.setCc('c2', 51)
+        assert.equal(midi._assignments.c2.cc, 51)
+        assert.equal(midi.getLearnView().find(r => r.controlId === 'c2')?.conflict, null)
+    })
+
+    it('setNote reassigns Note and resolves conflict', () => {
+        const midi = createTestMidi()
+        midi.registerControl('p1', { label: 'P1', kind: 'momentary', handler: () => {} })
+        midi.registerControl('p2', { label: 'P2', kind: 'momentary', handler: () => {} })
+        midi._assignments.p1 = { kind: 'note', ch: 0, note: 36, min: 0, max: 127 }
+        midi._assignments.p2 = { kind: 'note', ch: 0, note: 36, min: 0, max: 127 }
+
+        assert.ok(midi.getLearnView().find(r => r.controlId === 'p2')?.conflict)
+
+        midi.setNote('p2', 37)
+        assert.equal(midi._assignments.p2.note, 37)
+        assert.equal(midi.getLearnView().find(r => r.controlId === 'p2')?.conflict, null)
+    })
+})
+
