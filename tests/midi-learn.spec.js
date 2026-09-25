@@ -148,11 +148,11 @@ test('browser: MIDI learn drawer highlights CC conflict and resolves via channel
     expect(await badge.getAttribute('aria-label')).toContain('Conflict: shares CC 50 · ch 1')
 
     // Open edit panel on the second row (speedA)
-    const editBtn = page.locator('.midi-learn-row').filter({ hasText: 'speed · a' }).locator('.ml-btn-edit')
+    const editBtn = page.locator('.midi-learn-row').filter({ hasText: 'speed A' }).locator('.ml-btn-edit')
     await editBtn.click()
 
     // Find channel input for speedA and change it from 1 to 2
-    const chInput = page.locator('input[type="number"][aria-label="speed · a ch"]')
+    const chInput = page.locator('input[type="number"][aria-label="speed A ch"]')
     await expect(chInput).toBeVisible()
     await chInput.fill('2')
     await chInput.dispatchEvent('change')
