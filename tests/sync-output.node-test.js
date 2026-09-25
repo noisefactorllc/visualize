@@ -429,6 +429,28 @@ test('dispose closes an in-flight pairing client and prevents a late token from 
     assert.equal(controller.state.connected, false)
 })
 
+test('immediate dispose closes synchronously tracked client without yielding microtasks', async () => {
+    const pendingPair = deferred()
+    let pairingCloses = 0
+    const controller = new syncOutput.SyncOutputController({
+        connectionProvider: {
+            createClient() {
+                return {
+                    pair: () => pendingPair.promise,
+                    close() { pairingCloses++ }
+                }
+            }
+        }
+    })
+
+    const connecting = controller.connect()
+    controller.dispose()
+
+    assert.equal(pairingCloses, 1)
+    pendingPair.resolve({ protocolVersion: 1, token: 'a'.repeat(64) })
+    await assert.rejects(connecting, { code: 'SYNC_LIFECYCLE' })
+})
+
 test('dispose closes an in-flight authenticated client and ignores its late welcome', async () => {
     const pendingWelcome = deferred()
     let authenticatedCloses = 0
@@ -531,6 +553,9 @@ test('dispose tears down a live sender once and is idempotent', async () => {
     assert.equal(fixture.events.filter((event) => event === 'client close').length, 1)
     assert.equal(controller.state.connected, false)
     assert.equal(controller.state.senderName, null)
+    await assert.rejects(controller.checkAvailability(), { code: 'SYNC_LIFECYCLE' })
+    await assert.rejects(controller.connect(), { code: 'SYNC_LIFECYCLE' })
+    await assert.rejects(controller.start('Late'), { code: 'SYNC_LIFECYCLE' })
 })
 
 test('recovery continues after the fast ramp and reconnects without pairing again', async () => {
@@ -1186,3 +1211,55 @@ test('an encoding failure that is not a timeout still ends the output', async ()
     assert.equal(fixture.timers.timeouts.size, 0)
 })
 
+test('initializes one passive app singleton without probing, pairing, connecting, or UI', () => {
+    const calls = []
+    const connectionProvider = {
+        createClient() {
+            calls.push('createClient')
+            throw new Error('singleton initialization must stay passive')
+        }
+    }
+    const renderer = {
+        createFrameExportQueue() {},
+        addSink() {}
+    }
+    const canvas = { width: 1024, height: 1024 }
+
+    const first = syncOutput.initializeSyncOutputController({
+        renderer,
+        getCanvas: () => canvas,
+        connectionProvider
+    })
+    const second = syncOutput.initializeSyncOutputController({
+        renderer: null,
+        getCanvas: () => null,
+        connectionProvider
+    })
+
+    assert.equal(first, second)
+    assert.equal(syncOutput.getSyncOutputController(), first)
+    assert.equal(first.state.status, 'idle')
+    assert.deepEqual(calls, [])
+    assert.equal('document' in first, false)
+    assert.equal(globalThis.syncOutputController, undefined)
+    assert.equal(globalThis._testExports?.syncOutputController, undefined)
+})
+
+test('initializes a fresh singleton when the previous instance has been disposed', () => {
+    const first = syncOutput.initializeSyncOutputController({
+        renderer: { pipeline: {} },
+        getCanvas: () => ({}),
+        connectionProvider: { createClient: () => ({}) }
+    })
+    first.dispose()
+
+    const second = syncOutput.initializeSyncOutputController({
+        renderer: { pipeline: {} },
+        getCanvas: () => ({}),
+        connectionProvider: { createClient: () => ({}) }
+    })
+
+    assert.notEqual(first, second)
+    assert.equal(syncOutput.getSyncOutputController(), second)
+    assert.equal(second.state.status, 'idle')
+})

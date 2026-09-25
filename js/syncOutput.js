@@ -293,6 +293,7 @@ export class SyncOutputController {
         this._client = null
         this._welcome = null
         this._sender = null
+        this._exportQueue = null
         this._removeSink = null
         this._statsTimer = null
         this._liveGeneration = 0
@@ -300,6 +301,7 @@ export class SyncOutputController {
         this._liveCanvas = null
         this._liveDescriptor = null
         this._livePipeline = null
+        this._compressedSender = false
         this._recoveryGeneration = 0
         this._lastRecoveryCause = null
         this._recoveryAttempts = 0
@@ -469,9 +471,16 @@ export class SyncOutputController {
         this._listeners.clear()
     }
 
-    async _createOwnedClient(options, lifecycleGeneration) {
-        const client = await this._connectionProvider.createClient(options)
-        if (this._disposed || lifecycleGeneration !== this._operationGeneration) {
+    _createOwnedClient(options, lifecycleGeneration) {
+        const clientOrPromise = this._connectionProvider.createClient(options)
+        if (clientOrPromise && typeof clientOrPromise.then === 'function') {
+            return clientOrPromise.then((client) => this._trackOwnedClient(client, lifecycleGeneration))
+        }
+        return this._trackOwnedClient(clientOrPromise, lifecycleGeneration)
+    }
+
+    _trackOwnedClient(client, lifecycleGeneration) {
+        if (this._disposed || (lifecycleGeneration !== undefined && lifecycleGeneration !== this._operationGeneration)) {
             try { client?.close?.() } catch {
                 // A late client is already outside the active lifecycle.
             }
@@ -794,11 +803,13 @@ export class SyncOutputController {
 
             const generation = ++this._liveGeneration
             sinkGeneration = generation
+            this._exportQueue = resources.queue
             this._sender = sender
             this._removeSink = resources.removeSink
             this._liveCanvas = liveCanvas
             this._liveDescriptor = configuredDescriptor
             this._livePipeline = rendererIdentity.pipeline
+            this._compressedSender = compressed
             resources.queue = null
             resources.sender = null
             resources.removeSink = null
@@ -823,10 +834,12 @@ export class SyncOutputController {
             this._clearStatsTimer()
             this._cleanupStartResources(resources)
             this._sender = null
+            this._exportQueue = null
             this._removeSink = null
             this._liveCanvas = null
             this._liveDescriptor = null
             this._livePipeline = null
+            this._compressedSender = false
             this._closeClient()
             if (error?.code === 'SYNC_LIFECYCLE') throw error
             const code = typeof error?.code === 'string' ? error.code : 'SYNC_START_FAILED'
@@ -1161,11 +1174,13 @@ export class SyncOutputController {
             sinkGeneration = liveGeneration
             this._client = resources.client
             this._welcome = welcome
+            this._exportQueue = resources.queue
             this._sender = resources.sender
             this._removeSink = resources.removeSink
             this._liveCanvas = context.canvas
             this._liveDescriptor = configuredDescriptor
             this._livePipeline = context.pipeline
+            this._compressedSender = supportsH264CanvasOutput(welcome)
             resources.client = null
             resources.queue = null
             resources.sender = null
@@ -1354,10 +1369,12 @@ export class SyncOutputController {
         if (this._liveGeneration === generation) this._liveGeneration++
         this._stoppingGeneration = 0
         this._sender = null
+        this._exportQueue = null
         this._removeSink = null
         this._liveCanvas = null
         this._liveDescriptor = null
         this._livePipeline = null
+        this._compressedSender = false
     }
 
     _clearStatsTimer() {
@@ -1375,9 +1392,9 @@ export class SyncOutputController {
         this._client = null
         this._welcome = null
         if (!client) return null
-        if (this._ownedClients.has(client)) return this._closeOwnedClient(client)
+        if (this._ownedClients?.has(client)) return this._closeOwnedClient(client)
         try {
-            client.close()
+            client.close?.()
             return null
         } catch (error) {
             return error
@@ -1557,4 +1574,17 @@ export function deriveSyncOutputView(state = {}, { policy = { status: 'unknown' 
             failed: finiteCounter(stats.failed)
         })
     })
+}
+
+let syncOutputController = null
+
+export function initializeSyncOutputController(options) {
+    if (!syncOutputController || syncOutputController._disposed) {
+        syncOutputController = new SyncOutputController(options)
+    }
+    return syncOutputController
+}
+
+export function getSyncOutputController() {
+    return syncOutputController
 }
