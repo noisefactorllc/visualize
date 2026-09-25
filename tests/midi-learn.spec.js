@@ -127,7 +127,7 @@ test('browser: MIDI learn drawer highlights CC conflict and resolves via channel
     await page.waitForFunction(() => !!window.__visualize?.midi)
 
     // Open settings drawer
-    await page.click('#btn-settings')
+    await page.click('#settings-toggle')
     const conflictsBanner = page.locator('#midi-learn-conflicts')
 
     // Conflict banner should be populated and visible
