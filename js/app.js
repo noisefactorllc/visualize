@@ -2697,6 +2697,9 @@ function renderLearnRows(rows, midi) {
     if (!container.getAttribute('aria-label')) {
         container.setAttribute('aria-label', 'MIDI learn assignments')
     }
+    const activeAriaLabel = (container.contains(document.activeElement))
+        ? document.activeElement.getAttribute?.('aria-label')
+        : null
     container.innerHTML = ''
     renderLearnRows._bars = new Map()   // controlId -> { fill, row }
     renderLearnRows._editing = renderLearnRows._editing || new Set()
@@ -2862,28 +2865,34 @@ function renderLearnRows(rows, midi) {
             // Channel (1..16 displayed, stored 0..15)
             const chVal = (row.ch != null ? row.ch : 0) + 1
             const chField = mkNum('ch', chVal, 1, 16, () => {
-                const newCh = Math.max(1, Math.min(16, Number(chField.input.value) || 1)) - 1
+                const parsed = Number(chField.input.value)
+                const newCh = Math.max(1, Math.min(16, Number.isFinite(parsed) ? parsed : 1)) - 1
                 midi.setChannel(row.controlId, newCh)
             })
+            if (row.conflict) chField.input.setAttribute('aria-invalid', 'true')
             panel.appendChild(chField.wrap)
 
             if (row.kind === 'cc' && row.cc != null) {
                 // CC number (0..127)
                 const ccVal = row.cc ?? 0
                 const ccField = mkNum('cc', ccVal, 0, 127, () => {
-                    const newCc = Math.max(0, Math.min(127, Number(ccField.input.value) || 0))
+                    const parsed = Number(ccField.input.value)
+                    const newCc = Math.max(0, Math.min(127, Number.isFinite(parsed) ? parsed : 0))
                     midi.setCc(row.controlId, newCc)
                 })
+                if (row.conflict) ccField.input.setAttribute('aria-invalid', 'true')
                 panel.appendChild(ccField.wrap)
 
                 // Min and Max (0..127)
                 let minVal = row.min ?? 0, maxVal = row.max ?? 127
                 const minF = mkNum('min', minVal, 0, 127, () => {
-                    minVal = Math.max(0, Math.min(127, Number(minF.input.value) || 0))
+                    const parsed = Number(minF.input.value)
+                    minVal = Math.max(0, Math.min(127, Number.isFinite(parsed) ? parsed : 0))
                     midi.setRange(row.controlId, minVal, maxVal)
                 })
                 const maxF = mkNum('max', maxVal, 0, 127, () => {
-                    maxVal = Math.max(0, Math.min(127, Number(maxF.input.value) || 127))
+                    const parsed = Number(maxF.input.value)
+                    maxVal = Math.max(0, Math.min(127, Number.isFinite(parsed) ? parsed : 127))
                     midi.setRange(row.controlId, minVal, maxVal)
                 })
                 panel.appendChild(minF.wrap)
@@ -2905,9 +2914,11 @@ function renderLearnRows(rows, midi) {
                 // Note number (0..127)
                 const noteVal = row.note ?? 0
                 const noteField = mkNum('note', noteVal, 0, 127, () => {
-                    const newNote = Math.max(0, Math.min(127, Number(noteField.input.value) || 0))
+                    const parsed = Number(noteField.input.value)
+                    const newNote = Math.max(0, Math.min(127, Number.isFinite(parsed) ? parsed : 0))
                     midi.setNote(row.controlId, newNote)
                 })
+                if (row.conflict) noteField.input.setAttribute('aria-invalid', 'true')
                 panel.appendChild(noteField.wrap)
             }
 
@@ -2915,6 +2926,13 @@ function renderLearnRows(rows, midi) {
         }
 
         container.appendChild(div)
+    }
+
+    if (activeAriaLabel) {
+        const target = container.querySelector(`[aria-label="${activeAriaLabel}"]`)
+        if (target && typeof target.focus === 'function') {
+            target.focus()
+        }
     }
 }
 

@@ -280,6 +280,10 @@ export class SharedMidi {
             clearTimeout(this._learnCommitTimer)
             this._learnCommitTimer = null
         }
+        if (this._captureUpdateRaf) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this._captureUpdateRaf)
+            this._captureUpdateRaf = null
+        }
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
     }
 
@@ -554,7 +558,14 @@ export class SharedMidi {
                 changed = true
             }
             if (changed && this._onLearnUpdate) {
-                this._onLearnUpdate(this.getLearnView())
+                if (!this._captureUpdateRaf && typeof requestAnimationFrame === 'function') {
+                    this._captureUpdateRaf = requestAnimationFrame(() => {
+                        this._captureUpdateRaf = null
+                        if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
+                    })
+                } else if (typeof requestAnimationFrame !== 'function') {
+                    this._onLearnUpdate(this.getLearnView())
+                }
             }
         }
     }
@@ -570,6 +581,10 @@ export class SharedMidi {
         this._learningControlId = null
         this._learningCapture = null
         if (this._learnCommitTimer) { clearTimeout(this._learnCommitTimer); this._learnCommitTimer = null }
+        if (this._captureUpdateRaf) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this._captureUpdateRaf)
+            this._captureUpdateRaf = null
+        }
         this._saveAssignments()
         this._resetRuntime(id)
 
@@ -601,6 +616,10 @@ export class SharedMidi {
         if (this._learnCommitTimer) {
             clearTimeout(this._learnCommitTimer)
             this._learnCommitTimer = null
+        }
+        if (this._captureUpdateRaf) {
+            if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this._captureUpdateRaf)
+            this._captureUpdateRaf = null
         }
         this._resetRuntime(id)
         this._saveAssignments()
@@ -700,8 +719,9 @@ export class SharedMidi {
         const val = Number(cc)
         if (!Number.isFinite(val)) return
         const num = Math.max(0, Math.min(127, Math.round(val)))
-        if (a.cc === num) return
+        if (a.cc === num && a.kind === 'cc') return
         a.cc = num
+        if (!a.kind) a.kind = 'cc'
         this._saveAssignments()
         this._resetRuntime(controlId)
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())
