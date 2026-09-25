@@ -28,7 +28,7 @@ import { AutoMix, clampBarsPerScene } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
 import {
-    SyncOutputController,
+    initializeSyncOutputController,
     createSyncOutputConnectionProvider
 } from './syncOutput.js'
 import { createSyncOutputDialog } from './syncOutputDialog.js'
@@ -343,7 +343,7 @@ async function boot() {
     // Noisedeck Sync is an additional target for the mixer renderer's
     // selected output texture. Construction stays passive: discovery and
     // pairing happen only after the operator opens the dialog and acts.
-    const syncOutputController = new SyncOutputController({
+    const syncOutputController = initializeSyncOutputController({
         renderer: mixer.renderer,
         getCanvas: () => mixer.canvas,
         connectionProvider: createSyncOutputConnectionProvider({
