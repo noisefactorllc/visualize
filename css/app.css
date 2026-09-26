@@ -2615,6 +2615,45 @@ kbd {
 }
 .hf-theme-select:focus { border-color: var(--hf-accent); }
 
+/* ─────────────── mobile guard ─────────────── */
+/* Static styles live here rather than inline style="" attributes
+   (Handfish rule: no inline styles for static values — inline styles
+   outrank stylesheets and defeat token-based theming). JS toggles
+   only `display` (dynamic state, permitted inline). */
+#mobile-guard {
+    position: fixed;
+    inset: 0;
+    z-index: var(--hf-z-tooltip, 700);
+    display: none;
+    background: var(--hf-bg-base);
+    color: var(--hf-text-normal);
+    font-family: var(--hf-font-family);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: var(--hf-space-8);
+    gap: var(--hf-space-6);
+}
+#mobile-guard img {
+    /* 4rem brand mark: the Handfish spacing scale has no 4rem step
+       (--hf-space-12 tops out at 3rem), so this stays an exact size. */
+    width: 64px;
+    height: 64px;
+    border-radius: var(--hf-radius-lg);
+}
+#mobile-guard p {
+    font-size: var(--hf-size-xl);
+    line-height: 1.5;
+    max-width: 28ch;
+}
+#mobile-guard p + p {
+    font-size: var(--hf-size-md);
+    opacity: 0.75;
+    max-width: 32ch;
+}
+#mobile-guard a { color: var(--hf-link-color, var(--hf-accent)); }
+
 /* ─────────────── responsive ─────────────── */
 @media (max-width: 1100px) {
     :root { --library-w: 220px; }

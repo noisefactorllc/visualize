@@ -73,23 +73,47 @@ test('css/app.css uses semantic Handfish tokens for key UI elements', () => {
     assert.match(rawCss, /input\[type="range"\]:not\(\.slider\)::-webkit-slider-thumb\s*\{[^}]*var\(--hf-shadow-sm\)/)
 })
 
-test('index.html mobile guard adheres to Handfish token conventions', () => {
+test('index.html contains zero inline style="" attributes', () => {
     const htmlPath = resolve(process.cwd(), 'index.html')
     const html = readFileSync(htmlPath, 'utf8')
+
+    const inlineMatches = html.match(/style="/g) || []
+    assert.deepEqual(
+        inlineMatches,
+        [],
+        `Found inline style="" attributes in index.html (${inlineMatches.length}). Handfish bans inline styles for static values — put them in css/app.css with --hf-* tokens.`
+    )
+})
+
+test('index.html mobile guard adheres to Handfish token conventions', () => {
+    const htmlPath = resolve(process.cwd(), 'index.html')
+    const cssPath = resolve(process.cwd(), 'css/app.css')
+    const html = readFileSync(htmlPath, 'utf8')
+    const css = readFileSync(cssPath, 'utf8')
 
     const guardMatch = html.match(/<div id="mobile-guard"[\s\S]*?<\/div>/)
     assert.ok(guardMatch, 'mobile-guard element subtree should exist in index.html')
     const guardSubtree = guardMatch[0]
 
+    // Static styles live in css/app.css, not inline (Handfish rule)
+    assert.doesNotMatch(guardSubtree, /style="/, 'mobile-guard must not carry inline style attributes')
     assert.doesNotMatch(
         guardSubtree,
         /#[0-9a-fA-F]{3,8}/,
         'mobile-guard subtree should not contain raw hex fallbacks'
     )
-    assert.match(guardSubtree, /var\(--hf-bg-base\)/)
-    assert.match(guardSubtree, /var\(--hf-text-normal\)/)
-    assert.match(guardSubtree, /var\(--hf-radius-lg\)/)
-    assert.match(guardSubtree, /var\(--hf-link-color,\s*var\(--hf-accent\)\)/)
+
+    // The guard's static rule block uses semantic Handfish tokens
+    assert.match(css, /#mobile-guard\s*\{[^}]*background:\s*var\(--hf-bg-base\)/)
+    assert.match(css, /#mobile-guard\s*\{[^}]*color:\s*var\(--hf-text-normal\)/)
+    assert.match(css, /#mobile-guard\s*\{[^}]*font-family:\s*var\(--hf-font-family\)/)
+    assert.match(css, /#mobile-guard\s*\{[^}]*padding:\s*var\(--hf-space-8\)/)
+    assert.match(css, /#mobile-guard\s*\{[^}]*gap:\s*var\(--hf-space-6\)/)
+    assert.match(css, /#mobile-guard\s*\{[^}]*z-index:\s*var\(--hf-z-tooltip,?\s*700\)/)
+    assert.match(css, /#mobile-guard img\s*\{[^}]*border-radius:\s*var\(--hf-radius-lg\)/)
+    assert.match(css, /#mobile-guard p\s*\{[^}]*font-size:\s*var\(--hf-size-xl\)/)
+    assert.match(css, /#mobile-guard p \+ p\s*\{[^}]*font-size:\s*var\(--hf-size-md\)/)
+    assert.match(css, /#mobile-guard a\s*\{[^}]*color:\s*var\(--hf-link-color,\s*var\(--hf-accent\)\)/)
 })
 
 test('audio band meters maintain high contrast and accessibility semantics across themes', () => {
