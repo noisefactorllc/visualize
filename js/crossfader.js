@@ -18,6 +18,28 @@ export const CROSSFADE_ACCEL_RAMP_RATE = 0.25
 export const CROSSFADE_ACCEL_MAX_MULTIPLIER = 2.5
 
 /**
+ * Valid crossfade curve names, matching the compositor's XFADE_CURVES
+ * (linear, dipped equal-power, sharp, hard cut) and the #automix-curve
+ * dropdown options. Used to validate persisted / restored curve values.
+ */
+export const CROSSFADE_CURVES = ['linear', 'dipped', 'sharp', 'cut']
+export const CROSSFADE_DEFAULT_CURVE = 'dipped'
+
+/**
+ * Validate and normalize a crossfade curve name.
+ *
+ * @param {*} raw - Raw value (e.g. from localStorage or a dropdown)
+ * @param {Object} [options]
+ * @param {string} [options.defaultCurve=CROSSFADE_DEFAULT_CURVE] - Fallback for invalid input
+ * @returns {string} A valid curve name
+ */
+export function parseCrossfadeCurve(raw, { defaultCurve = CROSSFADE_DEFAULT_CURVE } = {}) {
+    if (typeof raw !== 'string') return defaultCurve
+    const name = raw.toLowerCase().trim()
+    return CROSSFADE_CURVES.includes(name) ? name : defaultCurve
+}
+
+/**
  * Compute the acceleration multiplier for a sustained repeat count.
  *
  * @param {number} repeatCount - Number of consecutive repeat events (0 for initial keypress)

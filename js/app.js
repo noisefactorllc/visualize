@@ -39,7 +39,7 @@ import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
-import { calculateCrossfadeNudge, CrossfadeNudgeTracker } from './crossfader.js'
+import { calculateCrossfadeNudge, CrossfadeNudgeTracker, parseCrossfadeCurve } from './crossfader.js'
 import { clearCodeFromUrl } from './sharingLoader.js'
 import { getUserEffectsManager, isQuotaExceededError } from './userEffects.js'
 import {
@@ -1495,10 +1495,41 @@ async function boot() {
         autoMix.setBarsPerScene(clampBarsPerScene(e.target.value))
     })
     $('automix-curve').addEventListener('change', (e) => {
-        state.curve = e.target.value
-        autoMix.setCurve(e.target.value)
-        compositor.setCurve(e.target.value)
+        state.curve = parseCrossfadeCurve(e.target.value)
+        autoMix.setCurve(state.curve)
+        compositor.setCurve(state.curve)
+        persistCurve()
     })
+
+    // Crossfade curve persistence — the VJ's preferred curve feel
+    // (linear / dipped / sharp / cut) survives a page reload so a gig
+    // setup doesn't silently snap back to 'dipped'. Invalid or missing
+    // values fall back to the default via parseCrossfadeCurve. Restoring
+    // goes through the same three targets as the dropdown change path
+    // (state, compositor, autoMix) and never touches the crossfader
+    // value or MIDI bindings (soft-takeover neutrality).
+    const CURVE_STORAGE_KEY = 'visualize.curve.v1'
+    function persistCurve() {
+        try {
+            localStorage.setItem(CURVE_STORAGE_KEY, JSON.stringify({ curve: state.curve }))
+        } catch {}
+    }
+    function loadCurvePrefs() {
+        let parsed
+        try {
+            parsed = JSON.parse(localStorage.getItem(CURVE_STORAGE_KEY) || 'null')
+        } catch {
+            return
+        }
+        const curve = parseCrossfadeCurve(parsed && parsed.curve)
+        if (curve === state.curve) return
+        state.curve = curve
+        compositor.setCurve(curve)
+        autoMix.setCurve(curve)
+        const sel = $('automix-curve')
+        if (sel) sel.value = curve
+    }
+    loadCurvePrefs()
 
     // Fade duration — single source of truth for both the manual
     // auto-fade button and auto-VJ scene transitions. Stored on
@@ -2194,7 +2225,8 @@ async function boot() {
         if (errors.length) toast(`recall had errors: ${errors[0].slice(0, 60)}`, 4000)
     }
 
-    state.curve = 'dipped' // track current curve so snapshots can read it
+    // state.curve is initialized in the state literal above and kept in
+    // sync by the dropdown handler, scene snapshots, and loadCurvePrefs.
 
     // Expose scene plumbing to the test hook so specs can drive
     // save / recall without scraping the UI.
