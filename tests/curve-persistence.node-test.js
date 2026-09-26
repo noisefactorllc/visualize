@@ -90,3 +90,4 @@ test('persisted-curve storage payload shape is validated end-to-end', () => {
     const empty = JSON.parse('null')
     assert.equal(parseCrossfadeCurve(empty && empty.curve), 'dipped')
 })
+
