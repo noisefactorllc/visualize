@@ -23,7 +23,8 @@ function harness() {
             compiles.push({ dsl, ...gate })
             await gate.promise
             this.rendered = dsl
-        }, start() { this.isRunning = true }, stop() {}, dispose() {}, }
+        }, start() { this.isRunning = true }, stop() {},
+ dispose() { this.disposeCalls = (this.disposeCalls || 0) + 1 }, }
     const context = vm.createContext({ console, CanvasRenderer: function () { return engine },
         CDN_BASE: '', extractEffectNamesFromDsl: () => [] })
     const Deck = vm.runInContext(source + '\nDeck', context)
@@ -243,6 +244,132 @@ test('cancelPending invalidates a queued load so it never compiles', async () =>
     assert.equal((await first).superseded, true)
     assert.equal((await second).superseded, true)
     assert.deepEqual(h.compiles.map(c => c.dsl), ['first'])
+})
+
+// Long-set memory & resource hygiene: repeated program swaps, rebind
+// reloads, cancels, and disposals across a multi-hour set must never
+// overlap renderer compiles, leak queued work past a dispose(), or
+// abort a successful load because a surface registry looks unexpected.
+test('soak: 120 alternating load/reloadDsl cycles with interleaved cancels serialize cleanly', async () => {
+    const h = harness()
+    const outcomes = []
+    let nextCompile = 0
+    const pump = () => {
+        if (h.compiles.length > nextCompile) {
+            h.compiles[nextCompile].resolve()
+            nextCompile++
+            return true
+        }
+        return false
+    }
+    for (let i = 0; i < 120; i++) {
+        const dsl = `dsl-${i}`
+        const p = i % 2 === 0 ? h.deck.load(dsl, `P${i}`) : h.deck.reloadDsl(dsl)
+        outcomes.push(p.then(r => r, e => ({ thrown: e })))
+        if (i % 9 === 4) h.deck.cancelPending()
+        await flush()
+        // The single-compile invariant: a queued request must wait for
+        // the in-flight one; at most one unresolved compile may exist.
+        assert.ok(h.compiles.length - nextCompile <= 1,
+            `iteration ${i}: ${h.compiles.length - nextCompile} unresolved compiles`)
+        pump()
+        await flush()
+    }
+    while (pump()) await flush()
+    const settled = await Promise.all(outcomes)
+    assert.equal(settled.length, 120)
+    for (const r of settled) {
+        assert.equal(r.thrown, undefined, 'no load may reject during the soak')
+        assert.ok(r.success || r.superseded, `unexpected result: ${JSON.stringify(r)}`)
+    }
+    // The engine's last compiled DSL must equal the deck's published
+    // metadata; the rebind source is the last full load (the reloads
+    // that follow preserve it).
+    assert.equal(h.engine.rendered, h.deck.currentDsl)
+    assert.ok(h.compiles.length <= 120, 'cancels must suppress queued compiles')
+    assert.ok(h.compiles.length > 0)
+    assert.equal(h.deck.rebind.originalDsl, 'dsl-118')
+    assert.equal(h.deck._disposed, false)
+    // The final request must have actually landed in the engine.
+    assert.equal(h.engine.rendered, 'dsl-119')
+})
+
+test('dispose rejects queued loads and stays idempotent', async () => {
+    const h = harness()
+    const inFlight = h.deck.load('first', 'First')
+    await flush()
+    const queued = h.deck.load('second', 'Second')
+    h.deck.dispose()
+    h.deck.dispose()
+    h.compiles[0].resolve()
+    await flush()
+    assert.equal((await inFlight).superseded, true)
+    assert.equal((await queued).superseded, true)
+    assert.deepEqual(h.compiles.map(c => c.dsl), ['first'])
+    assert.equal(h.engine.disposeCalls, 1, 'double dispose must not dispose the renderer twice')
+})
+
+function surfaceHarness(clearSurface) {
+    const h = harness()
+    const cleared = []
+    h.engine._pipeline = {
+        surfaces: new Map([['o0', 'tex0'], ['o1', 'tex1']]),
+        clearSurface(name) {
+            cleared.push(name)
+            if (clearSurface) clearSurface(name)
+        }
+    }
+    return { ...h, cleared }
+}
+
+test('a fresh load clears every surface; a rebind reload preserves them', async () => {
+    const h = surfaceHarness()
+    const fresh = h.deck.load('fresh', 'Fresh')
+    await flush()
+    h.compiles[0].resolve()
+    assert.equal((await fresh).success, true)
+    assert.deepEqual(h.cleared, ['o0', 'o1'])
+    const rebound = h.deck.reloadDsl('rebound')
+    await flush()
+    h.compiles[1].resolve()
+    assert.equal((await rebound).success, true)
+    assert.deepEqual(h.cleared, ['o0', 'o1'], 'rebind reloads must keep simulation surfaces')
+})
+
+test('a failing clearSurface warns but never aborts a successful load', async () => {
+    const warns = []
+    const origWarn = console.warn
+    console.warn = (...args) => warns.push(args)
+    try {
+        const h = surfaceHarness(name => { if (name === 'o1') throw new Error('boom') })
+        const pending = h.deck.load('fresh', 'Fresh')
+        await flush()
+        h.compiles[0].resolve()
+        const res = await pending
+        assert.equal(res.success, true, 'a surface-clear failure must not fail the load')
+        assert.equal(warns.length, 1)
+        assert.match(String(warns[0][0]), /\[deck\] clearSurface\(o1\) failed/)
+    } finally {
+        console.warn = origWarn
+    }
+})
+
+test('clearSurfaces is a safe no-op for missing pipelines and unusual registries', () => {
+    const h = harness()
+    h.engine._pipeline = undefined
+    h.deck.clearSurfaces() // no throw
+    const cleared = []
+    h.engine._pipeline = {
+        surfaces: { keys: () => ['o0'] },
+        clearSurface: name => cleared.push(name)
+    }
+    h.deck.clearSurfaces()
+    assert.deepEqual(cleared, ['o0'])
+    h.engine._pipeline = { surfaces: 'not-a-registry', clearSurface: () => {} }
+    h.deck.clearSurfaces() // no throw
+    h.engine._pipeline = { clearSurface: () => {} } // no surfaces registry
+    h.deck.clearSurfaces() // no throw
+    assert.deepEqual(cleared, ['o0'])
 })
 
 // Invalid deck state (corrupt persisted payload, NaN upstream computation)

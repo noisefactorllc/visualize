@@ -359,6 +359,7 @@ export class Deck {
     }
 
     dispose() {
+        if (this._disposed) return
         this._disposed = true
         ++this._loadVersion
         this.stop()
@@ -375,11 +376,23 @@ export class Deck {
      * The runtime's recompile() deliberately preserves these surfaces
      * across recompiles, so rebind + load paths call this explicitly
      * when they want a fresh seed instead of continuing the simulation.
+     *
+     * Robust across engine revisions: a surfaces registry that is a Map,
+     * a keyed collection with .keys(), or missing entirely must never
+     * throw here — clearSurfaces() runs inside the load path, and an
+     * unexpected shape would otherwise abort a successful program load
+     * mid-set.
      */
     clearSurfaces() {
         const pipeline = this._renderer?._pipeline
-        if (!pipeline?.surfaces || typeof pipeline.clearSurface !== 'function') return
-        for (const name of pipeline.surfaces.keys()) {
+        if (!pipeline || typeof pipeline.clearSurface !== 'function') return
+        const surfaces = pipeline.surfaces
+        let names = null
+        if (surfaces instanceof Map) names = [...surfaces.keys()]
+        else if (Array.isArray(surfaces)) names = surfaces
+        else if (surfaces && typeof surfaces.keys === 'function') names = [...surfaces.keys()]
+        if (!names) return
+        for (const name of names) {
             try {
                 pipeline.clearSurface(name)
             } catch (err) {
