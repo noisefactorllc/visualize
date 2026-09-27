@@ -587,3 +587,127 @@ describe('SharedMidi Conflict Highlighting & Channel Isolation in Learn Mode', (
     })
 })
 
+
+describe('MIDI soft-takeover vs software jumps (scene recall / auto-fade)', () => {
+    function createPickupRig() {
+        const midi = new SharedMidi()
+        midi._enabled = true
+        const rig = { software: 0.5, applied: [] }
+        midi.registerControl('crossfader', {
+            label: 'crossfader',
+            kind: 'continuous',
+            handler: (v01) => { rig.software = v01; rig.applied.push(v01) },
+            getValue: () => rig.software,
+        })
+        midi._assignments.crossfader = { kind: 'cc', ch: 0, cc: 7, min: 0, max: 127, invert: false }
+        rig.cc = (raw) => midi._dispatch('cc', 0, 7, raw, false)
+        rig.rt = () => midi._controlRuntime.get('crossfader')
+        return rig
+    }
+
+    it('a scene-recall jump past a parked fader does not hijack the control on the next CC', () => {
+        const rig = createPickupRig()
+        // Park the fader below the software value: arms side -1, no apply.
+        rig.cc(25) // ≈0.197 vs software 0.5
+        assert.equal(rig.applied.length, 0)
+        assert.equal(rig.rt().engaged, false)
+        assert.equal(rig.rt().armSide, -1)
+
+        // Scene recall (or an auto-fade sweep) moves the software value
+        // across the parked hardware position, 0.5 -> 0.1.
+        rig.software = 0.1
+        rig.cc(25)
+        // Without the stale-arm invalidation this "crossing" would engage
+        // and stomp the recalled value with the parked hardware position.
+        assert.equal(rig.applied.length, 0, 'parked fader must not stomp a recalled value')
+        assert.equal(rig.rt().engaged, false)
+        assert.equal(rig.rt().armSide, 1, 'stale arm is invalidated and re-armed fresh against the recalled value')
+    })
+
+    it('after a recall jump the fader must travel to the new software value to catch', () => {
+        const rig = createPickupRig()
+        rig.cc(25) // arm below 0.5
+        rig.software = 0.1 // scene recall
+        rig.cc(25) // stale arm invalidated
+        // Fader sweeps down toward the recalled value; nothing applies
+        // until it lands within eps of 0.1.
+        rig.cc(38) // ≈0.299
+        rig.cc(32) // ≈0.252
+        rig.cc(25) // ≈0.197
+        assert.equal(rig.applied.length, 0, 'approaching from a re-armed side must not engage')
+        rig.cc(13) // ≈0.102 — within eps of 0.1
+        assert.equal(rig.applied.length, 1)
+        assert.equal(rig.rt().engaged, true)
+    })
+
+    it('crossing catch still engages when the software value is static (regression)', () => {
+        const rig = createPickupRig()
+        rig.cc(38) // ≈0.299 vs static software 0.5 → arm side -1
+        assert.equal(rig.rt().armSide, -1)
+        rig.cc(77) // ≈0.606 — hardware crossed the static software value
+        assert.equal(rig.applied.length, 1)
+        assert.equal(rig.rt().engaged, true)
+        assert.equal(rig.rt().armSide, null)
+    })
+
+    it('an engaged fader re-arms after an automation sweep moves the software value', () => {
+        const rig = createPickupRig()
+        rig.cc(64) // ≈0.504 — within eps of 0.5, engages
+        assert.equal(rig.rt().engaged, true)
+        // Auto-xfade sweep moves the software value away.
+        rig.software = 0.9
+        rig.cc(64)
+        assert.equal(rig.applied.length, 1, 're-arm must suppress the stale hardware value')
+        assert.equal(rig.rt().engaged, false)
+        // Holding the fader steady must not fight the sweep; the value is
+        // only caught again once the fader reaches the swept position.
+        rig.cc(64)
+        assert.equal(rig.applied.length, 1)
+        rig.cc(114) // ≈0.898 — within eps of 0.9
+        assert.equal(rig.applied.length, 2)
+        assert.equal(rig.rt().engaged, true)
+    })
+
+    it('external software movement within PICKUP_EPS does not invalidate a stale arm', () => {
+        const rig = createPickupRig()
+        // Park the fader below the software value: arms side -1.
+        rig.cc(25) // ≈0.197 vs software 0.5
+        assert.equal(rig.rt().armSide, -1)
+        // Software nudges by less than eps (0.02) — e.g. a rounding-level
+        // drift or a sub-eps trim. The arm must survive; a subsequent
+        // crossing still catches.
+        rig.software = 0.485 // |Δ| = 0.015 < eps
+        rig.cc(25) // still below 0.485 → re-arms side -1, no apply
+        assert.equal(rig.applied.length, 0)
+        assert.equal(rig.rt().armSide, -1)
+        // Crossing the (barely moved) software value engages as before.
+        rig.cc(77) // ≈0.606 > 0.485
+        assert.equal(rig.applied.length, 1)
+        assert.equal(rig.rt().engaged, true)
+    })
+
+    it('a speed fader behaves identically: scene-recall speed jump does not get stomped', () => {
+        const midi = new SharedMidi()
+        midi._enabled = true
+        const deck = { speed: 1.0 }
+        const applied = []
+        midi.registerControl('speedA', {
+            label: 'speed A',
+            kind: 'continuous',
+            handler: (v01) => { deck.speed = 0.1 + v01 * 3.9; applied.push(deck.speed) },
+            getValue: () => (deck.speed - 0.1) / 3.9,
+        })
+        midi._assignments.speedA = { kind: 'cc', ch: 0, cc: 20, min: 0, max: 127, invert: false }
+        const cc = (raw) => midi._dispatch('cc', 0, 20, raw, false)
+
+        cc(102) // ≈0.803 → ≈3.23× vs software 1.0: arm side +1, no apply
+        assert.equal(applied.length, 0)
+        deck.speed = 0.35 // scene recall restores 0.35× (≈0.064 normalized)
+        cc(102) // stale arm (side +1) must not "cross" the recalled value
+        assert.equal(applied.length, 0, 'recalled deck speed must not be stomped by parked fader')
+        cc(120) // ≈0.945 → ≈3.78×: side +1 again but arm was invalidated; re-arms, no apply
+        assert.equal(applied.length, 0)
+        cc(120) // same side, still not near 0.064 — no apply
+        assert.equal(applied.length, 0)
+    })
+})

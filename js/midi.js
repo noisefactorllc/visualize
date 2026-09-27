@@ -248,7 +248,7 @@ export class SharedMidi {
             }
         }
         this._controlHandlers.set(controlId, info)
-        this._controlRuntime.set(controlId, { prevOn: false, engaged: false, armSide: null, lastWritten: null })
+        this._controlRuntime.set(controlId, { prevOn: false, engaged: false, armSide: null, lastWritten: null, lastCurrent: null })
     }
 
     /** Subscribe to per-control activity: cb(controlId, { value01, engaged, pickup }). */
@@ -259,7 +259,7 @@ export class SharedMidi {
     }
 
     _resetRuntime(controlId) {
-        this._controlRuntime.set(controlId, { prevOn: false, engaged: false, armSide: null, lastWritten: null })
+        this._controlRuntime.set(controlId, { prevOn: false, engaged: false, armSide: null, lastWritten: null, lastCurrent: null })
     }
 
     /** Begin learning the next CC for the given control. */
@@ -465,7 +465,7 @@ export class SharedMidi {
             if (info.kind === 'continuous' && inputKind === 'note') continue
 
             const rt = this._controlRuntime.get(controlId)
-                || { prevOn: false, engaged: false, armSide: null, lastWritten: null }
+                || { prevOn: false, engaged: false, armSide: null, lastWritten: null, lastCurrent: null }
 
             if (info.kind === 'continuous') {
                 const norm = normalizeCcValue(raw, asg.min ?? 0, asg.max ?? 127, !!asg.invert)
@@ -479,6 +479,18 @@ export class SharedMidi {
                 } else {
                     current = rt.lastWritten ?? norm
                 }
+                // A software-side jump (scene recall, auto-xfade / auto-mix
+                // sweep, cut, keyboard nudge) invalidates a stale arm:
+                // without this, a parked fader that happens to sit on the
+                // opposite side of the new current instantly "crosses" it
+                // and hijacks the control on the next CC — the value leaps
+                // to the hardware position without the performer touching
+                // the fader. While disengaged, any external movement of the
+                // software value re-arms relative to the new position.
+                if (!rt.engaged && rt.lastCurrent != null && Math.abs(current - rt.lastCurrent) > PICKUP_EPS) {
+                    rt.armSide = null
+                }
+                rt.lastCurrent = current
                 // Re-arm if software moved from a non-MIDI source since our last write.
                 if (rt.engaged && rt.lastWritten != null && Math.abs(current - rt.lastWritten) > PICKUP_EPS) {
                     rt.engaged = false

@@ -40,7 +40,7 @@ Open <http://localhost:3007>. Click **START SET**. Click **⚙ → audio device*
 - **Recording**: capture the main canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
 - **Output window**: dedicated popup that mirrors the main canvas for second-display / projector use.
 - **Fullscreen main** (F key).
-- **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), S (settings drawer), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), E / Shift+E (rebind EQ deck A / B), M / Shift+M (rebind MIDI deck A / B), arrows (nudge xfade), Shift+S (scenes drawer), Shift+1…9 (recall scene), Esc (close drawer / exit fullscreen).
+- **Keyboard shortcuts**: Space (auto-VJ), T (tap), F (fullscreen), R (record), S (settings drawer), Z/X/C (cut A / auto / cut B), 1-6 (FX), Q/W (random A/B), E / Shift+E (rebind EQ deck A / B), M / Shift+M (rebind MIDI deck A / B), arrows (nudge xfade), Home / End (cut Deck A / Deck B), Shift+S (scenes drawer), Shift+1…9 (recall scene), Esc (close drawer / exit fullscreen).
 
 ## Architecture
 
