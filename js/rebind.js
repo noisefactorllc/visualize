@@ -91,6 +91,20 @@ export function collectRebindableParams(originalDsl) {
 }
 
 /**
+ * Clamp an oscillator count to the documented 0..4 integer range.
+ * Accepts anything a deck state bag, persisted payload, or AutoMix
+ * override might carry: numbers, numeric strings, null/undefined.
+ * Non-finite input (NaN, garbage strings, booleans) → 0. Fractional
+ * values floor — 2.5 must not yield 3 oscillators via `i < 2.5`.
+ */
+export function clampOscillatorCount(value) {
+    if (typeof value === 'boolean') return 0
+    const n = Math.floor(Number(value))
+    if (!Number.isFinite(n)) return 0
+    return Math.max(0, Math.min(4, n))
+}
+
+/**
  * Pick a random (min, max) sub-window inside [lo, hi]. One of three
  * flavours, equally weighted:
  *   full   — (lo, hi)
@@ -215,7 +229,7 @@ export function buildAudioOverrides({
     const n = Math.max(1, Math.min(count, rebindable.length))
     const picked = pickN(rebindable, n, rand)
     const bands = bandpass ? homeBands : [0, 1, 2]
-    const nOsc = Math.max(0, Math.min(oscillatorCount, picked.length))
+    const nOsc = Math.min(clampOscillatorCount(oscillatorCount), picked.length)
     const out = {}
     for (let i = 0; i < picked.length; i++) {
         const p = picked[i]
@@ -238,7 +252,7 @@ export function buildMidiOverrides({ rebindable, count, oscillatorCount = 0, ran
     if (rebindable.length === 0) return {}
     const n = Math.max(1, Math.min(count, rebindable.length))
     const picked = pickN(rebindable, n, rand)
-    const nOsc = Math.max(0, Math.min(oscillatorCount, picked.length))
+    const nOsc = Math.min(clampOscillatorCount(oscillatorCount), picked.length)
     const out = {}
     for (let i = 0; i < picked.length; i++) {
         const p = picked[i]

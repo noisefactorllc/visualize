@@ -7,7 +7,7 @@ import vm from 'node:vm'
 const source = readFileSync(new URL('../js/rebind.js', import.meta.url), 'utf8')
     .replace(/import \{[\s\S]*?\} from '\.\/noisemaker\/bundle.js'/, '')
     .replace(/export /g, '')
-const generators = vm.runInNewContext(source + '\n({ buildAudioOverrides, buildMidiOverrides })', { console })
+const generators = vm.runInNewContext(source + '\n({ buildAudioOverrides, buildMidiOverrides, clampOscillatorCount })', { console })
 
 for (const generator of ['buildAudioOverrides', 'buildMidiOverrides']) {
     test(`${generator} supplies the resolved oscillator offset required for valid DSL`, () => {
@@ -29,6 +29,62 @@ for (const generator of ['buildAudioOverrides', 'buildMidiOverrides']) {
             assert.ok(Number.isFinite(value.min))
             assert.ok(Number.isFinite(value.max))
         }
+    })
+}
+
+test('clampOscillatorCount normalizes to the documented 0..4 integer range', () => {
+    const cases = [
+        { input: 0, expected: 0 },
+        { input: 4, expected: 4 },
+        { input: 99, expected: 4 },      // above documented max
+        { input: -5, expected: 0 },      // below documented min
+        { input: 2.5, expected: 2 },     // fractional floors, never rounds up
+        { input: 4.9, expected: 4 },
+        { input: null, expected: 0 },
+        { input: undefined, expected: 0 },
+        { input: NaN, expected: 0 },
+        { input: Infinity, expected: 0 }, // non-finite → 0
+        { input: '3', expected: 3 },     // numeric string from a corrupt payload
+        { input: 'invalid', expected: 0 },
+        { input: true, expected: 0 },
+        { input: false, expected: 0 },
+    ]
+    for (const { input, expected } of cases) {
+        assert.equal(generators.clampOscillatorCount(input), expected, `input ${String(input)}`)
+    }
+})
+
+for (const generator of ['buildAudioOverrides', 'buildMidiOverrides']) {
+    test(`${generator} clamps fractional oscillatorCount so it cannot emit an extra oscillator`, () => {
+        const rebindable = [0, 1, 2].map(stepIndex => ({
+            stepIndex, paramName: `p${stepIndex}`, spec: { min: 0, max: 10 }
+        }))
+        // 2.5 previously passed straight into `i < nOsc`, producing 3
+        // oscillators for a nominal count of 2.
+        const overrides = generators[generator]({
+            rebindable, count: 3, oscillatorCount: 2.5, rand: () => 0.5,
+            homeBands: [0], bandpass: true,
+        })
+        const oscCount = Object.values(overrides).flatMap(Object.values)
+            .filter(v => v.type === 'Oscillator').length
+        assert.equal(oscCount, 2)
+    })
+
+    test(`${generator} clamps oscillatorCount above the documented max of 4`, () => {
+        const rebindable = [0, 1, 2, 3, 4].map(stepIndex => ({
+            stepIndex, paramName: `p${stepIndex}`, spec: { min: 0, max: 10 }
+        }))
+        // AutoMix's forced fallback passes explicit counts; a count of 99
+        // must not turn every rebindable param into an oscillator.
+        const overrides = generators[generator]({
+            rebindable, count: 5, oscillatorCount: 99, rand: () => 0.5,
+            homeBands: [0], bandpass: true,
+        })
+        const values = Object.values(overrides).flatMap(Object.values)
+        assert.equal(values.length, 5)
+        const oscCount = values.filter(v => v.type === 'Oscillator').length
+        assert.equal(oscCount, 4)
+        assert.equal(values.filter(v => v.type !== 'Oscillator').length, 1)
     })
 }
 
