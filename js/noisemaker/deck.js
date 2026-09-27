@@ -59,6 +59,20 @@ function hexToRgb(hex) {
     ] : [1, 1, 1]
 }
 
+/**
+ * Coerce an upstream/persisted numeric state to a finite number.
+ * Accepts finite numbers and numeric strings ('0.5'); rejects NaN,
+ * ±Infinity, booleans, null, and non-numeric strings. Returns null
+ * when invalid so callers can keep their current live state instead
+ * of stomping a running deck with NaN (a corrupt localStorage payload
+ * or a NaN upstream computation must never zero the render buffer or
+ * freeze the loop mid-set).
+ */
+export function toFiniteNumber(value) {
+    const n = typeof value === 'string' && value.trim() !== '' ? Number(value) : value
+    return typeof n === 'number' && Number.isFinite(n) ? n : null
+}
+
 export class Deck {
     constructor(canvas, options = {}) {
         this.canvas = canvas
@@ -120,7 +134,9 @@ export class Deck {
      * the underlying renderer's buffer shrinks.
      */
     setPixelDensity(density) {
-        const clamped = Math.max(0.1, Math.min(1.0, density))
+        const d = toFiniteNumber(density)
+        if (d === null) return
+        const clamped = Math.max(0.1, Math.min(1.0, d))
         if (clamped === this._pixelDensity) return
         this._pixelDensity = clamped
         const bufW = Math.max(1, Math.round(this.width * clamped))
@@ -282,22 +298,30 @@ export class Deck {
      * speed > 1 = faster (shorter loop), < 1 = slower.
      */
     setSpeed(speed) {
-        this._speed = Math.max(0.05, speed)
+        const s = toFiniteNumber(speed)
+        if (s === null) return
+        this._speed = Math.max(0.05, s)
         const dur = this.loopDuration / this._speed
         this._renderer.setLoopDuration(dur)
     }
 
     /**
      * Replace the base loop duration (e.g. when user changes "loop duration"
-     * in settings). Reapplies current speed.
+     * in settings). Reapplies current speed. Non-finite or non-positive
+     * values are rejected so a NaN upstream computation (bpm 0, empty
+     * input) can never install a zero or NaN loop duration.
      */
     setBaseLoopDuration(seconds) {
-        this.loopDuration = seconds
+        const s = toFiniteNumber(seconds)
+        if (s === null || s <= 0) return
+        this.loopDuration = s
         this.setSpeed(this._speed)
     }
 
     syncTimeOrigin(originMs) {
-        this._renderer._loopStartTime = originMs
+        const ms = toFiniteNumber(originMs)
+        if (ms === null) return
+        this._renderer._loopStartTime = ms
     }
 
     /**
@@ -322,10 +346,13 @@ export class Deck {
     }
 
     resize(width, height) {
-        this.width = width
-        this.height = height
-        const bufW = Math.max(1, Math.round(width * this._pixelDensity))
-        const bufH = Math.max(1, Math.round(height * this._pixelDensity))
+        const w = toFiniteNumber(width)
+        const h = toFiniteNumber(height)
+        if (w === null || h === null) return
+        this.width = w
+        this.height = h
+        const bufW = Math.max(1, Math.round(w * this._pixelDensity))
+        const bufH = Math.max(1, Math.round(h * this._pixelDensity))
         this.canvas.width = bufW
         this.canvas.height = bufH
         this._renderer.resize(bufW, bufH)

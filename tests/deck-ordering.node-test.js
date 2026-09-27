@@ -245,4 +245,116 @@ test('cancelPending invalidates a queued load so it never compiles', async () =>
     assert.deepEqual(h.compiles.map(c => c.dsl), ['first'])
 })
 
+// Invalid deck state (corrupt persisted payload, NaN upstream computation)
+// must never stomp a live deck mid-set: the setters reject it and keep
+// current state instead of installing NaN/zero values that freeze or
+// zero the render pipeline.
+function stateHarness() {
+    const h = harness()
+    const durations = []
+    h.engine.setLoopDuration = (dur) => durations.push(dur)
+    const resizes = []
+    h.engine.resize = (w, bh) => resizes.push([w, bh])
+    h.toFiniteNumber = (() => {
+        let Deck
+        const context = vm.createContext({ console, CanvasRenderer: function () { return h.engine },
+            CDN_BASE: '', extractEffectNamesFromDsl: () => [] })
+        Deck = vm.runInContext(source + '\ntoFiniteNumber', context)
+        return Deck
+    })()
+    return { ...h, durations, resizes }
+}
+
+test('toFiniteNumber accepts finite numbers and numeric strings only', () => {
+    const h = stateHarness()
+    assert.equal(h.toFiniteNumber(0.5), 0.5)
+    assert.equal(h.toFiniteNumber('0.5'), 0.5)
+    assert.equal(h.toFiniteNumber(' 2 '), 2)
+    assert.equal(h.toFiniteNumber(-3), -3)
+    assert.equal(h.toFiniteNumber(''), null)
+    assert.equal(h.toFiniteNumber('   '), null)
+    assert.equal(h.toFiniteNumber('abc'), null)
+    assert.equal(h.toFiniteNumber(NaN), null)
+    assert.equal(h.toFiniteNumber(Infinity), null)
+    assert.equal(h.toFiniteNumber(-Infinity), null)
+    assert.equal(h.toFiniteNumber(null), null)
+    assert.equal(h.toFiniteNumber(undefined), null)
+    assert.equal(h.toFiniteNumber(true), null)
+    assert.equal(h.toFiniteNumber(false), null)
+    assert.equal(h.toFiniteNumber({}), null)
+})
+
+test('setSpeed rejects corrupt values and keeps the live speed and loop duration', () => {
+    const h = stateHarness()
+    h.deck.setSpeed(2)
+    assert.equal(h.deck._speed, 2)
+    h.durations.length = 0
+    for (const bad of [NaN, Infinity, -Infinity, null, undefined, true, false, 'abc', '', '  ']) {
+        h.deck.setSpeed(bad)
+        assert.equal(h.deck._speed, 2, `speed must survive ${String(bad)}`)
+        assert.deepEqual(h.durations, [], `renderer must not be reprogrammed for ${String(bad)}`)
+    }
+})
+
+test('setSpeed accepts numeric strings and clamps to the documented floor', () => {
+    const h = stateHarness()
+    h.deck.setSpeed('2')
+    assert.equal(h.deck._speed, 2)
+    assert.equal(h.durations.at(-1), h.deck.loopDuration / 2)
+    h.deck.setSpeed(0.001)
+    assert.equal(h.deck._speed, 0.05)
+})
+
+test('setPixelDensity rejects corrupt values keeping the live buffer size', () => {
+    const h = stateHarness()
+    assert.equal(h.deck._pixelDensity, 1.0)
+    h.deck.setPixelDensity(0.5)
+    assert.equal(h.deck._pixelDensity, 0.5)
+    assert.deepEqual(h.resizes.at(-1), [h.deck.width * 0.5, h.deck.height * 0.5])
+    for (const bad of [NaN, Infinity, -Infinity, null, undefined, true, false, 'abc', '', '  ']) {
+        h.deck.setPixelDensity(bad)
+        assert.equal(h.deck._pixelDensity, 0.5, `density must survive ${String(bad)}`)
+    }
+    assert.equal(h.resizes.length, 1, 'rejected densities must not touch the renderer')
+    // Numeric strings are coerced; out-of-range clamps to [0.1, 1].
+    h.deck.setPixelDensity('0.25')
+    assert.equal(h.deck._pixelDensity, 0.25)
+    h.deck.setPixelDensity('5')
+    assert.equal(h.deck._pixelDensity, 1.0)
+})
+
+test('setBaseLoopDuration rejects non-finite and non-positive values', () => {
+    const h = stateHarness()
+    h.deck.loopDuration = 10
+    h.deck.setSpeed(1)
+    h.durations.length = 0
+    for (const bad of [NaN, Infinity, 0, -5, null, undefined, true, false, 'abc', '', '  ']) {
+        h.deck.setBaseLoopDuration(bad)
+        assert.equal(h.deck.loopDuration, 10, `base loop must survive ${String(bad)}`)
+        assert.deepEqual(h.durations, [], `renderer must not be reprogrammed for ${String(bad)}`)
+    }
+    h.deck.setBaseLoopDuration('20')
+    assert.equal(h.deck.loopDuration, 20)
+    assert.deepEqual(h.durations, [20])
+})
+
+test('resize and syncTimeOrigin reject corrupt values keeping live state', () => {
+    const h = stateHarness()
+    h.deck.resize(640, 360)
+    assert.equal(h.deck.width, 640)
+    assert.equal(h.deck.height, 360)
+    assert.deepEqual(h.resizes.at(-1), [640, 360])
+    const resizesAfter = h.resizes.length
+    for (const bad of [[NaN, 360], [640, NaN], [null, null], ['x', 360], [640, true]]) {
+        h.deck.resize(...bad)
+        assert.equal(h.deck.width, 640, `width must survive ${String(bad)}`)
+        assert.equal(h.deck.height, 360, `height must survive ${String(bad)}`)
+    }
+    assert.equal(h.resizes.length, resizesAfter, 'rejected resizes must not touch the renderer')
+    h.deck.syncTimeOrigin(1234)
+    assert.equal(h.deck._renderer._loopStartTime, 1234)
+    h.deck.syncTimeOrigin(NaN)
+    assert.equal(h.deck._renderer._loopStartTime, 1234, 'NaN time origin must not corrupt the loop clock')
+})
+
 
