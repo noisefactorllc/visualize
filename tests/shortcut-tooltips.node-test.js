@@ -300,3 +300,68 @@ test('js/app.js: renders scene names with Handfish tooltip class and data-title'
     const appJs = readFileSync(resolve(process.cwd(), 'js/app.js'), 'utf8')
     assert.match(appJs, /class="sr-name tooltip"\s+data-title="Double-click to rename"/)
 })
+
+test('index.html: drawer, library, and Sync dialog controls carry .tooltip and data-title', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
+
+    const expect = (pattern, name) => {
+        const match = html.match(pattern)
+        assert.ok(match, `${name} must exist in index.html`)
+        const tag = match[0]
+        assert.match(tag, /class="[^"]*\btooltip\b[^"]*"/, `${name} must have .tooltip class`)
+        assert.match(tag, /data-title="[^"]+"/, `${name} must have data-title`)
+    }
+
+    const byId = (id) => new RegExp(`<[^>]+id=["']${id}["'][^>]*>`, 'i')
+
+    // Library & deck media
+    expect(byId('library-search'), '#library-search')
+    expect(/<button[^>]+class=["'][^>]*deck-media-file-btn[^>]*data-deck=["']A["'][^>]*>/, '#deck-a-media-file-btn')
+    expect(/<button[^>]+class=["'][^>]*deck-media-file-btn[^>]*data-deck=["']B["'][^>]*>/, '#deck-b-media-file-btn')
+
+    // Transport & topbar
+    expect(byId('mixer-effect'), '#mixer-effect')
+    expect(byId('speed-a'), '#speed-a')
+    expect(byId('speed-b'), '#speed-b')
+
+    // Auto-Mix
+    expect(byId('automixer-source'), '#automixer-source')
+
+    // Settings drawer: audio
+    expect(byId('audio-device'), '#audio-device')
+    expect(byId('sync-audio-connect'), '#sync-audio-connect')
+    expect(byId('audio-sensitivity'), '#audio-sensitivity')
+
+    // Settings drawer: MIDI
+    expect(byId('midi-enable'), '#midi-enable')
+    expect(byId('midi-clock-enable'), '#midi-clock-enable')
+    expect(byId('midi-learn-clear'), '#midi-learn-clear')
+
+    // Settings drawer: main output
+    expect(byId('main-resolution'), '#main-resolution')
+    expect(byId('prefer-webgpu'), '#prefer-webgpu')
+
+    // Scenes drawer
+    expect(byId('scene-name-input'), '#scene-name-input')
+    expect(byId('scene-save'), '#scene-save')
+
+    // Sync output dialog
+    expect(byId('sync-output-close'), '#sync-output-close')
+    expect(byId('sync-output-name'), '#sync-output-name')
+})
+
+test('index.html: tooltips use no hardcoded style attributes and native titles stay migratable', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
+
+    // No inline static styles introduced by the sweep (Handfish hard rule)
+    assert.doesNotMatch(html, /\sstyle="/, 'index.html must not contain static inline styles')
+
+    // Tooltip text stays in data-title; any remaining native title is
+    // cleaned up at boot by setupTooltips()'s migrateBelow()
+    const tags = html.match(/<(button|input|select-dropdown|toggle-switch|tempo-bar)[^>]*>/gi) || []
+    for (const tag of tags) {
+        if (/\btooltip\b/.test(tag)) {
+            assert.ok(/data-title=/.test(tag), `tooltip element must carry data-title: ${tag}`)
+        }
+    }
+})

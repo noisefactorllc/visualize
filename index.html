@@ -227,7 +227,7 @@
 
         <aside class="library" id="library-panel">
             <div class="panel-head">
-                <input id="library-search" type="search" placeholder="library filter…" aria-label="Filter programs">
+                <input id="library-search" type="search" placeholder="library filter…" aria-label="Filter programs" class="tooltip" data-title="Filter programs">
             </div>
             <div class="library-grid" id="library-grid"></div>
             <div class="library-footer">
@@ -258,7 +258,7 @@
                     </button>
                     <div class="deck-media" data-deck="A" id="deck-a-media" hidden>
                         <select-dropdown class="deck-media-camera" id="deck-a-media-camera" data-deck="A" hidden></select-dropdown>
-                        <button class="deck-media-file-btn" id="deck-a-media-file-btn" data-deck="A" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
+                        <button class="deck-media-file-btn tooltip" id="deck-a-media-file-btn" data-deck="A" data-title="Choose image or video file" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
                         <span class="deck-media-label" id="deck-a-media-label"></span>
                         <input type="file" class="deck-media-file-input" id="deck-a-media-file-input" data-deck="A" accept="image/*,video/*" hidden>
                     </div>
@@ -292,7 +292,7 @@
                 </div>
                 <div class="main-toolbar">
                     <span class="mixer-effect-label">mixer effect</span>
-                    <select-dropdown id="mixer-effect" class="mixer-select"></select-dropdown>
+                    <select-dropdown id="mixer-effect" class="mixer-select tooltip" data-title="Mixer effect"></select-dropdown>
                     <div class="main-output-targets" aria-label="Output targets">
                         <button id="output-window" class="main-output-btn icon-button tooltip" data-title="Open mirrored output window" title="Open mirrored output window" aria-label="Open mirrored output window"><span class="icon">display_external_input</span></button>
                         <button id="sync-output-open" class="main-output-btn sync-output-open tooltip" data-title="Send to Noisedeck Sync" title="Send to Noisedeck Sync" aria-label="Send to Noisedeck Sync">
@@ -338,7 +338,7 @@
                     </button>
                     <div class="deck-media" data-deck="B" id="deck-b-media" hidden>
                         <select-dropdown class="deck-media-camera" id="deck-b-media-camera" data-deck="B" hidden></select-dropdown>
-                        <button class="deck-media-file-btn" id="deck-b-media-file-btn" data-deck="B" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
+                        <button class="deck-media-file-btn tooltip" id="deck-b-media-file-btn" data-deck="B" data-title="Choose image or video file" title="Choose image or video file" hidden><span class="icon">folder_open</span></button>
                         <span class="deck-media-label" id="deck-b-media-label"></span>
                         <input type="file" class="deck-media-file-input" id="deck-b-media-file-input" data-deck="B" accept="image/*,video/*" hidden>
                     </div>
@@ -367,7 +367,7 @@
             <div class="controls-transport">
                 <div class="control-group">
                     <label for="speed-a" class="control-label">speed A</label>
-                    <input id="speed-a" type="range" min="0.1" max="4" step="0.1" value="1">
+                    <input id="speed-a" type="range" min="0.1" max="4" step="0.1" value="1" class="tooltip" data-title="Deck A playback speed" title="Deck A playback speed">
                     <span class="control-value" id="speed-a-val">1.0×</span>
                 </div>
 
@@ -403,7 +403,7 @@
 
                 <div class="control-group">
                     <label for="speed-b" class="control-label">speed B</label>
-                    <input id="speed-b" type="range" min="0.1" max="4" step="0.1" value="1">
+                    <input id="speed-b" type="range" min="0.1" max="4" step="0.1" value="1" class="tooltip" data-title="Deck B playback speed" title="Deck B playback speed">
                     <span class="control-value" id="speed-b-val">1.0×</span>
                 </div>
             </div>
@@ -436,7 +436,7 @@
                 </button>
                 <label class="status-field">
                     <span class="status-field-label tooltip" data-title="Auto-Mix source" title="Auto-Mix source">source</span>
-                    <select-dropdown id="automixer-source" value="osc:0">
+                    <select-dropdown id="automixer-source" class="tooltip" value="osc:0" data-title="Auto-Mix source">
                         <option value="osc:0">osc · sine</option>
                         <option value="osc:1">osc · tri</option>
                         <option value="osc:2">osc · saw</option>
@@ -516,17 +516,17 @@
                 <h3>audio input</h3>
                 <div class="settings-row">
                     <label for="audio-device">device</label>
-                    <select-dropdown id="audio-device">
+                    <select-dropdown id="audio-device" class="tooltip" data-title="Audio input device">
                         <option value="">— pick to enable —</option>
                     </select-dropdown>
                 </div>
                 <div class="settings-row">
-                    <button id="sync-audio-connect" class="ghost-button">connect Sync audio</button>
+                    <button id="sync-audio-connect" class="ghost-button tooltip" data-title="Connect Sync audio input">connect Sync audio</button>
                 </div>
                 <p id="sync-audio-status" class="settings-hint" role="status" aria-live="polite">Use native audio inputs through the Sync companion.</p>
                 <div class="settings-row">
                     <label for="audio-sensitivity">sensitivity</label>
-                    <input id="audio-sensitivity" type="range" min="0.5" max="4" step="0.1" value="1.5">
+                    <input id="audio-sensitivity" type="range" min="0.5" max="4" step="0.1" value="1.5" class="tooltip" data-title="Audio analyzer sensitivity" title="Audio analyzer sensitivity">
                     <span class="control-value" id="audio-sensitivity-val">1.5×</span>
                 </div>
                 <p class="settings-hint">tip: route a system loopback (BlackHole on macOS, VB-Cable on Windows) for app/DAW audio.</p>
@@ -535,12 +535,12 @@
             <section class="settings-section">
                 <h3>midi</h3>
                 <div class="settings-row">
-                    <button id="midi-enable" class="ghost-button">enable MIDI</button>
+                    <button id="midi-enable" class="ghost-button tooltip" data-title="Enable MIDI input">enable MIDI</button>
                     <span id="midi-info" class="settings-hint">not connected</span>
                 </div>
                 <div class="settings-row">
                     <label class="checkbox-row">
-                        <toggle-switch id="midi-clock-enable"></toggle-switch>
+                        <toggle-switch id="midi-clock-enable" class="tooltip" data-title="Follow incoming MIDI clock"></toggle-switch>
                         <span>follow incoming MIDI clock for BPM</span>
                     </label>
                 </div>
@@ -548,7 +548,7 @@
                     <h4>learn assignments</h4>
                     <div id="midi-learn-conflicts" class="midi-learn-conflicts" role="status" aria-live="polite"></div>
                     <div class="midi-learn-rows" id="midi-learn-rows" role="list" aria-label="MIDI learn assignments"></div>
-                    <button id="midi-learn-clear" class="ghost-button" aria-label="Clear all MIDI learn assignments">clear all</button>
+                    <button id="midi-learn-clear" class="ghost-button tooltip" aria-label="Clear all MIDI learn assignments" data-title="Clear all MIDI learn assignments">clear all</button>
                 </div>
             </section>
 
@@ -556,7 +556,7 @@
                 <h3>main</h3>
                 <div class="settings-row">
                     <label for="main-resolution">resolution</label>
-                    <select-dropdown id="main-resolution" value="1280x720">
+                    <select-dropdown id="main-resolution" class="tooltip" value="1280x720" data-title="Main output resolution">
                         <option value="640x360">640×360 (low)</option>
                         <option value="1280x720">1280×720 (HD)</option>
                         <option value="1920x1080">1920×1080 (full HD)</option>
@@ -569,7 +569,7 @@
                 </div>
                 <div class="settings-row">
                     <label class="checkbox-row">
-                        <toggle-switch id="prefer-webgpu"></toggle-switch>
+                        <toggle-switch id="prefer-webgpu" class="tooltip" data-title="Prefer WebGPU renderer (if available)"></toggle-switch>
                         <span>prefer WebGPU (if available)</span>
                     </label>
                     <span class="settings-hint" id="active-renderer">active: …</span>
@@ -626,8 +626,8 @@
             <section class="settings-section">
                 <h3>save current state</h3>
                 <div class="settings-row">
-                    <input id="scene-name-input" type="text" placeholder="scene name" maxlength="40">
-                    <button id="scene-save" class="ghost-button">save</button>
+                    <input id="scene-name-input" type="text" placeholder="scene name" maxlength="40" class="tooltip" data-title="Scene name (max 40 characters)">
+                    <button id="scene-save" class="ghost-button tooltip" data-title="Save scene to the first free slot">save</button>
                 </div>
                 <p class="settings-hint">
                     Snapshots both decks (DSL + speed), crossfader, BPM, main FX, and auto-VJ config. Recall is instant — for animated transitions, use auto-VJ.
@@ -688,14 +688,14 @@
                 <span id="sync-output-title">Noisedeck Sync</span>
                 <span id="sync-output-live" class="sync-output-live" hidden>LIVE</span>
             </div>
-            <button type="button" id="sync-output-close" class="icon-button" aria-label="Close Sync output"><span class="icon">close</span></button>
+            <button type="button" id="sync-output-close" class="icon-button tooltip" aria-label="Close Sync output" data-title="Close Sync output (Esc)"><span class="icon">close</span></button>
         </div>
         <div class="sync-output-body">
             <p id="sync-output-description">Publish Visualize’s mixer output through the local Sync companion.</p>
             <p id="sync-output-preview" class="sync-output-preview">Preview — Sync is not ready for general use. <a href="https://github.com/noisefactorllc/sync" target="_blank" rel="noopener">learn about Sync</a></p>
             <label class="sync-output-field" for="sync-output-name">
                 <span>output name</span>
-                <input type="text" id="sync-output-name" value="Visualize" placeholder="Visualize" autocomplete="off" spellcheck="false" maxlength="64">
+                <input type="text" id="sync-output-name" class="tooltip" data-title="Sync output name" value="Visualize" placeholder="Visualize" autocomplete="off" spellcheck="false" maxlength="64">
             </label>
             <div class="sync-output-meta">
                 <div><span>state</span><strong id="sync-output-state">Disconnected</strong></div>

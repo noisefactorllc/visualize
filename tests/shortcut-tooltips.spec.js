@@ -71,6 +71,53 @@ test('browser: performance shortcuts appear in tooltips across all controls', as
     }
 })
 
+test('browser: swept drawer, library, and Sync dialog controls carry tooltips', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const checkTooltip = async (selector, expectedSubstring) => {
+            const el = page.locator(selector).first()
+            await expect(el).toHaveClass(/\btooltip\b/)
+            const dataTitle = await el.getAttribute('data-title')
+            expect(dataTitle).toContain(expectedSubstring)
+        }
+
+        // Library & deck media
+        await checkTooltip('#library-search', 'Filter programs')
+        await checkTooltip('#deck-a-media-file-btn', 'Choose image or video file')
+        await checkTooltip('#deck-b-media-file-btn', 'Choose image or video file')
+
+        // Transport & topbar
+        await checkTooltip('#mixer-effect', 'Mixer effect')
+        await checkTooltip('#speed-a', 'Deck A playback speed')
+        await checkTooltip('#speed-b', 'Deck B playback speed')
+        await checkTooltip('#automixer-source', 'Auto-Mix source')
+
+        // Settings drawer: audio
+        await checkTooltip('#audio-device', 'Audio input device')
+        await checkTooltip('#sync-audio-connect', 'Connect Sync audio input')
+        await checkTooltip('#audio-sensitivity', 'Audio analyzer sensitivity')
+
+        // Settings drawer: MIDI
+        await checkTooltip('#midi-enable', 'Enable MIDI input')
+        await checkTooltip('#midi-clock-enable', 'Follow incoming MIDI clock')
+        await checkTooltip('#midi-learn-clear', 'Clear all MIDI learn assignments')
+
+        // Settings drawer: main output
+        await checkTooltip('#main-resolution', 'Main output resolution')
+        await checkTooltip('#prefer-webgpu', 'Prefer WebGPU')
+
+        // Scenes drawer
+        await checkTooltip('#scene-name-input', 'Scene name')
+        await checkTooltip('#scene-save', 'Save scene')
+
+        // Sync output dialog
+        await checkTooltip('#sync-output-close', 'Close Sync output (Esc)')
+        await checkTooltip('#sync-output-name', 'Sync output name')
+    } finally {
+        await context.close()
+    }
+})
+
 test('browser: record button tooltip dynamically reflects recording state with (R) shortcut', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {
