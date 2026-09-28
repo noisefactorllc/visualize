@@ -2915,17 +2915,31 @@ function renderLearnRows(rows, midi) {
                 if (row.conflict) ccField.input.setAttribute('aria-invalid', 'true')
                 panel.appendChild(ccField.wrap)
 
-                // Min and Max (0..127)
+                // Min and Max (0..127). setRange canonicalizes the stored
+                // bounds (crossed pairs are swapped), so both closures and
+                // inputs resync from the persisted assignment after every
+                // edit — otherwise a subsequent edit would act on stale,
+                // possibly re-crossed local values.
                 let minVal = row.min ?? 0, maxVal = row.max ?? 127
+                const resyncRange = () => {
+                    const asg = midi.assignments[row.controlId]
+                    if (!asg) return
+                    minVal = asg.min
+                    maxVal = asg.max
+                    minF.input.value = String(minVal)
+                    maxF.input.value = String(maxVal)
+                }
                 const minF = mkNum('min', minVal, 0, 127, () => {
                     const parsed = Number(minF.input.value)
                     minVal = Math.max(0, Math.min(127, Number.isFinite(parsed) ? parsed : 0))
                     midi.setRange(row.controlId, minVal, maxVal)
+                    resyncRange()
                 })
                 const maxF = mkNum('max', maxVal, 0, 127, () => {
                     const parsed = Number(maxF.input.value)
                     maxVal = Math.max(0, Math.min(127, Number.isFinite(parsed) ? parsed : 127))
                     midi.setRange(row.controlId, minVal, maxVal)
+                    resyncRange()
                 })
                 panel.appendChild(minF.wrap)
                 panel.appendChild(maxF.wrap)

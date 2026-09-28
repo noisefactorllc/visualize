@@ -164,3 +164,61 @@ test('browser: MIDI learn drawer highlights CC conflict and resolves via channel
 
     await context.close()
 })
+
+test('browser: edit panel resyncs min/max after a crossed-bounds edit and invert keeps bounds', async ({ browser }) => {
+    const context = await browser.newContext()
+    await context.addInitScript(() => {
+        localStorage.setItem(
+            'visualize.midi.learn.v1',
+            JSON.stringify({
+                crossfader: { kind: 'cc', ch: 0, cc: 7, min: 10, max: 90, invert: false },
+            })
+        )
+    })
+
+    const page = await context.newPage()
+    await page.goto('/')
+    await page.click('#boot-start')
+    await page.waitForFunction(() => !!window.__visualize?.midi)
+    await page.click('#settings-toggle')
+
+    // Open the edit panel for the crossfader row.
+    const editBtn = page.locator('.midi-learn-row').filter({ hasText: 'crossfader' }).locator('.ml-btn-edit')
+    await editBtn.click()
+    const minInput = page.locator('input[type="number"][aria-label="crossfader min"]')
+    const maxInput = page.locator('input[type="number"][aria-label="crossfader max"]')
+    const invBox = page.locator('input[type="checkbox"][aria-label="crossfader invert"]')
+    await expect(minInput).toBeVisible()
+    await expect(maxInput).toBeVisible()
+    await expect(invBox).toBeVisible()
+
+    // Type a crossed pair (min 110 > max 90): setRange must swap and both
+    // panel inputs must resync to the canonical stored bounds.
+    await minInput.fill('110')
+    await minInput.dispatchEvent('change')
+    await expect(minInput).toHaveValue('90')
+    await expect(maxInput).toHaveValue('110')
+    const stored1 = await page.evaluate(() => window.__visualize.midi.assignments.crossfader)
+    expect(stored1.min).toBe(90)
+    expect(stored1.max).toBe(110)
+
+    // A subsequent edit of max acts on the resynced (non-crossed) values.
+    await maxInput.fill('120')
+    await maxInput.dispatchEvent('change')
+    const stored2 = await page.evaluate(() => window.__visualize.midi.assignments.crossfader)
+    expect(stored2.min).toBe(90)
+    expect(stored2.max).toBe(120)
+    await expect(minInput).toHaveValue('90')
+
+    // Toggling invert flips the mapping flag without touching the bounds.
+    await invBox.check()
+    await invBox.dispatchEvent('change')
+    const stored3 = await page.evaluate(() => window.__visualize.midi.assignments.crossfader)
+    expect(stored3.invert).toBe(true)
+    expect(stored3.min).toBe(90)
+    expect(stored3.max).toBe(120)
+    await expect(minInput).toHaveValue('90')
+    await expect(maxInput).toHaveValue('120')
+
+    await context.close()
+})
