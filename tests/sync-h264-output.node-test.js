@@ -385,3 +385,83 @@ test('marks an encoder warmup timeout as a transient failure', {
         return true
     })
 })
+
+test('graceful close drains pending frames and terminates the worker exactly once', {
+    timeout: 10000
+}, async () => {
+    installEncoder()
+    let terminates = 0
+    let transportCloses = 0
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        terminate() { terminates++; super.terminate() }
+    }
+    let resolveClosed
+    const closed = new Promise(resolve => { resolveClosed = resolve })
+    const transport = {
+        ...transportFixture(),
+        closed,
+        close() { transportCloses++; resolveClosed() }
+    }
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Teardown', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    const now = performance.now()
+    sender.submit(1, now)
+    sender.close()
+    sender.close()
+    await sender.closed
+    await new Promise(resolve => setImmediate(resolve))
+
+    assert.equal(terminates, 1, 'encoder worker must be terminated exactly once')
+    assert.equal(transportCloses, 1, 'transport must be closed exactly once')
+    assert.equal(sender._timer, null, 'no pending pacing timer may survive teardown')
+    sender.close()
+    assert.equal(terminates, 1)
+    assert.equal(transportCloses, 1)
+})
+
+test('a stuck encoder drain aborts teardown and rejects closed', {
+    timeout: 10000
+}, async () => {
+    installEncoder()
+    let terminates = 0
+    let transportCloses = 0
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        postMessage(message) {
+            if (message.type === 'flush') return
+            super.postMessage(message)
+        }
+        terminate() { terminates++; super.terminate() }
+    }
+    let resolveClosed
+    const closed = new Promise(resolve => { resolveClosed = resolve })
+    const transport = {
+        ...transportFixture(),
+        closed,
+        close() { transportCloses++; resolveClosed() }
+    }
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Stuck drain', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    sender.submit(1, performance.now())
+    sender.close()
+    await assert.rejects(sender.closed, error => {
+        assert.equal(error.code, 'SYNC_STOP_TIMEOUT')
+        assert.equal(error.message, 'H.264 output did not drain before stopping')
+        return true
+    })
+
+    assert.equal(terminates, 1, 'drain timeout must abort with a single worker termination')
+    assert.equal(transportCloses, 1)
+    assert.equal(sender._timer, null, 'no pending pacing timer may survive the drain abort')
+    assert.equal(sender._pending.size, 0, 'pending frames must be dropped on drain abort')
+    sender.close()
+    assert.equal(terminates, 1)
+    assert.equal(transportCloses, 1)
+})

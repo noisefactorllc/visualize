@@ -602,6 +602,56 @@ test('Stop cancels sustained recovery with no later attempts', async () => {
     assert.equal(fixture.controller.state.status, 'ready')
 })
 
+test('dispose during recovery cancels the pending ramp and produces no later attempts', async () => {
+    const counters = { probes: 0 }
+    const fixture = await connectedRecoveryFixture({
+        recoveryClients: [recoveryProbe({ available: false, code: 'SYNC_UNAVAILABLE' }, counters)]
+    })
+    fixture.initial.completion.reject(senderLoss(1006))
+    await flushMicrotasks()
+    assert.equal(fixture.controller.state.status, 'recovering')
+    assert.equal(counters.probes, 0, 'no probe may run while the ramp delay is pending')
+    assert.equal(fixture.timers.timeouts.size, 1)
+
+    fixture.controller.dispose()
+    assert.equal(fixture.timers.timeouts.size, 0, 'recovery ramp timer must be cancelled by teardown')
+    assert.equal(fixture.timers.intervals.size, 0)
+    assert.throws(() => fixture.timers.fireTimeout(250), /expected a 250ms timeout/)
+    await flushMicrotasks(8)
+    assert.equal(counters.probes, 0, 'no recovery probe may run after teardown')
+    assert.equal(fixture.controller.state.status, 'idle')
+    assert.equal(fixture.controller.state.senderName, null)
+    assert.equal(fixture.controller.state.error, null)
+})
+
+test('dispose closes an in-flight recovery probe exactly once and drops its late result', async () => {
+    const probeResult = deferred()
+    const counters = {}
+    const probeClient = {
+        probe: () => { counters.probes = (counters.probes || 0) + 1; return probeResult.promise },
+        close() { counters.closes = (counters.closes || 0) + 1 }
+    }
+    const lateSender = senderFixture()
+    const connection = recoveryConnection({ sender: lateSender.sender, counters })
+    const fixture = await connectedRecoveryFixture({
+        recoveryClients: [probeClient, connection]
+    })
+    fixture.initial.completion.reject(senderLoss(1006))
+    await flushMicrotasks()
+    fixture.timers.fireTimeout(250)
+    await flushMicrotasks()
+    assert.equal(counters.probes, 1)
+
+    fixture.controller.dispose()
+    assert.equal(counters.closes, 1, 'teardown must close the in-flight recovery probe exactly once')
+    probeResult.resolve({ available: true, health: health() })
+    await flushMicrotasks(12)
+    assert.equal(counters.connects, undefined, 'late probe result must not reach connect')
+    assert.equal(counters.senderCreations, undefined, 'late probe result must not create a sender')
+    assert.equal(lateSender.closeCalls, 0)
+    assert.equal(fixture.controller.state.status, 'idle')
+})
+
 test('recovery adopts a resize of the same canvas and retains the loss cause', async () => {
     const canvas = { width: 1280, height: 720 }
     const replacement = senderFixture()
