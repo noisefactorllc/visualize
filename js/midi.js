@@ -63,6 +63,20 @@ export function normalizeCcValue(raw, min = 0, max = 127, invert = false) {
 }
 
 /**
+ * Canonicalize a 0..127 controller range for storage: rounds and clamps
+ * both bounds into 0..127, then swaps them if they arrive crossed so the
+ * persisted assignment always has min <= max. An equal pair is left as
+ * is — dispatch guards the degenerate span (>= 1) at normalization time.
+ */
+export function normalizeRange(min, max) {
+    const clamp = (v) => Math.max(0, Math.min(127, Math.round(v)))
+    let lo = clamp(min)
+    let hi = clamp(max)
+    if (lo > hi) [lo, hi] = [hi, lo]
+    return { min: lo, max: hi }
+}
+
+/**
  * Rising-edge detector for latch/momentary controls. `fire` is true only
  * on the off→on transition, so a fader held above threshold (or jittering)
  * toggles exactly once; crossing back below re-arms it.
@@ -757,8 +771,13 @@ export class SharedMidi {
         if (!a) return
         const lo = Number(min), hi = Number(max)
         if (!Number.isFinite(lo) || !Number.isFinite(hi)) return
-        a.min = Math.max(0, Math.min(127, Math.round(lo)))
-        a.max = Math.max(0, Math.min(127, Math.round(hi)))
+        // Canonicalize: crossed bounds are swapped, not stored inverted, so
+        // the persisted assignment and the edit panel always show min <= max
+        // and dispatch normalization stays unambiguous.
+        const norm = normalizeRange(lo, hi)
+        if (a.min === norm.min && a.max === norm.max) return
+        a.min = norm.min
+        a.max = norm.max
         this._saveAssignments()
         this._resetRuntime(controlId)
         if (this._onLearnUpdate) this._onLearnUpdate(this.getLearnView())

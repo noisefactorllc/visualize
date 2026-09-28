@@ -6,6 +6,7 @@ import {
     computeEdgeToggle,
     computePickup,
     normalizeCcValue,
+    normalizeRange,
     findConflicts,
     parseMidiStatus
 } from '../js/midi.js'
@@ -709,5 +710,143 @@ describe('MIDI soft-takeover vs software jumps (scene recall / auto-fade)', () =
         assert.equal(applied.length, 0)
         cc(120) // same side, still not near 0.064 — no apply
         assert.equal(applied.length, 0)
+    })
+})
+
+describe('normalizeRange canonicalization', () => {
+    it('swaps crossed bounds deterministically', () => {
+        assert.deepEqual(normalizeRange(120, 10), { min: 10, max: 120 })
+        assert.deepEqual(normalizeRange(64, 1), { min: 1, max: 64 })
+    })
+
+    it('rounds and clamps both bounds into 0..127', () => {
+        assert.deepEqual(normalizeRange(-5, 200), { min: 0, max: 127 })
+        assert.deepEqual(normalizeRange(10.4, 63.6), { min: 10, max: 64 })
+        assert.deepEqual(normalizeRange(-0.5, 127.4), { min: 0, max: 127 })
+    })
+
+    it('leaves equal and ordered pairs as-is', () => {
+        assert.deepEqual(normalizeRange(20, 100), { min: 20, max: 100 })
+        assert.deepEqual(normalizeRange(42, 42), { min: 42, max: 42 })
+    })
+})
+
+describe('MIDI learn range editing hardening', () => {
+    function createTestMidi() {
+        const midi = new SharedMidi()
+        midi._enabled = true
+        return midi
+    }
+
+    it('setRange swaps crossed bounds instead of storing them inverted', () => {
+        const midi = createTestMidi()
+        midi.registerControl('xfade', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 0, max: 127, invert: false }
+        midi.setRange('xfade', 110, 15)
+        assert.equal(midi._assignments.xfade.min, 15)
+        assert.equal(midi._assignments.xfade.max, 110)
+        assert.ok(midi._assignments.xfade.min <= midi._assignments.xfade.max)
+    })
+
+    it('setRange clamps out-of-range bounds into 0..127', () => {
+        const midi = createTestMidi()
+        midi.registerControl('xfade', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 0, max: 127, invert: false }
+        midi.setRange('xfade', -10, 300)
+        assert.equal(midi._assignments.xfade.min, 0)
+        assert.equal(midi._assignments.xfade.max, 127)
+    })
+
+    it('setRange ignores non-finite input and keeps the live assignment', () => {
+        const midi = createTestMidi()
+        midi.registerControl('xfade', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 10, max: 90, invert: false }
+        midi.setRange('xfade', NaN, 90)
+        assert.equal(midi._assignments.xfade.min, 10)
+        midi.setRange('xfade', 10, Infinity)
+        assert.equal(midi._assignments.xfade.max, 90)
+    })
+
+    it('setRange with unchanged values does not re-save or reset runtime', () => {
+        const midi = createTestMidi()
+        midi.registerControl('xfade', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 10, max: 90, invert: false }
+        let updates = 0
+        midi.onLearnUpdate(() => { updates++ })
+        midi.setRange('xfade', 10, 90)
+        assert.equal(updates, 0, 'no-op edit must not churn runtime or notifications')
+    })
+
+    it('CC values outside the edited range clamp to the range edges mid-performance', () => {
+        const midi = createTestMidi()
+        const applied = []
+        midi.registerControl('xfade', {
+            label: 'crossfader',
+            kind: 'continuous',
+            handler: (v) => { applied.push(v) },
+            getValue: () => 0,
+        })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 32, max: 96, invert: false }
+        midi._dispatch('cc', 0, 7, 0, false)    // below min → 0
+        midi._dispatch('cc', 0, 7, 127, false)  // above max → 1
+        assert.deepEqual(applied, [0, 1])
+    })
+
+    it('out-of-range clamping composes deterministically with invert', () => {
+        const midi = createTestMidi()
+        const applied = []
+        // Software value starts at the inverted top edge so the first CC
+        // catches immediately (pickup) and later CCs follow while engaged.
+        midi.registerControl('xfade', {
+            label: 'crossfader',
+            kind: 'continuous',
+            handler: (v) => { applied.push(v) },
+            getValue: () => 1,
+        })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 32, max: 96, invert: true }
+        midi._dispatch('cc', 0, 7, 0, false)    // below min → clamped 0, inverted → 1
+        midi._dispatch('cc', 0, 7, 127, false)  // above max → clamped 1, inverted → 0
+        assert.deepEqual(applied, [1, 0])
+    })
+
+    it('toggling invert deterministically flips the mapping without touching stored bounds', () => {
+        assert.equal(
+            normalizeCcValue(32, 0, 127, true),
+            1 - normalizeCcValue(32, 0, 127, false),
+            'invert is the exact complement at the same raw value',
+        )
+        const midi = createTestMidi()
+        midi.registerControl('xfade', { label: 'crossfader', kind: 'continuous', handler: () => {} })
+        midi._assignments.xfade = { kind: 'cc', ch: 0, cc: 7, min: 10, max: 90, invert: false }
+        midi._controlRuntime.set('xfade', { prevOn: false, engaged: true, armSide: null, lastWritten: 0.5, lastCurrent: 0.5 })
+        midi.setInvert('xfade', true)
+        assert.equal(midi._assignments.xfade.min, 10, 'bounds are untouched by invert')
+        assert.equal(midi._assignments.xfade.max, 90, 'bounds are untouched by invert')
+        assert.equal(midi._assignments.xfade.invert, true)
+        // Runtime reset: the takeover arm/engage state is cleared so the
+        // flipped mapping re-arms cleanly instead of fighting stale state.
+        assert.equal(midi._controlRuntime.get('xfade').engaged, false)
+        assert.equal(midi._controlRuntime.get('xfade').armSide, null)
+    })
+
+    it('inverted assignments survive a save/reload round-trip with canonical bounds', () => {
+        const store = new Map()
+        globalThis.localStorage = {
+            getItem: (k) => (store.has(k) ? store.get(k) : null),
+            setItem: (k, v) => { store.set(k, v) },
+            removeItem: (k) => { store.delete(k) },
+        }
+        try {
+            const midi = createTestMidi()
+            midi.registerControl('speedA', { label: 'speed A', kind: 'continuous', handler: () => {} })
+            midi._assignments.speedA = { kind: 'cc', ch: 3, cc: 20, min: 120, max: 5, invert: true }
+            midi.setRange('speedA', 120, 5) // crossed → canonicalized + persisted
+            assert.deepEqual(midi._assignments.speedA, { kind: 'cc', ch: 3, cc: 20, min: 5, max: 120, invert: true })
+
+            const reloaded = new SharedMidi()
+            assert.deepEqual(reloaded._assignments.speedA, { kind: 'cc', ch: 3, cc: 20, min: 5, max: 120, invert: true })
+        } finally {
+            delete globalThis.localStorage
+        }
     })
 })
