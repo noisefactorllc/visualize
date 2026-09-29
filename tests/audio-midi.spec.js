@@ -23,8 +23,11 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+// Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
+// sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 1 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 1 })
 
 async function bootWithFakeMidi(browser) {
     const context = await browser.newContext()
@@ -71,7 +74,7 @@ async function bootWithFakeMidi(browser) {
     // to wait for the (slower, CDN-bound) shader compile path.
     await page.waitForFunction(() =>
         !!window.__visualize?.audio && !!window.__visualize?.midi,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
 
     return { context, page }
 }
@@ -85,7 +88,7 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     await page.waitForFunction(() => {
         const sel = document.getElementById('audio-device')
         return sel?.getOptions && sel.getOptions().length >= 2
-    }, null, { timeout: 15_000 })
+    }, null, { timeout: 15_000 * SCALE })
 
     const dropdownPost = await page.evaluate(() => {
         const sel = document.getElementById('audio-device')
@@ -117,7 +120,7 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
         return a?.enabled
             && a?._audioContext?.state === 'running'
             && (a.meters.low > 0 || a.meters.mid > 0 || a.meters.high > 0)
-    }, null, { timeout: 20_000 })
+    }, null, { timeout: 20_000 * SCALE })
 
     const meters = await page.evaluate(() => ({ ...window.__visualize.audio.meters }))
     expect(meters.vol).toBeGreaterThan(0.1)
@@ -150,7 +153,7 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
         const sel = document.getElementById('audio-device')
         const opts = sel?.getOptions ? sel.getOptions() : []
         return opts.length === 2 && opts[1].value === '__default__'
-    }, null, { timeout: 15_000 })
+    }, null, { timeout: 15_000 * SCALE })
 
     const dropdownPre = await page.evaluate(() => {
         const sel = document.getElementById('audio-device')
@@ -174,14 +177,14 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     })
     await page.waitForFunction(() =>
         window.__visualize?.audio?.enabled === true,
-        null, { timeout: 10_000 })
+        null, { timeout: 10_000 * SCALE })
 
     // ─── Scenario 3: MIDI CC dispatch ──────────────────────────────────
     await page.click('#midi-enable')
     await page.waitForFunction(() =>
         window.__visualize?.midi?.enabled === true
             && window.__visualize.midi.inputCount === 1,
-        null, { timeout: 15_000 })
+        null, { timeout: 15_000 * SCALE })
 
     // Start crossfader at zero so a CC of 100 moves it visibly.
     await page.evaluate(() => {
@@ -338,7 +341,7 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.audio && !!window.__visualize?.midi,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
 
     await page.click('#settings-toggle')
     const reloadedSens = await page.evaluate(() => {
@@ -361,7 +364,7 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     await page.waitForFunction(() => {
         const stored = JSON.parse(localStorage.getItem('visualize.audio.v1') || '{}')
         return stored.sensitivity === 3.5
-    }, null, { timeout: 2000 })
+    }, null, { timeout: 2000 * SCALE })
 
     const programmaticSens = await page.evaluate(() => {
         const input = document.getElementById('audio-sensitivity')

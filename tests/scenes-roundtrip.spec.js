@@ -13,8 +13,9 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 0 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
 
 async function boot(browser) {
     const context = await browser.newContext()
@@ -26,7 +27,7 @@ async function boot(browser) {
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() =>
-        !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 })
+        !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 * SCALE })
     return { context, page }
 }
 
@@ -187,7 +188,7 @@ test('editor updates when rebindEq fires', async ({ browser }) => {
         await page.click('.deck.deck-a .deck-edit-toggle')
         await page.waitForFunction(() =>
             !document.querySelector('.deck.deck-a .deck-editor')?.hidden,
-            null, { timeout: 5_000 })
+            null, { timeout: 5_000 * SCALE })
 
         const beforeEditor = await page.locator('.deck.deck-a code-editor').evaluate(el => el.value)
         expect(beforeEditor).toContain('search')
@@ -224,7 +225,7 @@ test('scenes round-trip: mixer effect and pixel density survive', async ({ brows
         await page.waitForFunction(() => {
             const sel = document.getElementById('mixer-effect')
             return sel && typeof sel.getOptions === 'function' && sel.getOptions().length > 1
-        }, null, { timeout: 30_000 })
+        }, null, { timeout: 30_000 * SCALE })
 
         // Pick the second mixer effect (whatever it is) and manually
         // pin deck A to 50% density.
@@ -296,7 +297,7 @@ test('mixer enum control: shows the active choice + persists/restores it across 
         await page.waitForFunction((q) => {
             const el = document.querySelector(q)
             return el && typeof el.getOptions === 'function' && el.getOptions().length > 1
-        }, sel, { timeout: 30_000 })
+        }, sel, { timeout: 30_000 * SCALE })
 
         // (1) The dropdown must DISPLAY the active selection — its value
         //     must be a real option value (not the bare name) and resolve
@@ -331,7 +332,7 @@ test('mixer enum control: shows the active choice + persists/restores it across 
                 const m = JSON.parse(localStorage.getItem('visualize.mixer.v1') || 'null')
                 return m?.overrides?.mode === expected
             } catch { return false }
-        }, chosen, { timeout: 10_000 })
+        }, chosen, { timeout: 10_000 * SCALE })
         const persisted = await page.evaluate(() => {
             try { return JSON.parse(localStorage.getItem('visualize.mixer.v1') || 'null') } catch { return null }
         })
@@ -341,11 +342,11 @@ test('mixer enum control: shows the active choice + persists/restores it across 
         // choice (exercises persistence + the name→value display mapping).
         await page.reload()
         await page.click('#boot-start')
-        await page.waitForFunction(() => !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 })
+        await page.waitForFunction(() => !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 * SCALE })
         await page.waitForFunction((q) => {
             const el = document.querySelector(q)
             return el && typeof el.getOptions === 'function' && el.getOptions().length > 1
-        }, sel, { timeout: 30_000 })
+        }, sel, { timeout: 30_000 * SCALE })
 
         const restored = await page.evaluate((q) => {
             const el = document.querySelector(q)

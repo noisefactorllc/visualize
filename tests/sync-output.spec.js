@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 test('Noisedeck Sync target sends real SDK-framed mixer pixels and disposes on pagehide', async ({ page }) => {
     test.slow()
@@ -170,7 +171,7 @@ test('Noisedeck Sync target sends real SDK-framed mixer pixels and disposes on p
     await expect(page.locator('#sync-output-open')).toHaveCount(1)
     await page.click('#boot-start')
     await page.waitForFunction(() => window.__visualize?.mixer?.ready === true, null, {
-        timeout: 45_000
+        timeout: 45_000 * SCALE
     })
 
     await page.click('#sync-output-open')
@@ -258,5 +259,5 @@ test('Noisedeck Sync target sends real SDK-framed mixer pixels and disposes on p
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')))
     await page.waitForFunction((before) => (
         window.__visualizeSyncTest.calls.filter((entry) => entry[0] === 'socket-close').length >= before + 2
-    ), closesBeforePagehide, { timeout: 5_000 })
+    ), closesBeforePagehide, { timeout: 5_000 * SCALE })
 })

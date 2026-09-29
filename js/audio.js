@@ -69,6 +69,30 @@ export function persistAudioSensitivity(sensitivity, storage = (typeof localStor
     }
 }
 
+/**
+ * Unmet message when the live capture cannot supply a compiled program's
+ * selected audio binding. Without it a channel lookup for a higher channel
+ * than the capture exposes returns null and the binding would silently
+ * evaluate to `min` with no diagnostic. Mirrors the shared runtime's
+ * channel-shortfall warning for the Visualize capture path.
+ */
+export function channelShortfall(requirement, device) {
+    if (!requirement || !device) return null
+    const channel = requirement.channel
+    if (!Number.isInteger(channel) || channel < 1) return null
+    const selectorName = typeof requirement.name === 'string' && requirement.name ? requirement.name : null
+    if (typeof requirement.id === 'string' && requirement.id && requirement.id !== device.id) {
+        return `${requirement.id} is not the captured input (${device.name || device.id || 'default input'})`
+    }
+    if (requirement.id == null && selectorName && selectorName !== device.name) {
+        return `${selectorName} is not the captured input (${device.name || device.id || 'default input'})`
+    }
+    const available = device.channelCount
+    if (!Number.isInteger(available) || channel <= available) return null
+    const label = selectorName || (typeof requirement.id === 'string' ? requirement.id : '') || device.name || 'default input'
+    return `${label} channel ${channel} (captured device only exposes ${available} channel(s))`
+}
+
 export class SharedAudio {
     constructor(options = {}) {
         this._syncAudio = options?.syncAudio ?? nativeSyncAudio
@@ -96,6 +120,7 @@ export class SharedAudio {
         this._onStatus = null
         this._onMeters = null
         this._onSensitivity = null
+        this._lastShortfallWarning = ''
 
         this.meters = { sub: 0, low: 0, mid: 0, high: 0, vol: 0 }
     }
@@ -273,6 +298,41 @@ export class SharedAudio {
         for (const deck of this._decks) {
             const state = deck.ensureAudioState()
             if (state) this._audioStates.set(deck, state)
+        }
+        this._warnChannelShortfalls()
+    }
+
+    /**
+     * Non-blocking diagnostic: after a deck recompiles, a program whose
+     * audio bindings select a channel (or device) the live capture cannot
+     * supply would otherwise evaluate silently to `min`. Warn once per
+     * distinct unmet set; logging issues never interrupt the render loop.
+     */
+    _warnChannelShortfalls() {
+        try {
+            const channels = this._nativeChannels
+            if (!this._enabled || !channels?.device) return
+            const unmet = []
+            for (const deck of this._decks) {
+                const selected = deck.audioRequirements?.()?.selected
+                if (!Array.isArray(selected)) continue
+                for (const requirement of selected) {
+                    const message = channelShortfall(requirement, channels.device)
+                    if (message) unmet.push(message)
+                }
+            }
+            if (!unmet.length) {
+                this._lastShortfallWarning = ''
+                return
+            }
+            const message = `[SharedAudio] ${unmet.length} selected audio binding(s) could not be captured (${unmet.join(', ')}); they evaluate to min.`
+            if (message === this._lastShortfallWarning) return
+            this._lastShortfallWarning = message
+            try {
+                console.warn(message)
+            } catch {}
+        } catch {
+            // Diagnostics must never interrupt deck recompiles or the render loop.
         }
     }
 

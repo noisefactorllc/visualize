@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 installHandfishLocal(test)
 
@@ -18,7 +19,7 @@ test('deck editors use Handfish public editor APIs directly', async ({ page }) =
                 typeof editor.flashLines === 'function'
         }),
     null,
-    { timeout: 30_000 })
+    { timeout: 30_000 * SCALE })
 
     const states = await page.evaluate(() => {
         return ['A', 'B'].map((deckId) => {

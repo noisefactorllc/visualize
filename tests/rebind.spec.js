@@ -12,8 +12,9 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 1 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 1 })
 
 async function bootAndLoad(browser, programTitle) {
     const context = await browser.newContext()
@@ -36,7 +37,7 @@ async function bootAndLoad(browser, programTitle) {
         const b = document.getElementById('deck-b-name')?.textContent
         return !!window.__visualize?.decks?.A && !!window.__visualize?.rebind
             && a && a !== '—' && b && b !== '—'
-    }, null, { timeout: 30_000 })
+    }, null, { timeout: 30_000 * SCALE })
     // Load the target program into deck A by fetching the manifest
     // directly so we don't depend on the library UI having rendered.
     await page.evaluate(async (title) => {

@@ -2,8 +2,11 @@
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
 import { FakeSeanceServer, routeSeanceSdkLocal, routePortableImagesLocal } from './seanceLocal.js'
+// Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
+// sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 0 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
 
 const DSL_A1 = 'search synth, render\n\nnoise(seed: 101, ridges: true)\n  .write(o0)\n\nrender(o0)'
 const DSL_A2 = 'search synth, render\n\nnoise(seed: 202, ridges: false)\n  .write(o0)\n\nrender(o0)'
@@ -47,10 +50,10 @@ async function newOnlinePage(context, server, path = '/', { online = true } = {}
         await page.waitForFunction(() =>
             !!window.__visualize?.online?.ready,
             null,
-            { timeout: 45_000 }
+            { timeout: 45_000 * SCALE }
         )
     } else {
-        await page.waitForFunction(() => !!window.__visualize?.decks?.A?.currentDsl, null, { timeout: 45_000 })
+        await page.waitForFunction(() => !!window.__visualize?.decks?.A?.currentDsl, null, { timeout: 45_000 * SCALE })
     }
     return page
 }
@@ -94,7 +97,7 @@ async function closeDialog(page) {
 async function takeOnline(page) {
     await openDialog(page)
     await page.locator('#seance-dialog [data-action="take-online"]').click()
-    await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Online', { timeout: 30_000 })
+    await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Online', { timeout: 30_000 * SCALE })
     const sessionId = await page.locator('#seance-dialog').evaluate((el) => el.sessionId)
     await closeDialog(page)
     return sessionId
@@ -102,8 +105,8 @@ async function takeOnline(page) {
 
 async function waitForOnlineJoin(page) {
     await openDialog(page)
-    await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Online', { timeout: 30_000 })
-    await page.waitForFunction(() => window.__visualize.online.getStatus() === 'online', null, { timeout: 30_000 })
+    await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Online', { timeout: 30_000 * SCALE })
+    await page.waitForFunction(() => window.__visualize.online.getStatus() === 'online', null, { timeout: 30_000 * SCALE })
     await closeDialog(page)
 }
 
@@ -123,13 +126,13 @@ test('deck A and deck B sync independently in one Seance session', async ({ brow
 
         const originalGuestB = await editorText(guest, 'B')
         await setEditorText(host, 'A', DSL_A1)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
-        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
         expect(await editorText(guest, 'B')).toBe(originalGuestB)
 
         await setEditorText(host, 'B', DSL_B1)
-        await expect.poll(() => editorText(guest, 'B'), { timeout: 45_000 }).toBe(DSL_B1)
-        await expect.poll(() => currentDsl(guest, 'B'), { timeout: 45_000 }).toBe(DSL_B1)
+        await expect.poll(() => editorText(guest, 'B'), { timeout: 45_000 * SCALE }).toBe(DSL_B1)
+        await expect.poll(() => currentDsl(guest, 'B'), { timeout: 45_000 * SCALE }).toBe(DSL_B1)
         expect(await editorText(guest, 'A')).toBe(DSL_A1)
     } finally {
         await context.close()
@@ -151,7 +154,7 @@ test('online collaboration is available by default without any feature flag', as
         const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`, { online: false })
         await waitForOnlineJoin(guest)
         await openEditor(guest, 'A')
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
     } finally {
         await context.close()
     }
@@ -176,10 +179,10 @@ test('printed Seance URL restores both deck documents', async ({ browser }) => {
 
         await openEditor(restored, 'A')
         await openEditor(restored, 'B')
-        await expect.poll(() => editorText(restored, 'A'), { timeout: 45_000 }).toBe(DSL_A2)
-        await expect.poll(() => editorText(restored, 'B'), { timeout: 45_000 }).toBe(DSL_B2)
-        await expect.poll(() => currentDsl(restored, 'A'), { timeout: 45_000 }).toBe(DSL_A2)
-        await expect.poll(() => currentDsl(restored, 'B'), { timeout: 45_000 }).toBe(DSL_B2)
+        await expect.poll(() => editorText(restored, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A2)
+        await expect.poll(() => editorText(restored, 'B'), { timeout: 45_000 * SCALE }).toBe(DSL_B2)
+        await expect.poll(() => currentDsl(restored, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A2)
+        await expect.poll(() => currentDsl(restored, 'B'), { timeout: 45_000 * SCALE }).toBe(DSL_B2)
     } finally {
         await context.close()
     }
@@ -200,8 +203,8 @@ test('Join Session by ID adopts server state', async ({ browser }) => {
 
         await openEditor(guest, 'A')
         await openEditor(guest, 'B')
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
-        await expect.poll(() => editorText(guest, 'B'), { timeout: 45_000 }).toBe(DSL_B1)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
+        await expect.poll(() => editorText(guest, 'B'), { timeout: 45_000 * SCALE }).toBe(DSL_B1)
     } finally {
         await context.close()
     }
@@ -221,7 +224,7 @@ test('joining a different session closes the previous online connection', async 
 
         const guest = await newOnlinePage(context, server, `/?seance=${sessionOne}`)
         await waitForOnlineJoin(guest)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
 
         // Switch sessions. The unified dialog only offers join-by-id while
         // offline, so leave session one first, then join session two — the
@@ -232,7 +235,7 @@ test('joining a different session closes the previous online connection', async 
         await closeDialog(guest)
         await pageJoinById(guest, sessionTwo)
         await waitForOnlineJoin(guest)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A2)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A2)
 
         await setEditorText(hostOne, 'A', DSL_B1)
         await guest.waitForTimeout(1000)
@@ -260,7 +263,7 @@ test('Go Offline preserves local editor text and stops publishing edits', async 
         await waitForOnlineJoin(guest)
 
         await setEditorText(host, 'A', DSL_A1)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
 
         await openDialog(host)
         await host.locator('#seance-dialog [data-action="go-offline"]').click()
@@ -270,7 +273,7 @@ test('Go Offline preserves local editor text and stops publishing edits', async 
 
         await setEditorText(host, 'A', DSL_A2)
         expect(await editorText(host, 'A')).toBe(DSL_A2)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 3_000 }).toBe(DSL_A1)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 3_000 * SCALE }).toBe(DSL_A1)
     } finally {
         await context.close()
     }
@@ -286,10 +289,10 @@ test('invalid remote DSL updates editor text but preserves last-good deck render
         await waitForOnlineJoin(guest)
 
         await setEditorText(host, 'A', DSL_A1)
-        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 }).toBe(DSL_A1)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A1)
 
         await setEditorText(host, 'A', INVALID_DSL)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 }).toBe(INVALID_DSL)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(INVALID_DSL)
         expect(await currentDsl(guest, 'A')).toBe(DSL_A1)
         await openEditor(guest, 'A')
         expect(await editorText(guest, 'A')).toBe(INVALID_DSL)
@@ -334,7 +337,7 @@ test('Deck A is the SDK default document for single-editor bindings', async ({ b
             editor.dispatchEvent(new Event('input', { bubbles: true }))
         }, DSL_A2)
 
-        await expect.poll(() => currentDsl(host, 'A'), { timeout: 45_000 }).toBe(DSL_A2)
+        await expect.poll(() => currentDsl(host, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_A2)
         expect(await currentDsl(host, 'B')).toBe(DSL_B1)
     } finally {
         await context.close()
@@ -358,7 +361,7 @@ test('joining a session created by a single-editor app (doc id "main") populates
         const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
         await waitForOnlineJoin(guest)
 
-        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 }).toBe(DSL_B2)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_B2)
     } finally {
         await context.close()
     }
@@ -379,7 +382,7 @@ test('joining a single-document session never proposes the deck it does not have
 
         const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
         await waitForOnlineJoin(guest)
-        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 }).toBe(DSL_B2)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45_000 * SCALE }).toBe(DSL_B2)
 
         // Typing into deck B must not re-arm the loop either.
         await setEditorText(guest, 'B', DSL_B1)
@@ -387,12 +390,12 @@ test('joining a single-document session never proposes the deck it does not have
 
         expect(server.proposals.filter(p => p.docId === 'deck:B')).toEqual([])
         expect(server.rejected).toEqual([])
-        await expect.poll(() => guest.locator('#toast').textContent(), { timeout: 10_000 })
+        await expect.poll(() => guest.locator('#toast').textContent(), { timeout: 10_000 * SCALE })
             .toContain('stays local')
 
         // Deck A still works: the session's own document is unaffected.
         await setEditorText(guest, 'A', DSL_A1)
-        await expect.poll(() => server.docsFor(sessionId).find(d => d.id === 'main')?.text, { timeout: 45_000 })
+        await expect.poll(() => server.docsFor(sessionId).find(d => d.id === 'main')?.text, { timeout: 45_000 * SCALE })
             .toBe(DSL_A1)
     } finally {
         await context.close()
@@ -412,11 +415,11 @@ test('a refused join stops retrying and reports the reason', async ({ browser })
         const guest = await newOnlinePage(context, server)
         await pageJoinById(guest, sessionId)
 
-        await expect.poll(() => guest.locator('#toast').textContent(), { timeout: 30_000 })
+        await expect.poll(() => guest.locator('#toast').textContent(), { timeout: 30_000 * SCALE })
             .toContain('that session is full')
         // Not left pulsing on "Connecting", whose controls are all hidden.
         await openDialog(guest)
-        await expect(guest.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Offline', { timeout: 30_000 })
+        await expect(guest.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Offline', { timeout: 30_000 * SCALE })
         await closeDialog(guest)
         expect(await guest.evaluate(() => window.__visualize.online.getStatus())).toBe('offline')
     } finally {
@@ -435,7 +438,7 @@ test('remote deck edits serialize a delayed renderer compile and retain the newe
         const sessionId = await takeOnline(host)
         const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
         await waitForOnlineJoin(guest)
-        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45000 }).toBe(await currentDsl(host, 'A'))
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45000 * SCALE }).toBe(await currentDsl(host, 'A'))
         await guest.evaluate(() => {
             const renderer = window.__visualize.decks.A.inner
             const compile = renderer.compile.bind(renderer)
@@ -451,10 +454,10 @@ test('remote deck edits serialize a delayed renderer compile and retain the newe
         await setEditorText(host, 'A', firstDsl)
         await guest.waitForFunction(() => !!window.__releaseCompile)
         await setEditorText(host, 'A', latestDsl)
-        await expect.poll(() => editorText(guest, 'A'), { timeout: 15000 }).toBe(latestDsl)
+        await expect.poll(() => editorText(guest, 'A'), { timeout: 15000 * SCALE }).toBe(latestDsl)
         expect(await guest.evaluate(() => window.__compileCalls.length)).toBe(1)
         await guest.evaluate(() => window.__releaseCompile())
-        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45000 }).toBe(latestDsl)
+        await expect.poll(() => currentDsl(guest, 'A'), { timeout: 45000 * SCALE }).toBe(latestDsl)
         expect(await guest.evaluate(() => window.__visualize.decks.A.inner.currentDsl)).toBe(latestDsl)
         expect(await editorText(guest, 'A')).toBe(latestDsl)
     } finally {
@@ -477,14 +480,14 @@ test('two deck image seeds and a live file replacement preserve original bytes a
         })
         for (const [index, deckId] of ['A', 'B'].entries()) {
             await setEditorText(host, deckId, `search synth\nmedia(url:"${sources[index]}").write(o0)\nrender(o0)`)
-            await expect.poll(() => currentDsl(host, deckId), { timeout: 30000 }).toContain(sources[index])
+            await expect.poll(() => currentDsl(host, deckId), { timeout: 30000 * SCALE }).toContain(sources[index])
         }
         const sessionId = await takeOnline(host)
         expect([...server.sessions.get(sessionId).images.values()].map(image => image.dataUrl).sort()).toEqual(sources.slice(0, 2).sort())
         const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
         await waitForOnlineJoin(guest)
-        await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 }).toEqual([255, 0, 0, 255])
-        await expect.poll(() => deckImagePixel(guest, 'B'), { timeout: 30000 }).toEqual([0, 255, 0, 255])
+        await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 * SCALE }).toEqual([255, 0, 0, 255])
+        await expect.poll(() => deckImagePixel(guest, 'B'), { timeout: 30000 * SCALE }).toEqual([0, 255, 0, 255])
         await guest.click('#scenes-open')
         await guest.fill('#scene-name-input', 'Image save boundary')
         await guest.click('#scene-save')
@@ -506,7 +509,7 @@ test('two deck image seeds and a live file replacement preserve original bytes a
             await expect(guest.locator('#toast')).toContainText('Could not save scene')
             expect(await guest.evaluate(() => localStorage.getItem('visualize.scenes.v1'))).toEqual(saved)
         } finally { await guest.evaluate(() => window.__releaseImage()) }
-        await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 }).toEqual([0, 0, 255, 255])
+        await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 * SCALE }).toEqual([0, 0, 255, 255])
         expect(await guest.evaluate(() => window.__visualize.decks.A.images.map(image => image.dataUrl))).toContain(sources[2])
         expect(await currentDsl(guest, 'A')).not.toContain('data:')
         const uploaded = [...server.sessions.get(sessionId).images.values()]

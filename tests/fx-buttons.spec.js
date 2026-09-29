@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+// Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
+// sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 60_000, retries: 1 })
+test.describe.configure({ timeout: 60_000 * SCALE, retries: 1 })
 
 async function boot(browser) {
     const context = await browser.newContext()
@@ -14,7 +17,7 @@ async function boot(browser) {
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.scenes,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
     return { context, page }
 }
 
@@ -83,7 +86,7 @@ test('browser: FX toggle buttons maintain active/latched state, ARIA semantics, 
 
         // 6. Flash button triggers momentary feedback without latching aria-pressed
         // Register observer before click to avoid racing the 300ms overlay removal
-        const flashPromise = page.evaluate(() => new Promise(resolve => {
+        const flashPromise = page.evaluate(timeoutMs => new Promise(resolve => {
             const overlay = document.getElementById('main-fx-overlay')
             if (!overlay) return resolve(false)
             if (overlay.classList.contains('flash')) return resolve(true)
@@ -97,8 +100,8 @@ test('browser: FX toggle buttons maintain active/latched state, ARIA semantics, 
             setTimeout(() => {
                 observer.disconnect()
                 resolve(overlay.classList.contains('flash'))
-            }, 3000)
-        }))
+            }, timeoutMs)
+        }), 3000 * SCALE)
 
         await flashBtn.click()
         const sawFlash = await flashPromise

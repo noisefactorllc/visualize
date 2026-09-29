@@ -6,6 +6,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 // Serve the local handfish build (with <tempo-bar> + industrial.css) when
 // HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
@@ -24,8 +25,8 @@ test('library renders sectioned + ordered', async ({ page }) => {
     await page.click('#boot-start')
 
     // Wait for curated categories to appear (loaded from programs.json).
-    await page.waitForSelector('.lib-section[data-category="abstract"]', { timeout: 30_000 })
-    await page.waitForSelector('.lib-section[data-category="particles"]', { timeout: 30_000 })
+    await page.waitForSelector('.lib-section[data-category="abstract"]', { timeout: 30_000 * SCALE })
+    await page.waitForSelector('.lib-section[data-category="particles"]', { timeout: 30_000 * SCALE })
 
     const sections = await page.$$eval('.lib-section', els =>
         els.map(el => el.dataset.category))

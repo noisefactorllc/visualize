@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+// Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
+// sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 60_000, retries: 1 })
+test.describe.configure({ timeout: 60_000 * SCALE, retries: 1 })
 
 async function boot(browser) {
     const context = await browser.newContext()
@@ -14,7 +17,7 @@ async function boot(browser) {
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.state,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
     return { context, page }
 }
 

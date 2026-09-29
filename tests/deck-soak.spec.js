@@ -10,8 +10,9 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 0 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
 
 test('deck load/reloadDsl soak serializes cleanly on a live deck', async ({ page }) => {
     const pageErrors = []
@@ -20,7 +21,7 @@ test('deck load/reloadDsl soak serializes cleanly on a live deck', async ({ page
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() =>
-        !!window.__visualize?.decks?.A?.currentDsl, null, { timeout: 60_000 })
+        !!window.__visualize?.decks?.A?.currentDsl, null, { timeout: 60_000 * SCALE })
 
     const soak = await page.evaluate(async () => {
         const resp = await fetch('data/programs.json', { cache: 'no-cache' })

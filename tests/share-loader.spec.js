@@ -7,6 +7,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 // Serve the local handfish build (with <tempo-bar> + industrial.css) when
 // HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
@@ -46,7 +47,7 @@ test('share-loader: ?code= → pick B → deck B has shared program', async ({ p
 
     // Wait for the prompt to populate with the fetched title and for
     // the deck buttons to become clickable.
-    await expect(page.locator('#boot-share-prompt')).toContainText(SAMPLE_TITLE, { timeout: 20_000 })
+    await expect(page.locator('#boot-share-prompt')).toContainText(SAMPLE_TITLE, { timeout: 20_000 * SCALE })
     await expect(page.locator('#boot-share-a')).toBeEnabled()
     await expect(page.locator('#boot-share-b')).toBeEnabled()
 
@@ -56,7 +57,7 @@ test('share-loader: ?code= → pick B → deck B has shared program', async ({ p
     await page.waitForFunction(
         (expected) => document.getElementById('deck-b-name')?.textContent === expected,
         SAMPLE_TITLE,
-        { timeout: 30_000 }
+        { timeout: 30_000 * SCALE }
     )
 
     // Deck A should have its random initial pick — not the shared one.
@@ -92,7 +93,7 @@ test('share-loader: composition with hasEffects=true announces install', async (
     await page.goto('/?code=CUSTOMFX')
 
     // Buttons are enabled; hint mentions the bundled-effects install.
-    await expect(page.locator('#boot-share-prompt')).toContainText('has portable effects', { timeout: 20_000 })
+    await expect(page.locator('#boot-share-prompt')).toContainText('has portable effects', { timeout: 20_000 * SCALE })
     await expect(page.locator('#boot-share-hint')).toContainText('1 custom effect')
     await expect(page.locator('#boot-share-a')).toBeEnabled()
     await expect(page.locator('#boot-share-b')).toBeEnabled()
@@ -105,7 +106,7 @@ test('share-loader: failed fetch surfaces the error inline', async ({ page }) =>
 
     await page.goto('/?code=MISSING')
 
-    await expect(page.locator('#boot-share-prompt')).toContainText('MISSING', { timeout: 20_000 })
+    await expect(page.locator('#boot-share-prompt')).toContainText('MISSING', { timeout: 20_000 * SCALE })
     await expect(page.locator('#boot-share-a')).toBeDisabled()
     await expect(page.locator('#boot-share-b')).toBeDisabled()
 })

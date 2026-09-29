@@ -369,6 +369,15 @@ export class Deck {
         return this._renderer._midiState || null
     }
 
+    /**
+     * Runtime audio-input requirements of the compiled program (the same
+     * view the shared runtime's capture manager consumes), or null when the
+     * renderer has no pipeline yet.
+     */
+    audioRequirements() {
+        return this._renderer?.pipeline?.getAudioInputRequirements?.() ?? null
+    }
+
     resize(width, height) {
         const w = toFiniteNumber(width)
         const h = toFiniteNumber(height)

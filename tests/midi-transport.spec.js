@@ -15,8 +15,9 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 1 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 1 })
 
 async function bootWithFakeMidi(browser) {
     const context = await browser.newContext()
@@ -52,7 +53,7 @@ async function bootWithFakeMidi(browser) {
     await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.midi && !!window.__visualize?.scheduler,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
 
     return { context, page }
 }
@@ -65,15 +66,15 @@ test('MIDI transport Start/Continue/Stop drive the scheduler without re-anchorin
     await page.click('#settings-toggle')
     await page.waitForFunction(() =>
         document.getElementById('midi-enable')?.offsetParent !== null,
-        null, { timeout: 15_000 })
+        null, { timeout: 15_000 * SCALE })
     await page.click('#midi-enable')
     await page.waitForFunction(() =>
         window.__visualize?.midi?.enabled === true
             && window.__visualize.midi.inputCount === 1,
-        null, { timeout: 15_000 })
+        null, { timeout: 15_000 * SCALE })
     await page.click('#midi-clock-enable')
     await page.waitForFunction(() => window.__visualize.midi.followClock === true,
-        null, { timeout: 10_000 })
+        null, { timeout: 10_000 * SCALE })
 
     // Park the scheduler in a deterministic stopped state.
     const parked = await page.evaluate(() => {
@@ -103,7 +104,7 @@ test('MIDI transport Start/Continue/Stop drive the scheduler without re-anchorin
     // Let the grid run forward, then Continue while running: the beat
     // position must NOT reset (pre-fix, Continue called resetPhase()).
     await page.waitForFunction(() => window.__visualize.scheduler.beatIndex >= 2,
-        null, { timeout: 20_000 })
+        null, { timeout: 20_000 * SCALE })
     const continued = await page.evaluate(() => {
         const data = new Uint8Array([0xFB]) // Continue
         for (const { type, listener } of window.__fakeMidi.input._listeners) {

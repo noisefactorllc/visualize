@@ -25,12 +25,13 @@
   ],
   "scripts": {
     "dev": "npx http-server . -p 3007 -c-1",
-    "test": "npm run test:node && npx playwright test",
+    "test": "node scripts/test.cjs",
     "test:node": "node --test tests/*.node-test.js",
     "lint": "node --check js/*.js js/ui/*.js js/noisemaker/*.js"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2"
+    "@playwright/test": "^1.58.2",
+    "http-server": "^14.1.1"
   },
   "engines": {
     "node": ">=18.0.0"

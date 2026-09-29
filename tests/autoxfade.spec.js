@@ -8,8 +8,9 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 1 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 1 })
 
 async function boot(browser) {
     const context = await browser.newContext()
@@ -21,7 +22,7 @@ async function boot(browser) {
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.autoXfade,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
     return { context, page }
 }
 

@@ -12,6 +12,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 // One retry as defense-in-depth: this spec boots a real GPU pipeline and
 // runs ~20 real-time interactions against random programs, so isolated GPU
@@ -46,7 +47,7 @@ test('end-to-end smoke', async ({ page }) => {
         const a = document.getElementById('deck-a-name')?.textContent
         const b = document.getElementById('deck-b-name')?.textContent
         return a && a !== '—' && b && b !== '—'
-    }, { timeout: 30_000 })
+    }, { timeout: 30_000 * SCALE })
 
     // Library populated
     const libCount = await page.textContent('#library-count')

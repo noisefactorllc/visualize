@@ -17,8 +17,9 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
-test.describe.configure({ timeout: 120_000, retries: 1 })
+test.describe.configure({ timeout: 120_000 * SCALE, retries: 1 })
 
 test('global font: Atkinson Hyperlegible wins across themes, zero-CLS chain', async ({ browser }) => {
     const context = await browser.newContext()
@@ -26,7 +27,7 @@ test('global font: Atkinson Hyperlegible wins across themes, zero-CLS chain', as
     await routeHandfishLocal(page)
     await page.goto('/')
     await page.click('#boot-start')
-    await page.waitForFunction(() => !!window.__visualize, null, { timeout: 30_000 })
+    await page.waitForFunction(() => !!window.__visualize, null, { timeout: 30_000 * SCALE })
 
     // 1. Default chain is Atkinson → Atkinson Blank.
     const bodyFont = await page.evaluate(() => getComputedStyle(document.body).fontFamily)
@@ -65,7 +66,7 @@ test('global font: Atkinson Hyperlegible wins across themes, zero-CLS chain', as
 
     await page.waitForFunction(() =>
         document.fonts.check('16px "Atkinson Hyperlegible"'),
-        null, { timeout: 20_000 })
+        null, { timeout: 20_000 * SCALE })
 
     await context.close()
 })

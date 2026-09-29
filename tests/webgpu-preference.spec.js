@@ -6,6 +6,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 const RENDERER_STORAGE_KEY = 'visualize.renderer.v1'
 
@@ -17,7 +18,7 @@ async function bootApp(page) {
     await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.decks?.A && !!window.__visualize?.decks?.B,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
 }
 
 test('restores WebGPU preference before deck construction, persists and survives reload', async ({ page }) => {
@@ -106,7 +107,7 @@ test('settings surfaces the ACTIVE renderer and flags a silent WebGPU→WebGL2 f
     // Wait for a compiled, running deck so activeBackend reads from the
     // live pipeline backend, not the pre-compile preference fallback.
     await page.waitForFunction(() => window.__visualize?.decks?.A?.isRunning,
-        null, { timeout: 30_000 })
+        null, { timeout: 30_000 * SCALE })
 
     // Open settings — the indicator repaints on drawer open. Wait until
     // the placeholder is replaced so we read the resolved value.
@@ -114,7 +115,7 @@ test('settings surfaces the ACTIVE renderer and flags a silent WebGPU→WebGL2 f
     await page.waitForFunction(() => {
         const t = document.getElementById('active-renderer')?.textContent || ''
         return t.includes('active:') && !t.includes('…')
-    }, null, { timeout: 5_000 })
+    }, null, { timeout: 5_000 * SCALE })
 
     const info = await page.evaluate(() => ({
         active: window.__visualize.decks.A.activeBackend,

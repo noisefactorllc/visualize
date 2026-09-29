@@ -12,6 +12,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 // Serve the local handfish build (with <tempo-bar> + industrial.css) when
 // HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
@@ -26,7 +27,7 @@ installHandfishLocal(test)
 // wait gates on the composition rendering, NOT on the bundled effect
 // registering). Test-only: a genuinely broken install still fails, just
 // a bit later.
-const REGISTER_TIMEOUT = 30_000
+const REGISTER_TIMEOUT = 30_000 * SCALE
 
 /**
  * Minimal valid portable effect: a starter (no inputs) that paints a
@@ -163,7 +164,7 @@ test.describe('user effects', () => {
 
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
 
         // Open settings, import the fixture.
         await page.click('#settings-toggle')
@@ -174,7 +175,7 @@ test.describe('user effects', () => {
         await expect(page.locator('.user-effect-row[data-id="user/myTestFx"]')).toBeVisible()
 
         // Library now has a "user" section with at least our effect.
-        await expect(page.locator('.lib-section[data-category="user"]')).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('.lib-section[data-category="user"]')).toBeVisible({ timeout: 10_000 * SCALE })
         // prettify() turns `myTestFx` into `My Test Fx` for the card
         // title — same camelCase-split rule the engine-default cards
         // use (reactionDiffusion → Reaction Diffusion).
@@ -193,7 +194,7 @@ test.describe('user effects', () => {
 
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
         // The real <folder>/definition.json must win over the
@@ -203,7 +204,7 @@ test.describe('user effects', () => {
 
         await expect(page.locator('#user-effect-status')).toContainText('installed user/macFx', { timeout: REGISTER_TIMEOUT })
         await expect(page.locator('.user-effect-row[data-id="user/macFx"]')).toBeVisible()
-        await expect(page.locator('.lib-section[data-category="user"] .program-card[data-title="Mac Fx"]')).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('.lib-section[data-category="user"] .program-card[data-title="Mac Fx"]')).toBeVisible({ timeout: 10_000 * SCALE })
 
         expect(pageErrors, pageErrors.join('\n')).toEqual([])
     })
@@ -211,7 +212,7 @@ test.describe('user effects', () => {
     test('delete user effect → row removed, library updates', async ({ page }) => {
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
         await importFixture(page, makeFixture('disposable'))
@@ -221,7 +222,7 @@ test.describe('user effects', () => {
         page.once('dialog', d => d.accept())
         await page.click('.user-effect-row[data-id="user/disposable"] .user-effect-delete')
 
-        await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toHaveCount(0, { timeout: 10_000 })
+        await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toHaveCount(0, { timeout: 10_000 * SCALE })
 
         // Library's user section either drops the card or hides
         // entirely (since this was the only user effect). The
@@ -230,7 +231,7 @@ test.describe('user effects', () => {
         // render), so wait for the card to actually leave.
         await expect(
             page.locator('.lib-section[data-category="user"] .program-card[data-title="Disposable"]')
-        ).toHaveCount(0, { timeout: 10_000 })
+        ).toHaveCount(0, { timeout: 10_000 * SCALE })
     })
 
     test('persistence: reload survives an imported effect', async ({ page }) => {
@@ -241,7 +242,7 @@ test.describe('user effects', () => {
         test.slow()
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
         await importFixture(page, makeFixture('persisty'))
@@ -250,15 +251,15 @@ test.describe('user effects', () => {
         // Reload — boot hydration should re-register the effect.
         await page.reload()
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
-        await expect(page.locator('.user-effect-row[data-id="user/persisty"]')).toBeVisible({ timeout: 10_000 })
+        await expect(page.locator('.user-effect-row[data-id="user/persisty"]')).toBeVisible({ timeout: 10_000 * SCALE })
 
         // And it's back in the library's user section.
         await expect(
             page.locator('.lib-section[data-category="user"] .program-card[data-title="Persisty"]')
-        ).toBeVisible({ timeout: 10_000 })
+        ).toBeVisible({ timeout: 10_000 * SCALE })
     })
 
     test('share-loader: ?code= with bundled effect installs + persists', async ({ page }) => {
@@ -291,14 +292,14 @@ test.describe('user effects', () => {
         })
 
         await page.goto('/?code=WITHFX')
-        await expect(page.locator('#boot-share-hint')).toContainText('1 custom effect', { timeout: 20_000 })
+        await expect(page.locator('#boot-share-hint')).toContainText('1 custom effect', { timeout: 20_000 * SCALE })
         await page.click('#boot-share-a')
 
         // After the gesture: deck A title is the shared title; the
         // user-effects panel lists the bundled effect; library has it.
         await page.waitForFunction(
             () => document.getElementById('deck-a-name')?.textContent === 'with custom fx',
-            { timeout: 30_000 }
+            { timeout: 30_000 * SCALE }
         )
 
         await page.click('#settings-toggle')
@@ -312,7 +313,7 @@ test.describe('user effects', () => {
         test.slow()
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
         // Simulate persistent quota exhaustion in userEffects manager
@@ -329,7 +330,7 @@ test.describe('user effects', () => {
 
         const statusLocator = page.locator('#user-effect-status')
         await expect(statusLocator).toBeVisible({ timeout: REGISTER_TIMEOUT })
-        await expect(statusLocator).toHaveAttribute('data-kind', 'error')
+        await expect(statusLocator).toHaveAttribute('data-kind', 'error', { timeout: REGISTER_TIMEOUT })
         await expect(statusLocator).toContainText('storage quota exceeded — delete unused user effects or free disk space')
     })
 
@@ -337,7 +338,7 @@ test.describe('user effects', () => {
         test.slow()
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
         // Populate thumbnail cache first
@@ -379,7 +380,7 @@ test.describe('user effects', () => {
         test.slow()
         await page.goto('/')
         await page.click('#boot-start')
-        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 })
+        await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
         // Trigger file change with a mock file with size > 30MB
@@ -395,7 +396,7 @@ test.describe('user effects', () => {
 
         const statusLocator = page.locator('#user-effect-status')
         await expect(statusLocator).toBeVisible({ timeout: REGISTER_TIMEOUT })
-        await expect(statusLocator).toHaveAttribute('data-kind', 'error')
+        await expect(statusLocator).toHaveAttribute('data-kind', 'error', { timeout: REGISTER_TIMEOUT })
         await expect(statusLocator).toContainText('package exceeds maximum size limit (30MB)')
     })
 })

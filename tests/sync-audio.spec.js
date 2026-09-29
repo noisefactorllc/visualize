@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 const defaultDaemon = path.resolve(import.meta.dirname, '../../sync/build/sync_audio_test_server')
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
@@ -101,7 +102,7 @@ test('native 32-channel pulse source guarantees zero crosstalk across all unmodu
         const active = vals.filter(v => v > 0.5).length
         const inactiveClean = vals.filter(v => v <= 0.5).every(v => v === 0)
         return active === 1 && inactiveClean
-    }, { timeout: 10_000 }).toBe(true)
+    }, { timeout: 10_000 * SCALE }).toBe(true)
     await page.evaluate(() => window.audio.disable())
 })
 
@@ -119,7 +120,7 @@ test('native 32-channel discrete mapping preserves channel ordering without inve
             if (vals[i + 1] <= vals[i]) return false
         }
         return true
-    }, { timeout: 10_000 }).toBe(true)
+    }, { timeout: 10_000 * SCALE }).toBe(true)
     await page.evaluate(() => window.audio.disable())
 })
 
@@ -142,8 +143,8 @@ test('audio settings expose Sync discovery and native selection without micropho
         select.value = 'sync-audio:audio_32_tones'
         select.dispatchEvent(new Event('change', { bubbles: true }))
     })
-    await expect.poll(() => page.evaluate(() => window.__visualize.audio.enabled), { timeout: 15_000 }).toBe(true)
-    await expect.poll(() => page.evaluate(() => window.__visualize.audio.meters.vol), { timeout: 15_000 }).toBeGreaterThan(0)
+    await expect.poll(() => page.evaluate(() => window.__visualize.audio.enabled), { timeout: 15_000 * SCALE }).toBe(true)
+    await expect.poll(() => page.evaluate(() => window.__visualize.audio.meters.vol), { timeout: 15_000 * SCALE }).toBeGreaterThan(0)
     await expect(page.locator('#audio-status')).toContainText('audio: 32 channel ort')
     expect(await page.evaluate(() => window.__visualize.audio.currentDeviceId)).toBe('sync-audio:audio_32_tones')
     await page.evaluate(() => window.__visualize.audio.disable())
@@ -265,7 +266,7 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
             accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
     })
     try {
-        await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 15_000 }).toBe(true)
+        await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 15_000 * SCALE }).toBe(true)
     } catch (error) {
         error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
         throw error
