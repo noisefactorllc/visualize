@@ -19,7 +19,7 @@ import {
     loadAudioSensitivity,
     persistAudioSensitivity
 } from './audio.js'
-import { SharedMidi } from './midi.js'
+import { SharedMidi, transportAction } from './midi.js'
 import { MainCompositor } from './compositor.js'
 import { MixerRenderer, MIXERS, DEFAULT_MIXER_ID } from './mixer.js'
 import { MixerControls } from './ui/mixerControls.js'
@@ -540,14 +540,18 @@ async function boot() {
         // (incl. applyLoopFromBpm) stay the single source of truth.
         tempoBar.bpm = bpm
     })
-    // MIDI transport: start/continue resume the scheduler; stop pauses
-    // it so beat-driven FX freeze instead of free-running.
+    // MIDI transport: Start repositions to bar zero only from a stopped
+    // scheduler; Continue resumes from the current position; either way a
+    // running scheduler is never phase-stomped mid-fade (transportAction).
     midi.onTransport((kind) => {
         if (!midi.followClock) return
-        if (kind === 'start' || kind === 'continue') {
+        const action = transportAction(kind, { running: scheduler.running })
+        if (action === 'restart') {
             scheduler.resetPhase()
-            if (!scheduler.running) scheduler.start()
-        } else if (kind === 'stop') {
+            scheduler.start()
+        } else if (action === 'resume') {
+            scheduler.start()
+        } else if (action === 'pause') {
             scheduler.stop()
         }
     })

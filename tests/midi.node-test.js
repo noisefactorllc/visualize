@@ -8,7 +8,8 @@ import {
     normalizeCcValue,
     normalizeRange,
     findConflicts,
-    parseMidiStatus
+    parseMidiStatus,
+    transportAction
 } from '../js/midi.js'
 
 describe('computeEdgeToggle pure helper', () => {
@@ -848,5 +849,98 @@ describe('MIDI learn range editing hardening', () => {
         } finally {
             delete globalThis.localStorage
         }
+    })
+})
+
+describe('transportAction pure helper', () => {
+    it('start restarts from bar zero only when the scheduler is stopped', () => {
+        assert.equal(transportAction('start', { running: false }), 'restart')
+        assert.equal(transportAction('start', { running: true }), 'ignore',
+            'Start while running must not re-anchor a live beat grid (no mid-fade stutter)')
+    })
+
+    it('continue resumes from the current position without re-anchoring', () => {
+        assert.equal(transportAction('continue', { running: false }), 'resume')
+        assert.equal(transportAction('continue', { running: true }), 'ignore')
+    })
+
+    it('stop pauses a running scheduler and is a no-op when stopped', () => {
+        assert.equal(transportAction('stop', { running: true }), 'pause')
+        assert.equal(transportAction('stop', { running: false }), 'ignore')
+    })
+
+    it('ignores unknown transport kinds and defaults running to false', () => {
+        assert.equal(transportAction('songpos', {}), 'ignore')
+        assert.equal(transportAction(undefined, {}), 'ignore')
+        assert.equal(transportAction('start'), 'restart')
+    })
+})
+
+describe('SharedMidi MIDI transport ergonomics', () => {
+    function createTestMidi() {
+        const midi = new SharedMidi()
+        midi._enabled = true
+        midi.followClock = true
+        return midi
+    }
+
+    /** Seed a live clock state the way a running 24-PPQN stream would. */
+    function seedSynced(midi) {
+        midi._inputs.push({})
+        midi._tickTimes = [1000, 1021, 1042, 1063]
+        midi._smoothedBpm = 124
+        midi._setClockStatus('synced')
+        midi._clearNoClockWatchdog()  // followClock setter arms one; keep state exact
+        return midi
+    }
+
+    it('transport events reach onTransport even when clock follow is off', () => {
+        const midi = new SharedMidi()
+        midi._enabled = true
+        const seen = []
+        midi.onTransport((k) => seen.push(k))
+        for (const b of [0xFA, 0xFB, 0xFC]) midi._onMessage({ data: new Uint8Array([b]) })
+        assert.deepEqual(seen, ['start', 'continue', 'stop'])
+        assert.equal(midi.clockStatus, 'no-device',
+            'clock follow off → no scheduler-side status churn')
+    })
+
+    it('start resets the BPM estimate and waits for fresh ticks', () => {
+        const midi = seedSynced(createTestMidi())
+        midi._onMessage({ data: new Uint8Array([0xFA]) })
+        assert.equal(midi._tickTimes.length, 0)
+        assert.equal(midi._smoothedBpm, null)
+        assert.equal(midi.clockStatus, 'no-clock')
+        assert.ok(midi._noClockTimer, 'watchdog armed while waiting for ticks')
+        midi._clearNoClockWatchdog()
+    })
+
+    it('continue keeps the live BPM estimate and synced status (no tempo blip)', () => {
+        const midi = seedSynced(createTestMidi())
+        const ticks = [...midi._tickTimes]
+        midi._onMessage({ data: new Uint8Array([0xFB]) })
+        assert.equal(midi._smoothedBpm, 124, 'Continue must not discard the estimate')
+        assert.deepEqual(midi._tickTimes, ticks, 'window preserved for continuity')
+        assert.equal(midi.clockStatus, 'synced')
+        assert.equal(midi._noClockTimer, null, 'no watchdog churn while synced')
+    })
+
+    it('continue from an idle transport falls back to the no-clock wait state', () => {
+        const midi = createTestMidi()
+        midi._inputs.push({})
+        midi._onMessage({ data: new Uint8Array([0xFC]) })
+        assert.equal(midi.clockStatus, 'stopped')
+        midi._onMessage({ data: new Uint8Array([0xFB]) })
+        assert.equal(midi.clockStatus, 'no-clock')
+        assert.ok(midi._noClockTimer, 'watchdog armed while waiting for ticks')
+        midi._clearNoClockWatchdog()
+    })
+
+    it('stop clears the window and reports an intentional stopped state', () => {
+        const midi = seedSynced(createTestMidi())
+        midi._onMessage({ data: new Uint8Array([0xFC]) })
+        assert.equal(midi._tickTimes.length, 0)
+        assert.equal(midi.clockStatus, 'stopped')
+        assert.equal(midi._noClockTimer, null, 'stop is intentional: no watchdog')
     })
 })

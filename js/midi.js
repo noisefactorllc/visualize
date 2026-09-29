@@ -38,6 +38,28 @@ export function parseMidiStatus(byte) {
     }
 }
 
+/**
+ * Decide what the beat scheduler should do for a MIDI transport event.
+ * kind: 'start' | 'continue' | 'stop'; running: scheduler state.
+ * Returns 'restart' (reset phase, then run), 'resume' (run from the
+ * current position), 'pause', or 'ignore'.
+ *
+ * Ergonomics: Start means "reposition to bar zero" per the MIDI spec,
+ * but re-anchoring a scheduler that is already running snaps the beat
+ * grid (AutoXfade oscillator phase, AutoMix bar cadence) mid-fade — an
+ * audible stutter on running decks — so it only restarts from a stopped
+ * state. Continue (0xFB) resumes from the current position and never
+ * re-anchors. Stop pauses; a second Stop is a no-op.
+ */
+export function transportAction(kind, { running = false } = {}) {
+    switch (kind) {
+        case 'start': return running ? 'ignore' : 'restart'
+        case 'continue': return running ? 'ignore' : 'resume'
+        case 'stop': return running ? 'pause' : 'ignore'
+        default: return 'ignore'
+    }
+}
+
 /** BPM derived from a sliding window of clock-tick timestamps (ms). */
 export function bpmFromTickIntervals(timestamps) {
     if (!Array.isArray(timestamps) || timestamps.length < 2) return null
@@ -692,12 +714,23 @@ export class SharedMidi {
             this._tickTimes = []
             this._setClockStatus('stopped')
             this._clearNoClockWatchdog()
-        } else if (kind === 'start' || kind === 'continue') {
-            // Reset the window so post-transport BPM derives from new ticks.
+        } else if (kind === 'start') {
+            // Start = reposition to bar zero: reset the window so
+            // post-transport BPM derives from fresh ticks.
             this._tickTimes = []
             this._smoothedBpm = null
             this._setClockStatus('no-clock')
             this._armNoClockWatchdog()
+        } else if (kind === 'continue') {
+            // Continue resumes the stream without repositioning: keep
+            // the BPM estimate and a live 'synced' status intact so the
+            // tempo readout and beat grid don't blip on every resume.
+            // Only an idle transport (stopped / no clock yet) falls back
+            // to the no-clock wait state.
+            if (this._clockStatus !== 'synced') {
+                this._setClockStatus('no-clock')
+                this._armNoClockWatchdog()
+            }
         }
     }
 
