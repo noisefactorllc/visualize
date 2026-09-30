@@ -826,7 +826,7 @@ async function boot() {
         const docId = DECK_DOC_IDS[deckId]
         const dsl = state.decks[deckId]?.currentDsl || ''
         if (!docId || !dsl) return
-        online?.updateLocalText(docId, dsl, { source })
+        Promise.resolve(online?.updateLocalText(docId, dsl, { source })).catch(error => toast(error.message, 5000))
     }
 
     function publishAllDecks(source) {
@@ -838,6 +838,7 @@ async function boot() {
         const deck = state.decks[deckId]
         if (!deck || !String(dsl || '').trim()) return
         setCollaborativeDeckText(deckId, dsl)
+        if (/\burl\b/.test(dsl)) await deckMedia[deckId].stop()
         const res = await deck.load(dsl, '(online)')
         if (res.superseded) return
         if (!res.success) {
@@ -861,6 +862,8 @@ async function boot() {
     async function loadProgram(deckId, program) {
         if (!program) return
         const deck = state.decks[deckId]
+        if (program.images) deck.images = program.images
+        if (/\burl\b/.test(program.dsl)) await deckMedia[deckId].stop()
 
         // Pixel density auto-step-down: any DSL that invokes points/* or
         // sim-tagged effects (cellular automata, reaction-diffusion,
@@ -1207,6 +1210,10 @@ async function boot() {
                     try {
                         await deckMedia[deckId].setFile(f)
                         if (labelEl) labelEl.textContent = deckMedia[deckId].currentLabel
+                        if (!f.type.startsWith('video/')) {
+                            resetCollaborativeDeckText(deckId)
+                            publishDeckDsl(deckId, 'image-selection')
+                        }
                     } catch (err) {
                         toast(`${deckId}: ${err.message || err}`)
                     }
@@ -2286,8 +2293,17 @@ async function boot() {
             sceneNameInput.focus()
             return
         }
-        const snap = Scenes.snapshot(snapshotAccessors())
-        scenes.save(name, snap)
+        let snap
+        try {
+            snap = Scenes.snapshot(snapshotAccessors())
+        } catch (error) {
+            toast(`Could not save scene: ${error.message}`, 5000)
+            return
+        }
+        if (!scenes.save(name, snap)) {
+            toast('Could not save scene: browser storage is full or unavailable', 5000)
+            return
+        }
         sceneNameInput.value = ''
         toast(`saved: ${name.trim()}`)
     })
@@ -2497,6 +2513,18 @@ async function boot() {
                 editorForDeck: (deckId) => document.querySelector(`.deck[data-deck="${deckId}"] code-editor`),
                 getDeckText: (deckId) => collaborativeDeckText(deckId),
                 applyRemoteText: applyOnlineDsl,
+                validatePublication: deckId => deckMedia[deckId].hasLiveMedia
+                    ? { ok: false, reason: 'Only images can be shared; camera and video sources remain local' } : true,
+                prepareImages: async (deckId, dsl) => {
+                    if (deckMedia[deckId].hasLiveMedia) throw new Error('Only images can be shared; camera and video sources remain local')
+                    if (!/\burl\b/.test(dsl)) return { dsl, images: [] }
+                    const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+                    const deck = state.decks[deckId]
+                    const prepared = await tools.prepareImagesForShare(dsl, tools.getReferencedImages(dsl, deck.images))
+                    for (const image of prepared.images) if (!deck.images.some(asset => asset.id === image.id)) deck.images.push(image)
+                    return prepared
+                },
+                imageBlob: async image => (await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')).imageToBlob(image),
                 dialog: $('seance-dialog'),
                 toast,
                 location: window.location,
@@ -2504,6 +2532,15 @@ async function boot() {
                 clipboard: navigator.clipboard,
             })
             window.__visualize.online = online
+            for (const deck of Object.values(state.decks)) {
+                deck.resolveImage = async id => {
+                    const blob = await online.getImage(id)
+                    const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+                    const image = await tools.prepareImage(blob)
+                    if (!deck.images.some(asset => asset.id === image.id)) deck.images.push(image)
+                    return blob
+                }
+            }
         } catch (err) {
             console.warn('[seance] SDK unavailable', err?.message || err)
             toast('online collaboration unavailable', 4200)
@@ -2552,6 +2589,7 @@ async function boot() {
                 title: composition.title || `code ${composition.code || ''}`,
                 tagline: composition.description || 'shared from sharing.noisedeck.app',
                 dsl: composition.dsl,
+                images: composition.images || [],
             })
             updateLiveIndicator()
             const bundledNote = bundled.length > 0

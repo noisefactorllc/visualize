@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
-import { FakeSeanceServer, routeSeanceSdkLocal } from './seanceLocal.js'
+import { FakeSeanceServer, routeSeanceSdkLocal, routePortableImagesLocal } from './seanceLocal.js'
 
 test.describe.configure({ timeout: 120_000, retries: 0 })
 
@@ -29,6 +29,7 @@ async function newOnlinePage(context, server, path = '/', { online = true } = {}
     const page = await context.newPage()
     await routeHandfishLocal(page)
     await routeSeanceSdkLocal(page)
+    await routePortableImagesLocal(page)
     await server.install(page)
     await page.route('**/data/programs.json', async (route) => {
         await route.fulfill({
@@ -460,3 +461,64 @@ test('remote deck edits serialize a delayed renderer compile and retain the newe
         await context.close()
     }
 })
+
+test('two deck image seeds and a live file replacement preserve original bytes and pixels', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        const host = await newOnlinePage(context, server)
+        const sources = await host.evaluate(() => {
+            const canvas = document.createElement('canvas'); canvas.width = 3; canvas.height = 2
+            const ctx = canvas.getContext('2d')
+            return ['#ff0000', '#00ff00', '#0000ff'].map(color => {
+                ctx.fillStyle = color; ctx.fillRect(0, 0, 3, 2)
+                return canvas.toDataURL('image/png')
+            })
+        })
+        for (const [index, deckId] of ['A', 'B'].entries()) {
+            await setEditorText(host, deckId, `search synth\nmedia(url:"${sources[index]}").write(o0)\nrender(o0)`)
+            await expect.poll(() => currentDsl(host, deckId), { timeout: 30000 }).toContain(sources[index])
+        }
+        const sessionId = await takeOnline(host)
+        expect([...server.sessions.get(sessionId).images.values()].map(image => image.dataUrl).sort()).toEqual(sources.slice(0, 2).sort())
+        const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
+        await waitForOnlineJoin(guest)
+        await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 }).toEqual([255, 0, 0, 255])
+        await expect.poll(() => deckImagePixel(guest, 'B'), { timeout: 30000 }).toEqual([0, 255, 0, 255])
+        await guest.click('#scenes-open')
+        await guest.fill('#scene-name-input', 'Image save boundary')
+        await guest.click('#scene-save')
+        const saved = await guest.evaluate(() => localStorage.getItem('visualize.scenes.v1'))
+        await guest.evaluate(() => {
+            const original = window.__fakeSeanceImageRequest
+            const held = new Promise(resolve => { window.__releaseImage = resolve })
+            window.__fakeSeanceImageRequest = async (...args) => {
+                window.__imageRequested = true
+                await held
+                return original(...args)
+            }
+        })
+        await host.locator('#deck-a-media-file-input').setInputFiles({ name: 'blue.png', mimeType: 'image/png', buffer: Buffer.from(sources[2].split(',')[1], 'base64') })
+        try {
+            await guest.waitForFunction(() => window.__imageRequested)
+            await guest.fill('#scene-name-input', 'Image save boundary')
+            await guest.click('#scene-save')
+            await expect(guest.locator('#toast')).toContainText('Could not save scene')
+            expect(await guest.evaluate(() => localStorage.getItem('visualize.scenes.v1'))).toEqual(saved)
+        } finally { await guest.evaluate(() => window.__releaseImage()) }
+        await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 }).toEqual([0, 0, 255, 255])
+        expect(await guest.evaluate(() => window.__visualize.decks.A.images.map(image => image.dataUrl))).toContain(sources[2])
+        expect(await currentDsl(guest, 'A')).not.toContain('data:')
+        const uploaded = [...server.sessions.get(sessionId).images.values()]
+        expect(uploaded.map(image => image.dataUrl)).toContain(sources[2])
+    } finally { await context.close() }
+})
+
+async function deckImagePixel(page, deckId) {
+    return page.evaluate(id => {
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1
+        const context = canvas.getContext('2d')
+        context.drawImage(window.__visualize.decks[id].canvas, 0, 0, 1, 1)
+        return [...context.getImageData(0, 0, 1, 1).data]
+    }, deckId)
+}

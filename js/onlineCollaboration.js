@@ -9,7 +9,7 @@
 
 export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
 // Bypass browsers that cached the older alias without Cache-Control.
-export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=0.2.2'
+export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929'
 
 export const DECK_DOC_IDS = {
     A: 'deck:A',
@@ -76,6 +76,9 @@ class VisualizeOnlineController {
         editorForDeck,
         getDeckText,
         applyRemoteText,
+        prepareImages,
+        imageBlob,
+        validatePublication = () => true,
         dialog,
         toast = () => {},
         location = globalThis.location,
@@ -92,6 +95,7 @@ class VisualizeOnlineController {
         this._onlinePromise = null
         this._boundEditors = false
         this._actionInFlight = false
+        this._actionVersion = 0
         this.sdkUrl = sdkUrl
         this.seanceUrl = seanceUrl
         this.runtimeConfig = runtimeConfig
@@ -99,6 +103,13 @@ class VisualizeOnlineController {
         this.editorForDeck = editorForDeck
         this.getDeckText = getDeckText
         this.applyRemoteText = applyRemoteText
+        this.prepareImages = prepareImages
+        this.imageBlob = imageBlob
+        this.validatePublication = validatePublication
+        this._preparedImageText = new Map()
+        this._imageVersions = new Map()
+        this._uploadedImages = new Set()
+        this._imageSessionVersion = 0
         this.dialog = dialog
         this.toast = toast
         this.location = location
@@ -125,7 +136,17 @@ class VisualizeOnlineController {
                 setText: (text) => {
                     editor.value = String(text ?? '')
                 },
-                validateText: () => this._validateDeckWrite(deckId),
+                validateText: (text) => {
+                    const allowed = this._validateDeckWrite(deckId)
+                    if (allowed !== true) return allowed
+                    const publishable = this.validatePublication(deckId)
+                    if (publishable !== true) return publishable
+                    if (this.prepareImages && /\burl\b/.test(text) && text !== this._preparedImageText.get(deckId)) {
+                        void this._publishImageText(deckId, text, { source: 'editor' }).catch(error => this.toast(error.message, 5000))
+                        return { ok: false, reason: 'Preparing composition images' }
+                    }
+                    return true
+                },
                 onRemoteText: (text, context) => {
                     this.applyRemoteText(deckId, text, context)
                 },
@@ -177,18 +198,76 @@ class VisualizeOnlineController {
         if (!this.online) return null
         const deckId = Object.keys(DECK_DOC_IDS).find((id) => DECK_DOC_IDS[id] === docId)
         if (deckId && !this._deckDocInSession(deckId)) return null
+        if (this.getStatus() === 'readonly') return null
+        if (deckId && this.validatePublication(deckId) !== true) return null
+        if (deckId && this.prepareImages && /\burl\b/.test(text)) return this._publishImageText(deckId, text, meta)
+        if (deckId) this._imageVersions.set(deckId, (this._imageVersions.get(deckId) || 0) + 1)
         return this.online.updateLocalText(docId, text, meta)
+    }
+
+    async _publishImageText(deckId, text, meta) {
+        const version = (this._imageVersions.get(deckId) || 0) + 1
+        this._imageVersions.set(deckId, version)
+        const online = this.online, sessionId = this.getSessionId(), sessionVersion = this._imageSessionVersion
+        if (!sessionId || !['online', 'connecting'].includes(this.getStatus())) return null
+        const current = () => this._imageVersions.get(deckId) === version && this._imageSessionVersion === sessionVersion && this.online === online && this.getSessionId() === sessionId && this.getDeckText(deckId) === text
+        const prepared = await this.prepareImages(deckId, text)
+        if (!current()) return null
+        for (const image of prepared.images) {
+            if (!this._uploadedImages.has(image.id)) {
+                await online.uploadImage(await this.imageBlob(image))
+                if (!current()) return null
+                this._uploadedImages.add(image.id)
+            }
+        }
+        if (!current()) return null
+        this._preparedImageText.set(deckId, prepared.dsl)
+        const editor = this.editorForDeck(deckId)
+        if (editor) editor.value = prepared.dsl
+        return online.updateLocalText(DECK_DOC_IDS[deckId], prepared.dsl, meta)
+    }
+
+    async getImage(id) {
+        return (await this._ensureOnline()).getImage(id)
     }
 
     async takeOnline() {
         if (this._actionInFlight) return
         this._actionInFlight = true
+        const version = ++this._actionVersion
         try {
+            const docs = this._seedDocs()
+            const drafts = new Map(docs.map(doc => [doc.id, doc.text]))
             this._refusalAnnounced = false
             this._setBusy(true)
             await this._ensureOnline()
+            if (version !== this._actionVersion) return
             this._closeActiveSession()
-            await this.online.takeOnline(this._seedDocs())
+            const images = new Map()
+            if (this.prepareImages) {
+                for (const deckId of ['A', 'B']) {
+                    const doc = docs.find(doc => doc.id === DECK_DOC_IDS[deckId])
+                    const prepared = await this.prepareImages(deckId, doc.text)
+                    if (version !== this._actionVersion) return
+                    doc.text = prepared.dsl
+                    for (const image of prepared.images) images.set(image.id, image)
+                }
+            }
+            if (['A', 'B'].some(deckId => this.getDeckText(deckId) !== drafts.get(DECK_DOC_IDS[deckId]))) {
+                this.toast('Decks changed while preparing images. Go online again to share the latest version.', 5000)
+                return
+            }
+            if (this.prepareImages) {
+                for (const deckId of ['A', 'B']) {
+                    const text = docs.find(doc => doc.id === DECK_DOC_IDS[deckId]).text
+                    this._preparedImageText.set(deckId, text)
+                    const editor = this.editorForDeck(deckId)
+                    if (editor) editor.value = text
+                }
+            }
+            await this.online.takeOnline(images.size ? { docs, images: [...images.values()] } : docs)
+            if (version !== this._actionVersion) return
+            for (const id of images.keys()) this._uploadedImages.add(id)
             this._writeSessionToUrl(this.online.getSessionId())
             this.syncStatusUi()
             this.toast('online session ready')
@@ -234,6 +313,7 @@ class VisualizeOnlineController {
     }
 
     goOffline() {
+        this._actionVersion++
         this._closeActiveSession()
         this._writeSessionToUrl(null)
         this.syncStatusUi()
@@ -395,6 +475,9 @@ class VisualizeOnlineController {
     }
 
     _closeActiveSession() {
+        this._imageSessionVersion++
+        this._preparedImageText.clear()
+        this._uploadedImages.clear()
         this._sessionDocIds = null
         this._absentDocNoticeShown = false
         if (!this.online) return

@@ -40,13 +40,13 @@ export class DeckMedia {
         this._label = ''            // device label or file name
         this._cameraDeviceId = ''   // settled deviceId of the live camera
         this._video = null          // <video>
-        this._img = null            // <img>
         this._stream = null         // MediaStream
         this._objectUrl = null      // active blob: URL for a file source
         this._mediaStepIndex = null // discovered from compiled pipeline
     }
 
     get active() { return this._source }
+    get hasLiveMedia() { return this._source === 'camera' || (this._source === 'file' && Boolean(this._objectUrl)) }
     get currentLabel() { return this._label }
     /** Best-effort deviceId of the currently-running camera. Empty
      *  when no camera is active or the browser didn't report one. */
@@ -65,7 +65,7 @@ export class DeckMedia {
         try {
             const effects = extractEffectsFromDsl(dsl) || []
             for (const e of effects) {
-                if (MEDIA_EFFECT_KEYS.has(e.effectKey)) return e.stepIndex
+                if (MEDIA_EFFECT_KEYS.has(e.effectKey)) return e.temp ?? e.stepIndex
             }
         } catch { /* ignore */ }
         return null
@@ -114,7 +114,6 @@ export class DeckMedia {
         await this._video.play().catch(() => { /* autoplay may need retry */ })
         if (generation !== this._generation) return
         this._source = 'camera'
-        this._img = null
         this._queuedCamera = canQueueSyncCamera(track)
         if (this._queuedCamera) {
             let queue
@@ -144,29 +143,22 @@ export class DeckMedia {
         const generation = this._generation
         await stopping
         if (generation !== this._generation) return
+        if (!file.type.startsWith('video/')) {
+            const result = await this.deck.setImage(file)
+            if (generation !== this._generation || result.superseded) return
+            if (!result.success) throw new Error(result.error || 'Could not load image')
+            this._source = 'file'
+            this._label = file.name
+            return
+        }
         const url = URL.createObjectURL(file)
         this._objectUrl = url
         this._label = file.name
-        if (file.type.startsWith('video/')) {
-            this._ensureVideo()
-            // Clear any leftover state from a prior camera or video file. An
-            // assigned srcObject takes precedence over src per spec, so a
-            // camera→video-file switch would otherwise keep showing the dead
-            // stream instead of the file.
-            this._stopVideoEl()
-            this._video.src = url
-            this._video.loop = true
-            await this._video.play().catch(() => {})
-            this._img = null
-        } else {
-            this._ensureImg()
-            this._img.src = url
-            // Don't null this._video — that orphans a DOM-attached, still
-            // looping/decoding <video> and makes _ensureVideo() append a
-            // second element on the next video/camera load. Stop it but
-            // keep the single reused element.
-            this._stopVideoEl()
-        }
+        this._ensureVideo()
+        this._stopVideoEl()
+        this._video.src = url
+        this._video.loop = true
+        await this._video.play().catch(() => {})
         if (generation !== this._generation) return
         this._source = 'file'
     }
@@ -181,7 +173,6 @@ export class DeckMedia {
         this._frameError = null
         this._stopStream()
         this._stopVideoEl()
-        if (this._img) this._img.src = ''
         this._revokeUrl()
         this._source = null
         this._label = ''
@@ -197,8 +188,7 @@ export class DeckMedia {
             if (!this._frameError) this._frameQueue?.consume()
             return
         }
-        const src = this._video?.readyState >= 2 ? this._video
-                  : this._img?.complete ? this._img : null
+        const src = this._video?.readyState >= 2 ? this._video : null
         if (!src) return
         try { this._uploadSource(src) } catch { /* mid-recompile */ }
     }
@@ -260,11 +250,4 @@ export class DeckMedia {
         }
     }
 
-    _ensureImg() {
-        if (!this._img) {
-            const img = new Image()
-            img.crossOrigin = 'anonymous'
-            this._img = img
-        }
-    }
 }

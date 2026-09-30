@@ -30,6 +30,15 @@ export async function routeSeanceSdkLocal(page) {
     })
 }
 
+export async function routePortableImagesLocal(page) {
+    const file = resolve(process.env.PORTABLE_IMAGES_MODULE || '../sharing/public/js/portableImages.js')
+    if (!existsSync(file)) return
+    await page.route('https://sharing.noisedeck.app/js/portableImages.js*', route => route.fulfill({
+        status: 200, contentType: 'text/javascript', body: readFileSync(file),
+        headers: { 'Access-Control-Allow-Origin': '*' },
+    }))
+}
+
 function applyTextEdit(text, edit) {
     return text.slice(0, edit.start) + edit.text + text.slice(edit.end)
 }
@@ -63,6 +72,12 @@ export class FakeSeanceServer {
     async install(page) {
         const pageKey = `page-${this._nextPage++}`
         await page.exposeFunction('__fakeSeanceCreateSession', (body) => this.createSession(body))
+        await page.exposeFunction('__fakeSeanceImageRequest', (sessionId, id, image) => {
+            const session = this.sessions.get(sessionId)
+            if (!session) throw new Error('Unknown session')
+            if (image) session.images.set(image.id, image)
+            return session.images.get(image?.id || id) || null
+        })
         await page.exposeFunction('__fakeSeanceSocketOpen', (socketId, url) => this.openSocket(page, socketId, url))
         await page.exposeFunction('__fakeSeanceSocketSend', (socketId, data) => this.receiveSocketData(socketId, data))
         await page.exposeFunction('__fakeSeanceSocketClose', (socketId) => this.closeSocket(socketId))
@@ -120,6 +135,14 @@ export class FakeSeanceServer {
                 WebSocket: FakeWebSocket,
                 fetch: async (url, init = {}) => {
                     const href = String(url)
+                    const imagePath = new URL(href).pathname.match(/^\/v1\/sessions\/([^/]+)\/images(?:\/([a-f0-9]{64}))?$/)
+                    if (imagePath) {
+                        const upload = String(init.method || 'GET').toUpperCase() === 'POST'
+                        const image = await window.__fakeSeanceImageRequest(imagePath[1], imagePath[2], upload ? JSON.parse(init.body) : null)
+                        if (!image) return new Response('', { status: 404 })
+                        if (upload) return new Response(JSON.stringify({ id: image.id }), { headers: { 'Content-Type': 'application/json' } })
+                        return fetch(image.dataUrl)
+                    }
                     if (href === `${seanceUrl}/v1/sessions` && String(init.method || 'GET').toUpperCase() === 'POST') {
                         const body = JSON.parse(init.body || '{}')
                         const response = await window.__fakeSeanceCreateSession(body)
@@ -158,7 +181,8 @@ export class FakeSeanceServer {
                 rev: 0,
             })
         }
-        this.sessions.set(sessionId, { id: sessionId, docs, sockets: new Set() })
+        const images = new Map((body.images || []).map(image => [image.id, image]))
+        this.sessions.set(sessionId, { id: sessionId, docs, images, sockets: new Set() })
         return { session_id: sessionId, anon_token: `anon-${sessionId}` }
     }
 

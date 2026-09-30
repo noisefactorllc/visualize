@@ -26,13 +26,60 @@ function harness() {
         }, start() { this.isRunning = true }, stop() {},
  dispose() { this.disposeCalls = (this.disposeCalls || 0) + 1 }, }
     const context = vm.createContext({ console, CanvasRenderer: function () { return engine },
-        CDN_BASE: '', extractEffectNamesFromDsl: () => [] })
+        CDN_BASE: '', extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })
     const Deck = vm.runInContext(source + '\nDeck', context)
     const deck = new Deck({})
     deck._initialized = true
     deck._normalizeColorUniforms = () => {}
     return { deck, engine, compiles }
 }
+
+test('deck compiles engine text and binds original image references before starting', async () => {
+    const h = harness()
+    const calls = []
+    h.deck.images = [{ id: 'image', dataUrl: 'original bytes' }]
+    h.deck._imageTools = {
+        stripMediaUrls: () => 'media().write(o0)',
+        bindMediaImages: async (renderer, dsl, images) => calls.push({ renderer, dsl, images }),
+    }
+    const original = 'media(url:"image:image").write(o0)'
+    const loaded = h.deck.load(original)
+    await flush()
+    assert.equal(h.compiles[0].dsl, 'media().write(o0)')
+    assert.equal(h.engine.isRunning, undefined)
+    h.compiles[0].resolve()
+    assert.equal((await loaded).success, true)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].dsl, original)
+    assert.equal(calls[0].images, h.deck.images)
+    assert.equal(h.deck.currentDsl, original)
+})
+
+test('choosing a deck image keeps original asset bytes and replaces only the selected media call', async () => {
+    const h = harness()
+    const asset = { id: 'selected', dataUrl: 'original-image-bytes' }
+    const file = new Blob(['original-image-bytes'])
+    h.deck._currentDsl = 'two media slots'
+    h.deck.images = [{ id: 'other', dataUrl: 'other-image-bytes' }]
+    h.deck._imageTools = {
+        prepareImage: async blob => { assert.equal(blob, file); return asset },
+        getMediaSources: () => [{}, {}],
+        replaceMediaUrls: (dsl, replace) => {
+            assert.equal(dsl, 'two media slots')
+            assert.equal(replace('image:other', 0), 'image:other')
+            assert.equal(replace(null, 1), 'image:selected')
+            return 'two bound media slots'
+        },
+        stripMediaUrls: text => text,
+        bindMediaImages: async () => {},
+    }
+    const selected = h.deck.setImage(file, 1)
+    await flush()
+    h.compiles[0].resolve()
+    assert.equal((await selected).success, true)
+    assert.deepEqual(h.deck.images, [{ id: 'other', dataUrl: 'other-image-bytes' }, asset])
+    assert.equal(h.deck.currentDsl, 'two bound media slots')
+})
 
 for (const secondMethod of ['load', 'reloadDsl']) {
     test(`a newer ${secondMethod} waits for the active renderer compile and wins`, async () => {
@@ -483,5 +530,4 @@ test('resize and syncTimeOrigin reject corrupt values keeping live state', () =>
     h.deck.syncTimeOrigin(NaN)
     assert.equal(h.deck._renderer._loopStartTime, 1234, 'NaN time origin must not corrupt the loop clock')
 })
-
 

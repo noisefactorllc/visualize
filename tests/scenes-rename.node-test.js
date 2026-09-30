@@ -289,3 +289,29 @@ test('Scenes.prototype.rename: exact match has precedence over case-insensitive 
     assert.equal(scenes.byIndex(0).name, 'chill')
     assert.equal(scenes.byIndex(1).name, 'Relaxed')
 })
+
+test('scene images survive durable save and are installed before deck compilation', async () => {
+    const image = { id: 'image-id', dataUrl: 'data:image/png;base64,original' }
+    const deck = { currentDsl: 'media(url:"image:image-id").write(o0)', images: [image] }
+    const snapshot = Scenes.snapshot({ decks: { A: deck, B: deck }, getXfade: () => 0, getCurve: () => 'linear', scheduler: {}, getFxState: () => ({}), getAutoMixConfig: () => ({}) })
+    const storage = createMockStorage()
+    assert.equal(new Scenes({ storage }).save('Images', snapshot), true)
+    const loaded = new Scenes({ storage }).byName('Images')
+    let compiles = 0
+    const target = () => ({ rebind: {}, setSpeed() {}, async load(dsl) {
+        assert.deepEqual(this.images, [image]); assert.equal(dsl, deck.currentDsl); compiles++; return { success: true }
+    } })
+    const errors = await Scenes.apply(loaded, { decks: { A: target(), B: target() }, scheduler: {}, setXfade() {}, setCurve() {}, setFx() {}, setAutoMixConfig() {} })
+    assert.deepEqual(errors, [])
+    assert.equal(compiles, 2)
+})
+
+test('a refused scene image save preserves the previous durable scene and reports failure', () => {
+    const storage = createMockStorage()
+    const scenes = new Scenes({ storage })
+    scenes.save('Before', createDummySnapshot())
+    storage.setItem = () => { throw new Error('Quota exceeded') }
+    assert.equal(scenes.save('Image', createDummySnapshot()), false)
+    assert.equal(scenes.byName('Image'), null)
+    assert.ok(scenes.byName('Before'))
+})

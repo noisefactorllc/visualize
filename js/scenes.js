@@ -97,12 +97,14 @@ export class Scenes {
                 A: {
                     title: decks.A.currentName,
                     dsl: decks.A.currentDsl,
+                    images: (decks.A.getImageAssets?.() ?? decks.A.images ?? []).map(image => ({ ...image })),
                     speed: decks.A._speed ?? 1,
                     rebind: cloneRebind(decks.A.rebind)
                 },
                 B: {
                     title: decks.B.currentName,
                     dsl: decks.B.currentDsl,
+                    images: (decks.B.getImageAssets?.() ?? decks.B.images ?? []).map(image => ({ ...image })),
                     speed: decks.B._speed ?? 1,
                     rebind: cloneRebind(decks.B.rebind)
                 }
@@ -124,6 +126,7 @@ export class Scenes {
         const trimmed = name.trim().slice(0, 40)
         if (!trimmed) return false
         const existing = this._scenes.findIndex(s => s.name === trimmed)
+        const previous = [...this._scenes]
         const entry = { name: trimmed, ...snapshot }
         if (existing >= 0) {
             this._scenes[existing] = entry
@@ -136,7 +139,7 @@ export class Scenes {
             }
             this._scenes.push(entry)
         }
-        this._persist()
+        if (!this._persist()) { this._scenes = previous; return false }
         this._emit()
         return true
     }
@@ -243,6 +246,7 @@ export class Scenes {
                 // override map. Snapshots from before rebind shipped
                 // won't have rebind.originalDsl, so fall back to dsl.
                 const originalDsl = d.rebind?.originalDsl || d.dsl
+                decks[id].images = d.images || []
                 const res = await decks[id].load(originalDsl, d.title || '')
                 if (res.superseded) continue
                 if (!res.success) {
@@ -304,10 +308,13 @@ export class Scenes {
     _persist() {
         try {
             const storage = this._storage || (typeof localStorage !== 'undefined' ? localStorage : null)
-            storage?.setItem(STORAGE_KEY, JSON.stringify(this._scenes))
+            if (!storage) return false
+            storage.setItem(STORAGE_KEY, JSON.stringify(this._scenes))
+            return true
         } catch (err) {
             // QuotaExceededError — most likely scenes filled the budget
             console.warn('[Scenes] persist failed', err)
+            return false
         }
     }
 }

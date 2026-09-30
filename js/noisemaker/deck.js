@@ -8,15 +8,14 @@
  *  - speed multiplier (loop duration shortcut)
  *  - one-shot freeze (renderer.stop / start)
  *
- * It intentionally doesn't handle text/media textures (Polymorphic does);
- * the curated Visualize library uses synth + filter effects only so we can
- * keep the deck small.
+ * Image references retain original bytes for Sharing and Seance.
  */
 
 import {
     CanvasRenderer,
     CDN_BASE,
-    extractEffectNamesFromDsl
+    extractEffectNamesFromDsl,
+    extractEffectsFromDsl
 } from './bundle.js'
 
 /**
@@ -102,6 +101,9 @@ export class Deck {
         this._loadVersion = 0
         this._loadQueue = Promise.resolve()
         this._currentDsl = ''
+        this.images = []
+        this.resolveImage = null
+        this._imageTools = null
         this._currentName = ''
         this._speed = 1
         this._pixelDensity = 1.0    // 1.0 = full mainRes; 0.5 = half-res buffer upscaled
@@ -144,6 +146,7 @@ export class Deck {
         this.canvas.width = bufW
         this.canvas.height = bufH
         this._renderer.resize(bufW, bufH)
+        this._rebindImages()
     }
 
     get inner() { return this._renderer }
@@ -211,6 +214,22 @@ export class Deck {
         return this._queueLoad(dsl, name, true)
     }
 
+    getImageAssets(dsl = this._currentDsl) {
+        if (!this._imageTools && /\burl\b/.test(dsl)) throw new Error('Images are still loading; try again shortly')
+        return this._imageTools?.getReferencedImages(dsl, this.images) || []
+    }
+
+    async setImage(blob, mediaIndex = 0) {
+        const dsl = this._currentDsl, version = this._loadVersion
+        this._imageTools ||= await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+        const image = await this._imageTools.prepareImage(blob)
+        if (this._disposed || version !== this._loadVersion) return { success: false, superseded: true }
+        if (!this._imageTools.getMediaSources(dsl)[mediaIndex]) throw new Error('Select a program with a media effect first')
+        if (!this.images.some(asset => asset.id === image.id)) this.images.push(image)
+        const updated = this._imageTools.replaceMediaUrls(dsl, (url, index) => index === mediaIndex ? `image:${image.id}` : url)
+        return this.load(updated, this._currentName)
+    }
+
     // CanvasRenderer mutates a shared pipeline across awaited compilation.
     // Run one load at a time and discard obsolete queued requests. Callers
     // must not publish or relabel a request that returns superseded: true.
@@ -231,13 +250,15 @@ export class Deck {
             if (this._disposed || version !== this._loadVersion) return superseded()
             if (!this._initialized) await this.init()
             if (version !== this._loadVersion) return superseded()
-            const effectData = extractEffectNamesFromDsl(dsl, this._renderer.manifest || {})
+            if (/\burl\b/.test(dsl) && !this._imageTools) this._imageTools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+            const engineDsl = this._imageTools?.stripMediaUrls(dsl) ?? dsl
+            const effectData = extractEffectNamesFromDsl(engineDsl, this._renderer.manifest || {})
             const effectIds = effectData.map(e => e.effectId)
             if (effectIds.length > 0) {
                 await this._renderer.loadEffects(effectIds)
             }
             if (version !== this._loadVersion) return superseded()
-            await this._renderer.compile(dsl)
+            await this._renderer.compile(engineDsl)
             if (this._disposed) return superseded()
             // Compilation has installed this program even if another request
             // arrived meanwhile. Record the actual last successful render so
@@ -262,6 +283,8 @@ export class Deck {
             // recompile. For a fresh program load that's wrong — the
             // new program inherits the old's seed. Wipe surfaces here.
             if (resetRebind) this.clearSurfaces()
+            if (this._imageTools) await this._imageTools.bindMediaImages(this._renderer, dsl, this.images, { extractEffectsFromDsl, resolveImage: this.resolveImage })
+            if (this._disposed || version !== this._loadVersion) return superseded()
             if (!this._renderer.isRunning) this._renderer.start()
             if (version !== this._loadVersion) return superseded()
             return { success: true }
@@ -285,6 +308,7 @@ export class Deck {
      * behaviour as load(). Returns { success, error? }.
      */
     async reloadDsl(dsl) {
+        if (this._imageTools) dsl = this._imageTools.restoreMediaUrls(this.rebind.originalDsl, dsl)
         return this._queueLoad(dsl, '', false)
     }
 
@@ -356,6 +380,11 @@ export class Deck {
         this.canvas.width = bufW
         this.canvas.height = bufH
         this._renderer.resize(bufW, bufH)
+        this._rebindImages()
+    }
+
+    _rebindImages() {
+        this._imageTools?.bindMediaImages(this._renderer, this._currentDsl, this.images, { extractEffectsFromDsl, resolveImage: this.resolveImage }).catch(this.onError)
     }
 
     dispose() {
