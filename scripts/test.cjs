@@ -139,7 +139,9 @@ function ensureExecutableBrowser() {
 // at 783c6df: 5 failed / 2 flaky, every failure a 60s load timeout with
 // "GPU stall due to ReadPixels" logs; the identical suite passes at scale 3).
 // Real machines can force scale 1 with PW_TIMEOUT_SCALE=1; the specs' own
-// comments describe scale-1 budgets as the reference values.
+// comments describe scale-1 budgets as the reference values. Re-tighten this
+// default back to 1 once a non-emulated runner or a larger check time budget
+// exists (at scale 1 the required suite fails in the emulated runner).
 const browsersPath = ensureExecutableBrowser();
 const pwEnv = {
   PLAYWRIGHT_BROWSERS_PATH: browsersPath,

@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 const defaultDaemon = path.resolve(import.meta.dirname, '../../sync/build/sync_audio_test_server')
@@ -13,7 +14,7 @@ test.describe.configure({ retries: 1 })
 
 test.beforeAll(async () => {
     test.skip(!daemonPath || !fs.existsSync(daemonPath), 'Set SYNC_AUDIO_TEST_SERVER to the native Sync audio fixture')
-    daemon = spawn(daemonPath, ['--test-origin', 'http://localhost:3070', '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
+    daemon = spawn(daemonPath, ['--test-origin', process.env.SYNC_AUDIO_TEST_ORIGIN || 'http://localhost:3070', '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
     endpoint = await new Promise((resolve, reject) => {
         let output = ''
         const timer = setTimeout(() => reject(new Error('Audio daemon startup timed out')), 5000)
@@ -34,6 +35,11 @@ test.afterAll(async () => {
 })
 
 async function setup(page, fullApp = false) {
+    // Serve the Handfish UI assets from a local mirror when the runner's
+    // network cannot reach the CDN (HANDFISH_LOCAL); a no-op otherwise.
+    await routeHandfishLocal(page)
+    // Same for the engine runtime (ENGINE_LOCAL).
+    await routeEngineLocal(page)
     if (fullApp) {
         // Exercise real rendering with a bounded input, without randomly
         // compiling a heavy simulation during native protocol assertions.

@@ -36,6 +36,20 @@ export async function routeHandfishLocal(page) {
     })
 }
 
+export async function routeEngineLocal(page) {
+    const local = process.env.ENGINE_LOCAL || ''
+    if (!local) return
+    await page.route('https://shaders.noisedeck.app/**', async (route) => {
+        const rel = new URL(route.request().url()).pathname.replace(/^\//, '')
+        try {
+            const body = readFileSync(resolve(local, rel))
+            await route.fulfill({ status: 200, contentType: 'text/javascript', body })
+        } catch {
+            await route.fulfill({ status: 404, body: 'missing ' + rel })
+        }
+    })
+}
+
 export function installHandfishLocal(test) {
     test.beforeEach(async ({ page }) => {
         await routeHandfishLocal(page)
