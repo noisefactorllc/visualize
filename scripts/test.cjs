@@ -132,20 +132,31 @@ function ensureExecutableBrowser() {
   return localRoot;
 }
 
-// PW_TIMEOUT_SCALE defaults to 3 inside this wrapper: the supervisor-tests
+// PW_TIMEOUT_SCALE defaults to 10 inside this wrapper: the supervisor-tests
 // runner renders through SwiftShader on translated amd64 (emulated x86 on
 // arm64) with an effectively single core, and at scale 1 the required suite
 // measurably fails on load-timeout cases (Worker Elves job 881a7fed, check
 // at 783c6df: 5 failed / 2 flaky, every failure a 60s load timeout with
 // "GPU stall due to ReadPixels" logs; the identical suite passes at scale 3).
-// Real machines can force scale 1 with PW_TIMEOUT_SCALE=1; the specs' own
+// The emulated runners now show >2x run-to-run variance from host load, and
+// the SwiftShader GPU process can wedge under "GPU stall due to ReadPixels"
+// until teardown: specs whose reference budget passes in 156s when idle can
+// exceed a 300s (scale 5) budget, and a wedged browser context hangs
+// context.close() until the test timeout, with the same assertions passing
+// on the unchanged tree minutes later (Worker Elves tearoff item 722 checks
+// on 3d1c977: scenes-rename.spec.js and touch-targets.spec.js 180s
+// test-timeouts whose bodies also fail on the unchanged tree when the
+// container is slow). Scale 10 restores margin without touching any
+// assertion, case, or tolerance; on a fast machine the scaled expect/wait
+// budgets simply poll-return early, so the suite is not slower. Real
+// machines can force scale 1 with PW_TIMEOUT_SCALE=1; the specs' own
 // comments describe scale-1 budgets as the reference values. Re-tighten this
 // default back to 1 once a non-emulated runner or a larger check time budget
 // exists (at scale 1 the required suite fails in the emulated runner).
 const browsersPath = ensureExecutableBrowser();
 const pwEnv = {
   PLAYWRIGHT_BROWSERS_PATH: browsersPath,
-  PW_TIMEOUT_SCALE: process.env.PW_TIMEOUT_SCALE || '3',
+  PW_TIMEOUT_SCALE: process.env.PW_TIMEOUT_SCALE || '10',
 };
 
 let pwRun = run('npx', ['playwright', 'test'], pwEnv);

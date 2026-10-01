@@ -1,7 +1,12 @@
 import { test, expect } from '@playwright/test'
 
+// Container-scale factor for timing-sensitive budgets (SwiftShader/emulated
+// CI sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are
+// unchanged. Matches the SCALE convention used by the other specs.
+const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
+
 test('two Sync camera decks upload owned pixels and stopping A leaves B live', async ({ page }) => {
-    test.setTimeout(45_000)
+    test.setTimeout(45_000 * SCALE)
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() => window.__visualize?.mixer?.ready)

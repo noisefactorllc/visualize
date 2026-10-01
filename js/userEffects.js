@@ -15,33 +15,46 @@
  * never need the legacy definition.js + blob-URL ES module dance that
  * noisedeck uses for in-app effect authoring.
  *
- * Engine integration: a parsed effect is shaped into the format the
- * engine's `CanvasRenderer.registerEffectsFromBundle` expects (a fake
- * one-effect bundle), which then takes care of the full registration
- * dance (registerEffect under 4 aliases, registerOp, choice enums,
- * starter-op flagging, and renderer._loadedEffects caching so the
- * compiler's loadEffects() doesn't try to fetch user effects from the
- * CDN).
+ * Engine integration: a parsed effect is validated with the shared
+ * Portable-registration contract upstream noisemaker enforces in
+ * CanvasRenderer.registerPortableEffect (reserved prototype keys can never
+ * reach the shared operator/enum registries, passes must name programs with
+ * loaded shader sources, choices/paramAliases must be well-formed, and a
+ * duplicate name can never replace an accepted effect). Renderers that
+ * expose registerPortableEffect (noisemaker cb22a05e and later) take that
+ * path directly; older bundles fall back to a fake one-effect bundle via
+ * registerEffectsFromBundle, which then takes care of the registration
+ * dance (registerEffect under 4 aliases, registerOp, choice enums, and
+ * renderer._loadedEffects caching so the compiler's loadEffects() doesn't
+ * try to fetch user effects from the CDN). Either way a user effect never
+ * shadows an existing bare built-in lookup: after registering, the bare
+ * `func` name is restored to the prior effect or removed.
  */
 
 import { clearCache as clearThumbnailCache } from './thumbnailCache.js'
 
 let _Effect = null
 let _unregisterEffect = null
+let _getEffect = null
+let _registerEffect = null
 
 async function loadBundle() {
     if (_Effect && _unregisterEffect) {
-        return { Effect: _Effect, unregisterEffect: _unregisterEffect }
+        return { Effect: _Effect, unregisterEffect: _unregisterEffect, getEffect: _getEffect, registerEffect: _registerEffect }
     }
     const mod = await import('./noisemaker/bundle.js')
     _Effect = mod.Effect
     _unregisterEffect = mod.unregisterEffect
-    return { Effect: _Effect, unregisterEffect: _unregisterEffect }
+    _getEffect = mod.getEffect
+    _registerEffect = mod.registerEffect
+    return { Effect: _Effect, unregisterEffect: _unregisterEffect, getEffect: _getEffect, registerEffect: _registerEffect }
 }
 
 export function setBundleDependencies(deps = {}) {
     if (deps.Effect) _Effect = deps.Effect
     if (deps.unregisterEffect) _unregisterEffect = deps.unregisterEffect
+    if (deps.getEffect) _getEffect = deps.getEffect
+    if (deps.registerEffect) _registerEffect = deps.registerEffect
 }
 
 const DB_NAME = 'visualize-user-effects'
@@ -76,9 +89,86 @@ export function isQuotaExceededError(err) {
 }
 
 const PIPELINE_INPUT_TOKENS = new Set([
-    'inputTex', 'inputTex3d', 'src',
+    'inputTex', 'inputTex3d', 'inputGeo', 'inputXyz', 'inputVel', 'inputRgba', 'src',
     'o0', 'o1', 'o2', 'o3', 'o4', 'o5', 'o6', 'o7',
 ])
+
+// The shared operator/enum registries use object trees. Keys that control
+// their prototypes must never reach those registration paths (upstream
+// noisemaker cb22a05e applies the same guard before Portable registration).
+const RESERVED_METADATA_KEYS = Object.freeze([
+    ...Object.getOwnPropertyNames(Object.prototype),
+    'prototype',
+])
+
+const isValidDslIdentifier = name => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)
+
+const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value)
+const hasSource = source => typeof source === 'string' && source.trim().length > 0
+
+/**
+ * Validate a Portable definition against the upstream registration contract
+ * (noisemaker CanvasRenderer.registerPortableEffect) before anything reaches
+ * the shared registries. `shaders` must already be collected into the
+ * { <programName>: { glsl, wgsl } } shape. Throws `Portable effect: ...`
+ * errors on the first violated rule.
+ */
+export function validatePortableDefinition(definition) {
+    const fail = message => { throw new Error(`Portable effect: ${message}`) }
+    if (!isRecord(definition)) fail('expected a definition object')
+    const { namespace, passes, shaders, globals, starter } = definition
+    const func = definition.func ?? definition.name
+    if (typeof func !== 'string' || !isValidDslIdentifier(func)) fail('func must be a DSL identifier')
+    if (RESERVED_METADATA_KEYS.includes(func)) fail(`reserved func ${func}`)
+    const pending = [definition]
+    const visited = new Set()
+    while (pending.length) {
+        const value = pending.pop()
+        if (!value || typeof value !== 'object' || visited.has(value)) continue
+        visited.add(value)
+        for (const [key, child] of Object.entries(value)) {
+            if (RESERVED_METADATA_KEYS.includes(key)) fail(`reserved metadata key ${key}`)
+            if (child && typeof child === 'object') pending.push(child)
+        }
+    }
+    if (namespace !== undefined && namespace !== USER_NAMESPACE) fail('namespace must be user')
+    if (starter !== undefined && typeof starter !== 'boolean') fail('starter must be boolean')
+    if (!Array.isArray(passes) || passes.length === 0) fail('passes must be a nonempty array')
+    if (!isRecord(shaders)) fail('loaded shaders are required')
+    for (const pass of passes) {
+        if (!isRecord(pass) || typeof pass.program !== 'string' || !pass.program) fail('each pass must name a program')
+        for (const field of ['inputs', 'outputs']) {
+            if (pass[field] !== undefined && (!isRecord(pass[field]) || Object.values(pass[field]).some(value => !hasSource(value)))) {
+                fail(`pass ${field} must map names to nonempty texture references`)
+            }
+        }
+        const source = shaders[pass.program]
+        if (!isRecord(source) || ![source.glsl, source.wgsl].some(hasSource)) {
+            fail(`missing shader source for ${pass.program}`)
+        }
+    }
+    for (const language of ['glsl', 'wgsl']) {
+        if (passes.some(pass => hasSource(shaders[pass.program][language]))) {
+            for (const pass of passes) {
+                if (!hasSource(shaders[pass.program][language])) fail(`missing ${language} shader source for ${pass.program}`)
+            }
+        }
+    }
+    if (globals !== undefined && (!isRecord(globals) || Object.values(globals).some(spec => !isRecord(spec)))) {
+        fail('globals must contain parameter objects')
+    }
+    for (const [key, spec] of Object.entries(globals || {})) {
+        if (spec.choices !== undefined && (!isRecord(spec.choices) || Object.values(spec.choices).some(value =>
+            value !== null && (spec.type === 'string' ? typeof value !== 'string' : !Number.isFinite(value))))) {
+            fail(`choices for ${key} must map names to ${spec.type === 'string' ? 'strings' : 'numbers'} or null`)
+        }
+    }
+    if (definition.paramAliases !== undefined && (!isRecord(definition.paramAliases) ||
+        Object.values(definition.paramAliases).some(target => typeof target !== 'string' || !Object.hasOwn(globals || {}, target)))) {
+        fail('paramAliases must map names to declared globals')
+    }
+    return func
+}
 
 // macOS Finder "Compress" adds an __MACOSX/ tree of AppleDouble sidecar
 // files (e.g. __MACOSX/effect/._definition.json) plus .DS_Store. Their
@@ -432,10 +522,12 @@ class UserEffectsManager {
     /**
      * Engine's registerStarterOpForEffect uses the canvas-side
      * isStarterEffect helper, which inspects pass inputs. We replicate
-     * the same logic for the deduping fall-through in serialize-only
-     * paths (e.g. dslSourceBuilder uses it through bundle).
+     * the same inference over the full upstream pipeline-input list
+     * (noisemaker cb22a05e) for the deduping fall-through in
+     * serialize-only paths (e.g. dslSourceBuilder uses it through bundle).
      */
     static isStarterFromDefinition(definition) {
+        if (typeof definition?.starter === 'boolean') return definition.starter
         const passes = definition?.passes || []
         if (passes.length === 0) return true
         for (const pass of passes) {
@@ -447,23 +539,51 @@ class UserEffectsManager {
     }
 
     /**
-     * Register one stored record with the engine via the renderer's
-     * registerEffectsFromBundle (which calls into
-     * registerEffectWithRuntime under the hood and caches in the
-     * renderer's _loadedEffects so the compiler won't try to fetch
-     * this effect from the CDN).
+     * Register one stored record with the engine.
+     *
+     * Validates the Portable contract first, then prefers the renderer's
+     * own registerPortableEffect (noisemaker cb22a05e and later), which
+     * re-checks the contract and restores a bare built-in name itself.
+     * Older renderers fall back to registerEffectsFromBundle; there the
+     * bare `func` alias that registration installs is reverted afterwards
+     * so a user effect can never shadow a built-in's bare lookup.
+     * Either path caches in the renderer's _loadedEffects so the compiler
+     * won't try to fetch this effect from the CDN.
      */
     async _registerWithRenderer(renderer, record) {
-        const { Effect: EffectClass } = await loadBundle()
+        const bundle = await loadBundle()
         const def = JSON.parse(record.files['definition.json'])
         const shaders = this._collectShaders(record.files)
-        const instance = this._buildInstance(def, shaders, EffectClass)
         const effectName = def.func || def.name
-        renderer.registerEffectsFromBundle({
+        const id = `${USER_NAMESPACE}/${effectName}`
+        const portable = {
+            ...def,
+            func: effectName,
             namespace: USER_NAMESPACE,
-            effects: { [effectName]: instance },
-        })
-        this._loadedIds.add(`${USER_NAMESPACE}/${effectName}`)
+            shaders,
+        }
+        validatePortableDefinition(portable)
+
+        const alreadyRegistered = bundle.getEffect?.(`${USER_NAMESPACE}.${effectName}`) ||
+            bundle.getEffect?.(id)
+        if (!alreadyRegistered) {
+            if (typeof renderer.registerPortableEffect === 'function') {
+                const effect = await renderer.registerPortableEffect(portable)
+                // The engine's Effect constructor ignores defaultProgram; the
+                // library's buildDslSource() needs it on the instance.
+                if (def.defaultProgram && effect?.instance) effect.instance.defaultProgram = def.defaultProgram
+            } else {
+                const instance = this._buildInstance(def, shaders, bundle.Effect)
+                const previousBare = bundle.getEffect?.(effectName)
+                renderer.registerEffectsFromBundle({
+                    namespace: USER_NAMESPACE,
+                    effects: { [effectName]: instance },
+                })
+                if (previousBare === undefined) bundle.unregisterEffect?.(effectName)
+                else bundle.registerEffect?.(effectName, previousBare)
+            }
+        }
+        this._loadedIds.add(id)
         this._renderers.add(renderer)
     }
 

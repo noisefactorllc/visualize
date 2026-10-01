@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
     UserEffectsManager,
+    validatePortableDefinition,
     isQuotaExceededError,
     MAX_PACKAGE_SIZE,
     MAX_TOTAL_UNCOMPRESSED_SIZE,
@@ -9,6 +10,7 @@ import {
     USER_NAMESPACE,
     DB_NAME,
     EFFECTS_STORE,
+    setBundleDependencies,
 } from '../js/userEffects.js'
 
 test('isQuotaExceededError detects DOMException QuotaExceededError', () => {
@@ -371,4 +373,175 @@ test('UserEffectsManager._openDB memoizes in-flight connection promise', async (
     const [db1, db2] = await Promise.all([p1, p2])
     assert.equal(db1, db2)
     assert.equal(openCount, 1, 'indexedDB.open must only be called once when open requests are concurrent')
+})
+
+// ── Portable registration contract (noisemaker cb22a05e parity) ──────────
+
+const PORTABLE_GLSL = '#version 300 es\nvoid main() {}'
+
+function portableRecord(name, overrides = {}) {
+    const definition = {
+        name,
+        func: name,
+        namespace: 'user',
+        globals: {},
+        passes: [{ name: 'main', program: 'main', inputs: {}, outputs: { fragColor: 'outputTex' } }],
+        ...overrides,
+    }
+    return {
+        id: `user/${name}`,
+        name,
+        files: {
+            'definition.json': JSON.stringify(definition),
+            'glsl/main.glsl': PORTABLE_GLSL,
+        },
+        uploadedAt: 0,
+    }
+}
+
+test('validatePortableDefinition rejects reserved prototype keys before registration', () => {
+    for (const key of ['__proto__', 'constructor', 'prototype', 'toString', 'valueOf', 'hasOwnProperty']) {
+        // JSON.parse creates own properties, matching a parsed definition.json.
+        const malicious = JSON.parse(`{
+            "func": "portableReserved", "namespace": "user",
+            "passes": [{"program": "main", "inputs": {}, "outputs": {"fragColor": "outputTex"}}],
+            "globals": {"${key}": {"type": "int", "default": 0}}
+        }`)
+        assert.throws(() => validatePortableDefinition(malicious), /Portable effect: reserved metadata key/)
+        assert.throws(
+            () => validatePortableDefinition(JSON.parse(`{"func": "${key}", "passes": [{"program": "main"}]}`)),
+            /Portable effect: reserved func/
+        )
+    }
+    assert.equal(Object.hasOwn(Object.prototype, 'portableReserved'), false)
+})
+
+test('validatePortableDefinition enforces the upstream Portable contract', () => {
+    const valid = () => {
+        const record = portableRecord('portableContract')
+        return { ...JSON.parse(record.files['definition.json']), shaders: { main: { glsl: PORTABLE_GLSL } } }
+    }
+    const raw = () => JSON.parse(JSON.stringify(valid()))
+    const invalid = [
+        null,
+        [],
+        { ...raw(), func: 'bad-name' },
+        { ...raw(), namespace: 'synth' },
+        { ...raw(), passes: [] },
+        { ...raw(), passes: [null] },
+        { ...raw(), passes: [{ program: 'main', inputs: { src: 42 } }] },
+        { ...raw(), passes: [{ program: 'main', outputs: null }] },
+        { ...raw(), passes: [{ program: 'main', outputs: { color: '' } }] },
+        { ...raw(), shaders: {} },
+        { ...raw(), shaders: { main: { glsl: ' ' } } },
+        { ...raw(), passes: [{ program: 'a' }, { program: 'b' }], shaders: { a: { glsl: 's' }, b: { wgsl: 's' } } },
+        { ...raw(), globals: { amount: null } },
+        { ...raw(), starter: 'false' },
+        { ...raw(), paramAliases: 'bad' },
+        { ...raw(), paramAliases: { old: 42 } },
+        { ...raw(), paramAliases: { old: 'absent' } },
+        { ...raw(), globals: { mode: { type: 'int', default: 0, choices: 'abc' } } },
+        { ...raw(), globals: { mode: { type: 'int', default: 0, choices: { Broken: {} } } } },
+    ]
+    for (const definition of invalid) {
+        assert.throws(() => validatePortableDefinition(definition), /Portable effect:/, JSON.stringify(definition))
+    }
+    // The valid definition passes and returns the func name.
+    assert.equal(validatePortableDefinition(valid()), 'portableContract')
+})
+
+test('_registerWithRenderer prefers the renderer registerPortableEffect and copies defaultProgram', async () => {
+    setBundleDependencies({
+        Effect: class {},
+        unregisterEffect: () => { throw new Error('unregister must not run on the portable path') },
+        getEffect: () => undefined,
+        registerEffect: () => { throw new Error('register must not run on the portable path') },
+    })
+    const mgr = new UserEffectsManager()
+    const seen = []
+    const instance = {}
+    const renderer = {
+        registerPortableEffect: async definition => {
+            seen.push(definition)
+            return { instance }
+        },
+    }
+    await mgr._registerWithRenderer(renderer, portableRecord('fxPort', {
+        defaultProgram: 'search user\nfxPort().write(o0)\nrender(o0)',
+    }))
+    assert.equal(seen.length, 1)
+    assert.equal(seen[0].func, 'fxPort')
+    assert.equal(seen[0].namespace, 'user')
+    assert.equal(seen[0].shaders.main.glsl, PORTABLE_GLSL)
+    assert.equal(instance.defaultProgram, 'search user\nfxPort().write(o0)\nrender(o0)')
+    assert.equal(mgr._loadedIds.has('user/fxPort'), true)
+    assert.equal(mgr._renderers.has(renderer), true)
+})
+
+test('_registerWithRenderer preserves a bare built-in name in the fallback path', async () => {
+    const calls = []
+    setBundleDependencies({
+        Effect: class { constructor(init) { Object.assign(this, init) } },
+        unregisterEffect: name => calls.push(['unregister', name]),
+        getEffect: key => key === 'fxBare' ? 'PRIOR_BUILTIN' : undefined,
+        registerEffect: (key, value) => calls.push(['register', key, value]),
+    })
+    const mgr = new UserEffectsManager()
+    const renderer = {
+        registerEffectsFromBundle: bundle => calls.push(['bundle', bundle.namespace, Object.keys(bundle.effects)[0]]),
+    }
+    await mgr._registerWithRenderer(renderer, portableRecord('fxBare'))
+    // The bare alias installed by the fallback registration is reverted to the prior built-in.
+    assert.deepEqual(calls, [
+        ['bundle', 'user', 'fxBare'],
+        ['register', 'fxBare', 'PRIOR_BUILTIN'],
+    ])
+
+    const freeCalls = []
+    setBundleDependencies({
+        Effect: class {},
+        unregisterEffect: name => freeCalls.push(['unregister', name]),
+        getEffect: () => undefined,
+        registerEffect: () => { throw new Error('no prior bare effect to restore') },
+    })
+    const freeMgr = new UserEffectsManager()
+    const freeRenderer = {
+        registerEffectsFromBundle: bundle => freeCalls.push(['bundle', bundle.namespace, Object.keys(bundle.effects)[0]]),
+    }
+    await freeMgr._registerWithRenderer(freeRenderer, portableRecord('fxFresh'))
+    assert.deepEqual(freeCalls, [
+        ['bundle', 'user', 'fxFresh'],
+        ['unregister', 'fxFresh'],
+    ])
+})
+
+test('_registerWithRenderer skips engine registration when the realm already holds the effect', async () => {
+    setBundleDependencies({
+        Effect: class {},
+        unregisterEffect: () => {},
+        getEffect: key => key === 'user.fxDup' ? { namespace: 'user', name: 'fxDup' } : undefined,
+        registerEffect: () => {},
+    })
+    const mgr = new UserEffectsManager()
+    const renderer = {
+        registerPortableEffect: async () => { throw new Error('duplicate must not re-register') },
+        registerEffectsFromBundle: () => { throw new Error('duplicate must not re-register') },
+    }
+    await mgr._registerWithRenderer(renderer, portableRecord('fxDup'))
+    assert.equal(mgr._loadedIds.has('user/fxDup'), true)
+    assert.equal(mgr._renderers.has(renderer), true)
+})
+
+test('isStarterFromDefinition matches the upstream pipeline list and explicit overrides', () => {
+    const { UserEffectsManager: Mgr } = { UserEffectsManager }
+    const passesWith = input => [{ program: 'main', inputs: { source: input }, outputs: { fragColor: 'outputTex' } }]
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('inputGeo') }), false)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('inputXyz') }), false)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('inputVel') }), false)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('inputRgba') }), false)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('src') }), false)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('history') }), true)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: passesWith('inputTex'), starter: true }), true)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: [], starter: false }), false)
+    assert.equal(Mgr.isStarterFromDefinition({ passes: [] }), true)
 })
