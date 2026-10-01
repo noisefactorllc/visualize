@@ -365,3 +365,15 @@ test('index.html: tooltips use no hardcoded style attributes and native titles s
         }
     }
 })
+
+test('js/app.js: imperative tooltips go through setTooltip, never native title attributes', () => {
+    const appJs = readFileSync(resolve(process.cwd(), 'js/app.js'), 'utf8')
+    // Native `title=` is ignored by handfish's tooltip system and pops an
+    // unstyled browser tooltip on top of it; all dynamic controls (user
+    // effect import/delete buttons included) must use the setTooltip helper.
+    assert.doesNotMatch(
+        appJs,
+        /setAttribute\(\s*['"]title['"]/,
+        'js/app.js must not set native title attributes; use setTooltip()'
+    )
+})

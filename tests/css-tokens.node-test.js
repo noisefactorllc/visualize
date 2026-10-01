@@ -189,4 +189,25 @@ test('FX buttons and surface overlays follow Handfish spacing and z-index token 
     assert.match(rawCss, /#app\.fullscreen-main\s+\.main\s*\{[^}]*z-index:\s*var\(--hf-z-fixed,\s*300\)/)
 })
 
+test('css/app.css spacing and radius dimensions use exact Handfish token steps where one exists', () => {
+    const cssPath = resolve(process.cwd(), 'css/app.css')
+    const rawCss = readFileSync(cssPath, 'utf8')
+
+    // Dimensions whose value exactly matches a --hf-space-*/--hf-radius-*
+    // step must use the token, not the literal (values with no matching
+    // token step, e.g. 1px/2px/5px/6px/7px paddings, stay literal).
+    // gap/margin single values equal to --hf-space-1 (4px)
+    for (const prop of ['gap', 'margin-top', 'margin-right', 'margin-bottom', 'margin-left']) {
+        assert.doesNotMatch(
+            rawCss,
+            new RegExp(`${prop}:\\s*4px`),
+            `${prop}: 4px must use var(--hf-space-1)`
+        )
+    }
+    // Padding components equal to token steps use tokens
+    assert.doesNotMatch(rawCss, /padding:\s*0\s+8px/, 'padding 0 8px must use var(--hf-space-2)')
+    // Pill radius uses the Handfish token, not a raw 999px literal
+    assert.doesNotMatch(rawCss, /border-radius:\s*999px/, 'pill radius must use var(--hf-radius-pill)')
+})
+
 

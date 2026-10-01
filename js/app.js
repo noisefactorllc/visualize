@@ -2663,7 +2663,7 @@ function setupUserEffectsPanel(userEffects, renderer) {
     }
 
     importBtn.setAttribute('aria-label', 'Import custom effect (.zip)')
-    importBtn.setAttribute('title', 'Import custom effect (.zip)')
+    setTooltip(importBtn, 'Import custom effect (.zip)')
     importBtn.addEventListener('click', () => fileInput.click())
 
     fileInput.addEventListener('change', async () => {
@@ -2733,7 +2733,7 @@ function setupUserEffectsPanel(userEffects, renderer) {
             del.className = 'ghost-button user-effect-delete'
             del.textContent = 'delete'
             del.setAttribute('aria-label', `Delete custom effect ${eff.id}`)
-            del.setAttribute('title', `Delete ${eff.id}`)
+            setTooltip(del, `Delete ${eff.id}`)
             del.addEventListener('click', async () => {
                 if (!confirm(`Delete ${eff.id}? Programs that reference it will fail to compile until reinstall.`)) return
                 try {

@@ -382,7 +382,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     font-variant-numeric: tabular-nums;
     color: var(--hf-text-faint, var(--hf-text-dim));
     background: var(--hf-bg-base);
-    border-radius: 999px;
+    border-radius: var(--hf-radius-pill);
     padding: 0 6px;
     line-height: 16px;
     font-size: 10px;
@@ -511,7 +511,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .program-card .pc-actions {
     display: flex;
     gap: 3px;
-    margin-top: 4px;
+    margin-top: var(--hf-space-1);
     pointer-events: auto;
 }
 
@@ -829,7 +829,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     color: var(--hf-text-dim);
     border-radius: var(--hf-radius-sm);
     height: 32px;
-    padding: 0 8px;
+    padding: 0 var(--hf-space-2);
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     letter-spacing: 0.04em;
@@ -837,7 +837,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     transition: var(--hf-transition-color), var(--hf-transition-border);
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--hf-space-1);
 }
 .deck-density:hover,
 .deck-osc-count:hover { color: var(--hf-accent); border-color: var(--hf-accent); }
@@ -1192,7 +1192,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .sync-output-meta > div,
 .sync-output-counters > div {
     display: grid;
-    gap: 4px;
+    gap: var(--hf-space-1);
     min-width: 0;
     padding: var(--hf-space-2);
     background: var(--hf-bg-base);
@@ -1534,7 +1534,7 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 .status-field {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--hf-space-1);
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
     color: var(--hf-text-dim);
@@ -2104,7 +2104,7 @@ kbd {
     padding: 1px 5px;
     font-family: var(--hf-font-family-mono);
     font-size: var(--hf-size-xs);
-    margin-right: 4px;
+    margin-right: var(--hf-space-1);
 }
 
 .midi-learn-list {
@@ -2266,7 +2266,7 @@ kbd {
 .ml-conflict:empty {
     visibility: hidden;
 }
-.ml-actions { display: flex; gap: 4px; }
+.ml-actions { display: flex; gap: var(--hf-space-1); }
 
 .ml-edit-panel {
     display: none;
@@ -2278,7 +2278,7 @@ kbd {
     border-top: var(--hf-border-width) dashed var(--hf-border-subtle);
 }
 .midi-learn-row.editing .ml-edit-panel { display: flex; align-items: center; }
-.ml-edit-field { display: flex; align-items: center; gap: 4px; color: var(--hf-text-dim); font-size: var(--hf-size-xs); }
+.ml-edit-field { display: flex; align-items: center; gap: var(--hf-space-1); color: var(--hf-text-dim); font-size: var(--hf-size-xs); }
 .ml-edit-field input[type="number"] {
     width: 3.5em;
     background: var(--hf-input-bg, var(--hf-bg-base));
