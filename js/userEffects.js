@@ -582,6 +582,19 @@ class UserEffectsManager {
                 if (previousBare === undefined) bundle.unregisterEffect?.(effectName)
                 else bundle.registerEffect?.(effectName, previousBare)
             }
+        } else if (renderer._loadedEffects && !renderer._loadedEffects.has(id)) {
+            // The realm already holds the effect: upstream cb22a05e rejects
+            // duplicates and the accepted instance wins. Unlike upstream,
+            // visualize registers the same effect into each renderer, so a
+            // late-attaching renderer still gets its loaded-effects cache —
+            // otherwise its next compile would fall back to a CDN fetch for
+            // a user effect. Mirrors the wrapper shape
+            // registerEffectsFromBundle caches.
+            renderer._loadedEffects.set(id, {
+                namespace: USER_NAMESPACE,
+                name: effectName,
+                instance: alreadyRegistered,
+            })
         }
         this._loadedIds.add(id)
         this._renderers.add(renderer)

@@ -133,7 +133,12 @@ test('end-to-end smoke', async ({ page }) => {
         s.value = '0'
         s.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    await page.waitForTimeout(400)
+    // The settle waits scale with PW_TIMEOUT_SCALE: on the contended
+    // emulated SwiftShader runner a fixed 400ms may present deck A's frame
+    // for BOTH samples (MAD=0), an infra stall rather than a mixing
+    // failure. The mixing assertion itself (MAD > 2) is unchanged; on real
+    // machines (scale 1) the waits stay 400ms.
+    await page.waitForTimeout(400 * SCALE)
     const fieldAtZero = await sampleField('main-canvas')
 
     await page.evaluate(() => {
@@ -141,7 +146,7 @@ test('end-to-end smoke', async ({ page }) => {
         s.value = '1'
         s.dispatchEvent(new Event('input', { bubbles: true }))
     })
-    await page.waitForTimeout(400)
+    await page.waitForTimeout(400 * SCALE)
     const fieldAtOne = await sampleField('main-canvas')
 
     let madSum = 0

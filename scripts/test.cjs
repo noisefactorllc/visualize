@@ -88,7 +88,15 @@ function ensureExecutableBrowser() {
   }
 
   if (installProc) {
-    const status = spawnSync('sh', ['-c', 'while kill -0 ' + installProc.pid + ' 2>/dev/null; do sleep 1; done']);
+    // kill -0 keeps succeeding for an unreaped zombie child (node does not
+    // reap a spawned child that has no exit listener while the parent is
+    // blocked in spawnSync), which made this wait loop spin forever. Break
+    // on zombie state too: the child has exited and the browser
+    // presence/exec checks below decide the outcome.
+    const status = spawnSync('sh', ['-c',
+      'while kill -0 ' + installProc.pid + ' 2>/dev/null; do ' +
+      's=$(ps -o stat= -p ' + installProc.pid + ' 2>/dev/null); ' +
+      'case "$s" in Z*) break;; esac; sleep 1; done']);
     if (status.status !== 0) {
       console.error('[scripts/test] playwright install failed');
       process.exit(1);
@@ -132,31 +140,38 @@ function ensureExecutableBrowser() {
   return localRoot;
 }
 
-// PW_TIMEOUT_SCALE defaults to 10 inside this wrapper: the supervisor-tests
+// PW_TIMEOUT_SCALE defaults to 3 inside this wrapper: the supervisor-tests
 // runner renders through SwiftShader on translated amd64 (emulated x86 on
 // arm64) with an effectively single core, and at scale 1 the required suite
 // measurably fails on load-timeout cases (Worker Elves job 881a7fed, check
 // at 783c6df: 5 failed / 2 flaky, every failure a 60s load timeout with
 // "GPU stall due to ReadPixels" logs; the identical suite passes at scale 3).
-// The emulated runners now show >2x run-to-run variance from host load, and
-// the SwiftShader GPU process can wedge under "GPU stall due to ReadPixels"
-// until teardown: specs whose reference budget passes in 156s when idle can
-// exceed a 300s (scale 5) budget, and a wedged browser context hangs
-// context.close() until the test timeout, with the same assertions passing
-// on the unchanged tree minutes later (Worker Elves tearoff item 722 checks
-// on 3d1c977: scenes-rename.spec.js and touch-targets.spec.js 180s
-// test-timeouts whose bodies also fail on the unchanged tree when the
-// container is slow). Scale 10 restores margin without touching any
-// assertion, case, or tolerance; on a fast machine the scaled expect/wait
-// budgets simply poll-return early, so the suite is not slower. Real
-// machines can force scale 1 with PW_TIMEOUT_SCALE=1; the specs' own
-// comments describe scale-1 budgets as the reference values. Re-tighten this
-// default back to 1 once a non-emulated runner or a larger check time budget
-// exists (at scale 1 the required suite fails in the emulated runner).
+// Two host-load-bound specs (scenes-rename.spec.js, touch-targets.spec.js)
+// carry their own documented 3x budget multipliers instead of a global
+// increase: their reference passes measure ~52s per scale unit and
+// contended emulated runners can take >2x that. A further unconditional
+// global raise would mask genuine multi-x rendering-slowdown regressions,
+// so when PW_TIMEOUT_SCALE is unset the wrapper additionally raises the
+// scale to 10 while the host itself is under sustained contention (15-minute
+// loadavg > core count, the measured condition that makes even scale-3
+// budgets unmeetable: Worker Elves job 274eb15a, full-suite runs under a
+// loadavg of 10.4-10.9 on 6 cores show 180s test timeouts in
+// crossfader-keyboard/fx-buttons and a frozen-frame MAD=0 smoke sample, all
+// passing at scale 10 and passing in isolation on the unchanged tree; the
+// 15-minute window is used because the 1-minute average drops below the
+// core count between contention spikes while the load persists). An
+// explicit PW_TIMEOUT_SCALE always wins, so real machines can force scale 1;
+// when sustained contention is gone the default drops back to 3
+// automatically — no manual re-tightening.
 const browsersPath = ensureExecutableBrowser();
+const cores = os.cpus().length;
+const hostLoad = os.loadavg()[2];
+let pwScale = process.env.PW_TIMEOUT_SCALE;
+if (!pwScale) pwScale = hostLoad > cores ? '10' : '3';
+console.error(`[scripts/test] PW_TIMEOUT_SCALE=${pwScale} (host load ${hostLoad.toFixed(2)} / ${cores} cores)`);
 const pwEnv = {
   PLAYWRIGHT_BROWSERS_PATH: browsersPath,
-  PW_TIMEOUT_SCALE: process.env.PW_TIMEOUT_SCALE || '10',
+  PW_TIMEOUT_SCALE: pwScale,
 };
 
 let pwRun = run('npx', ['playwright', 'test'], pwEnv);

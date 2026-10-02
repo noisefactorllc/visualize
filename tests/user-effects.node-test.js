@@ -522,6 +522,7 @@ test('_registerWithRenderer skips engine registration when the realm already hol
         getEffect: key => key === 'user.fxDup' ? { namespace: 'user', name: 'fxDup' } : undefined,
         registerEffect: () => {},
     })
+    const accepted = { namespace: 'user', name: 'fxDup' }
     const mgr = new UserEffectsManager()
     const renderer = {
         registerPortableEffect: async () => { throw new Error('duplicate must not re-register') },
@@ -530,6 +531,14 @@ test('_registerWithRenderer skips engine registration when the realm already hol
     await mgr._registerWithRenderer(renderer, portableRecord('fxDup'))
     assert.equal(mgr._loadedIds.has('user/fxDup'), true)
     assert.equal(mgr._renderers.has(renderer), true)
+
+    // A late-attaching renderer gets its own loaded-effects cache so its
+    // compile never falls back to a CDN fetch for the user effect.
+    const lateRenderer = { _loadedEffects: new Map() }
+    await mgr._registerWithRenderer(lateRenderer, portableRecord('fxDup'))
+    assert.deepEqual(lateRenderer._loadedEffects.get('user/fxDup'), {
+        namespace: 'user', name: 'fxDup', instance: accepted,
+    })
 })
 
 test('isStarterFromDefinition matches the upstream pipeline list and explicit overrides', () => {

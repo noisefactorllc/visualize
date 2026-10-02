@@ -4,8 +4,14 @@ import { routeHandfishLocal } from './handfishLocal.js'
 // Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
 // sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
+// Spec-scoped host-load margin (see scripts/test.cjs): this spec wedged at
+// its scale-3 reference budget on host-contended emulated runners
+// (SwiftShader close() stall), so its budget carries a 3x multiplier instead
+// of a global PW_TIMEOUT_SCALE increase that would mask rendering
+// regressions suite wide. Re-tighten to 1 once a non-emulated runner exists.
+const BUDGET_MARGIN = 3
 
-test.describe.configure({ timeout: 60_000 * SCALE, retries: 1 })
+test.describe.configure({ timeout: 60_000 * SCALE * BUDGET_MARGIN, retries: 1 })
 
 async function boot(browser) {
     const context = await browser.newContext()
