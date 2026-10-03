@@ -12,6 +12,23 @@ let daemon, endpoint
 
 test.describe.configure({ retries: 1 })
 
+// Every test in this file talks to the loopback audio daemon from the served
+// page, which Chromium 148's Local Network Access check may block. The bypass
+// is scoped here — the config's global launch stays unchecked — so the rest
+// of the suite still exercises the browser's real local-network behavior
+// (the permission-denied coverage lives in sync-audio-permission.spec.js).
+test.use({
+    launchOptions: {
+        channel: process.env.PW_CHANNEL,
+        args: [
+            '--use-fake-ui-for-media-stream',
+            '--use-fake-device-for-media-stream',
+            '--disable-features=LocalNetworkAccessChecks',
+            ...(process.env.PW_GPU_ARGS ? process.env.PW_GPU_ARGS.split(' ') : []),
+        ],
+    },
+})
+
 test.beforeAll(async () => {
     test.skip(!daemonPath || !fs.existsSync(daemonPath), 'Set SYNC_AUDIO_TEST_SERVER to the native Sync audio fixture')
     daemon = spawn(daemonPath, ['--test-origin', process.env.SYNC_AUDIO_TEST_ORIGIN || 'http://localhost:3070', '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })

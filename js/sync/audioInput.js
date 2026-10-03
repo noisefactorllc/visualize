@@ -45,15 +45,17 @@ export async function retryUnavailable(retry, { attempts = 3, delay = 600, signa
     }
 }
 
-// Reset the bridge buffer only when the stream restarts (firstFrame moves
-// backward). Forward jumps mean the daemon's real-time capture ring dropped
-// frames while the reader was stalled; the enqueue clamp already bounds
-// staleness to the freshness target, and flushing the buffer on every such
-// jump kept the processor below its prefill forever under renderer load, so
-// meters read 0 despite audio flowing (Worker Elves job 80dbc0c3, evidence
-// m143-dbg8.log read cadence).
-export function syncAudioNeedsReset(nextFrame, packet) {
-    return nextFrame !== null && packet.firstFrame < nextFrame
+// Sync's contract for readAudioSource() (sync docs/developers.md and
+// browser/README.md): reset queued browser audio when firstFrame stops
+// following the preceding frame cursor or droppedFrames changes. Any
+// discontinuity means the queued frames are no longer contiguous with what
+// the bridge already delivered, so it must flush. audioWorklet.js pairs this
+// with a resume policy: a reset releases the start-of-stream prefill gate so
+// a sustained run of drops under renderer load cannot starve playback and
+// meters behind a prefill that keeps restarting.
+export function syncAudioNeedsReset(nextFrame, droppedFrames, packet) {
+    return nextFrame !== null &&
+        (packet.firstFrame !== nextFrame || packet.droppedFrames !== droppedFrames)
 }
 
 export function createSyncAudioInput({
@@ -252,6 +254,7 @@ export function createSyncAudioInput({
             await context.resume()
             signal?.throwIfAborted()
             let nextFrame = null
+            let droppedFrames = null
             ;(async () => {
                 try {
                     while (active) {
@@ -261,9 +264,10 @@ export function createSyncAudioInput({
                         if (packet.channelCount !== format.channelCount || packet.sampleRate !== context.sampleRate)
                             throw new Error('Sync audio format changed; reconnect the input')
                         if (packet.frameCount === 0) { await pause(3); continue }
-                        if (syncAudioNeedsReset(nextFrame, packet))
+                        if (syncAudioNeedsReset(nextFrame, droppedFrames, packet))
                             node.port.postMessage({ reset: true })
                         nextFrame = packet.firstFrame + BigInt(packet.frameCount)
+                        droppedFrames = packet.droppedFrames
                         node.port.postMessage(packet.planes, packet.planes.map(plane => plane.buffer))
                     }
                 } catch (error) {

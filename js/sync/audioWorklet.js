@@ -20,8 +20,13 @@ class SyncAudioBridgeProcessor extends AudioWorkletProcessor {
     enqueue(planes) {
         if (planes?.reset === true) {
             this.readIndex = this.writeIndex = this.available = 0
-            this.primed = false
             this.last.fill(0)
+            // A reset only ever arrives on a live discontinuity (the reader
+            // just delivered a fresh packet), so resume on the next frames
+            // instead of re-buffering the full start-up prefill. Re-arming
+            // the prefill here starved playback and meters whenever the
+            // capture ring drops on every exchange under renderer load.
+            this.primed = true
             return
         }
         if (!Array.isArray(planes) || planes.length < this.channelCount) return
@@ -62,7 +67,6 @@ class SyncAudioBridgeProcessor extends AudioWorkletProcessor {
         }
         this.readIndex = (this.readIndex + count) % this.capacity
         this.available -= count
-        if (this.available === 0) this.primed = false
         return true
     }
 }

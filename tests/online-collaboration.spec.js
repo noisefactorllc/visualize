@@ -322,6 +322,13 @@ test('Deck A is the SDK default document for single-editor bindings', async ({ b
         const sessionId = await takeOnline(host)
         await setEditorText(host, 'A', DSL_A1)
         await setEditorText(host, 'B', DSL_B1)
+        // The single-editor binding below adopts each deck document as it
+        // exists in the session snapshot at join time. The host's edits
+        // reach that snapshot asynchronously, so wait until both proposals
+        // are applied before joining — otherwise the adopted text races the
+        // publication and can be the pre-edit deck default.
+        await expect.poll(() => server.docsFor(sessionId).find(doc => doc.id === 'deck:A')?.text, { timeout: 45_000 * SCALE }).toBe(DSL_A1)
+        await expect.poll(() => server.docsFor(sessionId).find(doc => doc.id === 'deck:B')?.text, { timeout: 45_000 * SCALE }).toBe(DSL_B1)
 
         const single = await newOnlinePage(context, server)
         const adoptedText = await single.evaluate(async (id) => {

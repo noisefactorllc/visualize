@@ -35,22 +35,6 @@ export default defineConfig({
             args: [
                 '--use-fake-ui-for-media-stream',
                 '--use-fake-device-for-media-stream',
-                // Chromium 148 enforces Local Network Access checks for the
-                // specs' loopback WebSockets: the Sync native-fixture specs
-                // connect from the served page (the config's webServer
-                // origin, localhost:3070 by default) to the daemon on a
-                // different loopback port, and the browser
-                // intermittently blocks those sockets with
-                // ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS, which surfaces
-                // as "control connection could not be created"/"control
-                // connection closed" in discovery and as audio meters stuck
-                // at 0 after selection (Worker Elves job 80dbc0c3, evidence
-                // m143-dbg2.log/m84-dbg.log; the same specs pass on retry
-                // when the check does not fire, and the ws probe shows the
-                // block clearing under --disable-features). The daemon is a
-                // test-local loopback peer, so the check only adds
-                // nondeterminism here.
-                '--disable-features=LocalNetworkAccessChecks',
                 ...(process.env.PW_GPU_ARGS ? process.env.PW_GPU_ARGS.split(' ') : []),
             ],
         },

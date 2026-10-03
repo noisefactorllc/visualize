@@ -8,9 +8,11 @@
 //   data-message deadline (kDataMessageDeadlineMs); a busy main thread loses
 //   that race, which surfaced as 'control connection closed'/SyncUnavailableError
 //   during discovery and device selection.
-// - the bridge buffer must reset only when the stream restarts; resetting on
-//   every droppedFrames advance starved the documented prefill under renderer
-//   load, so meters read 0 while audio flowed.
+// - the bridge buffer reset must follow Sync's documented discontinuity
+//   contract: reset queued audio when firstFrame stops following the
+//   preceding cursor or droppedFrames changes. The worklet pairs this with
+//   a prompt resume (no re-prefill after a reset) so a sustained run of
+//   drops under renderer load cannot starve playback and meters.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { SyncLifecycleError, SyncUnavailableError } from '../js/sync/sdk/0.3.0/browser/index.js'
@@ -20,6 +22,17 @@ import {
     syncAudioNeedsReset,
     createSyncAudioInput
 } from '../js/sync/audioInput.js'
+
+// Real worklet harness: load the worklet module the way an AudioWorklet
+// global scope would, so tests below can drive actual bridge processors.
+const processors = new Map()
+globalThis.AudioWorkletProcessor = class {
+    constructor() {
+        this.port = { onmessage: null, postMessage: () => {} }
+    }
+}
+globalThis.registerProcessor = (name, ctor) => processors.set(name, ctor)
+await import('../js/sync/audioWorklet.js')
 
 test('transient connect loss classifies both daemon deadline shapes and nothing else', () => {
     assert.equal(isTransientConnectLoss(new SyncUnavailableError('pairing connection failed')), true)
@@ -79,17 +92,84 @@ test('retryUnavailable refuses to start when the signal is already aborted', asy
     assert.equal(calls, 0)
 })
 
-test('bridge buffer reset fires only when the stream restarts, not on forward drops', () => {
+test('bridge buffer reset follows the Sync discontinuity contract', () => {
     const start = { firstFrame: 1000n, frameCount: 480, droppedFrames: 0 }
     // First packet: nothing to reset.
-    assert.equal(syncAudioNeedsReset(null, start), false)
-    // Continuous stream.
-    assert.equal(syncAudioNeedsReset(1480n, { firstFrame: 1480n, frameCount: 480 }), false)
-    // Forward jump with dropped frames: the pre-restart policy flushed here on
-    // every read under renderer load, keeping meters at 0; it must not reset.
-    assert.equal(syncAudioNeedsReset(1480n, { firstFrame: 2440n, frameCount: 480, droppedFrames: 480 }), false)
+    assert.equal(syncAudioNeedsReset(null, null, start), false)
+    // Continuous stream: same cursor, same drop count.
+    assert.equal(syncAudioNeedsReset(1480n, 0, { firstFrame: 1480n, frameCount: 480, droppedFrames: 0 }), false)
+    // Forward jump: the daemon ring dropped frames while the reader stalled;
+    // the queued prefix is no longer contiguous with the cursor.
+    assert.equal(syncAudioNeedsReset(1480n, 0, { firstFrame: 2440n, frameCount: 480, droppedFrames: 480 }), true)
+    // Drop count advance without a cursor change.
+    assert.equal(syncAudioNeedsReset(1960n, 0, { firstFrame: 1960n, frameCount: 480, droppedFrames: 5 }), true)
     // Stream restart (firstFrame moves backward): reset.
-    assert.equal(syncAudioNeedsReset(1480n, { firstFrame: 480n, frameCount: 480 }), true)
+    assert.equal(syncAudioNeedsReset(1480n, 0, { firstFrame: 480n, frameCount: 480, droppedFrames: 0 }), true)
+})
+
+test('a sustained run of drops keeps audio and meters flowing through the real worklet', { timeout: 1000 }, () => {
+    // Drive the documented read-loop protocol (reset on any discontinuity,
+    // then the fresh packet) into the real sync-audio-bridge processor while
+    // the daemon ring drops frames on every exchange, as happens in a
+    // renderer-stalled container. The bridge must keep emitting fresh frames
+    // (meters rise) and must never replay frames from before a discontinuity.
+    const Bridge = processors.get('sync-audio-bridge')
+    const readExchange = (bridge, cursor, firstFrame, drops) => {
+        const packet = { firstFrame, frameCount: 480, droppedFrames: drops }
+        const reset = syncAudioNeedsReset(cursor.nextFrame, cursor.droppedFrames, packet)
+        if (reset) bridge.port.onmessage({ data: { reset: true } })
+        cursor.nextFrame = firstFrame + 480n
+        cursor.droppedFrames = drops
+        bridge.enqueue([Float32Array.from({ length: 480 }, (_, index) => Number(firstFrame) + index)])
+        const output = new Float32Array(128)
+        bridge.process([], [[output]])
+        return { reset, output }
+    }
+
+    // The stream primes normally (one 480-frame exchange and one 128-frame
+    // render quantum per tick), then the reader stalls and every exchange
+    // arrives with a forward gap and an advanced drop count.
+    const bridge = new Bridge({
+        processorOptions: { channelCount: 1, capacity: 16384, prefill: 5760, maxQueuedFrames: 8640 }
+    })
+    const cursor = { nextFrame: null, droppedFrames: null, resets: 0 }
+    for (let packet = 0; packet < 12; packet++) {
+        const { reset, output } = readExchange(bridge, cursor, BigInt(packet * 480), 0)
+        cursor.resets += reset ? 1 : 0
+        if (packet < 11) {
+            assert.deepEqual([...output], new Array(128).fill(0), 'start-up prefill must still gate the first frames')
+            continue
+        }
+        // 12 exchanges * 480 frames = 5760 = the prefill: the first released
+        // frames are the oldest queued ones, in order.
+        assert.deepEqual([...output], Array.from({ length: 128 }, (_, index) => 128 * (packet - 11) + index))
+    }
+    assert.equal(cursor.resets, 0, 'a continuous prefix must never reset')
+
+    for (let packet = 0; packet < 8; packet++) {
+        const firstFrame = BigInt(12 * 480 + packet * 960) // a 480-frame gap per exchange
+        const { reset, output } = readExchange(bridge, cursor, firstFrame, 480 * (packet + 1))
+        assert.equal(reset, true, 'a forward gap with new drops must reset per the Sync contract')
+        // Every rendered frame belongs to the fresh packet, in order — no
+        // stale pre-gap sample and no re-prefill silence.
+        assert.deepEqual([...output], Array.from({ length: 128 }, (_, index) => Number(firstFrame) + index))
+    }
+
+    // The drop storm can also begin before the prefill was ever reached; the
+    // first discontinuity still releases the bridge so meters rise.
+    const early = new Bridge({
+        processorOptions: { channelCount: 1, capacity: 16384, prefill: 5760, maxQueuedFrames: 8640 }
+    })
+    const earlyCursor = { nextFrame: null, droppedFrames: null, resets: 0 }
+    for (let packet = 0; packet < 2; packet++) {
+        const { reset, output } = readExchange(early, earlyCursor, BigInt(packet * 480), 0)
+        earlyCursor.resets += reset ? 1 : 0
+        assert.deepEqual([...output], new Array(128).fill(0))
+    }
+    assert.equal(earlyCursor.resets, 0)
+    const { reset, output } = readExchange(early, earlyCursor, BigInt(2 * 480 + 960), 960)
+    assert.equal(reset, true)
+    assert.deepEqual([...output], Array.from({ length: 128 }, (_, index) => 1920 + index))
 })
 
 function fakeCredentialStore() {
