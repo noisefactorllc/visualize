@@ -65,7 +65,9 @@ function findLaunchBinary(browsersRoot) {
 
 // Start the browser download concurrently with the node suite: it does not
 // depend on it and costs minutes on cold containers.
-const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH || path.join(process.env.HOME || '', '.cache', 'ms-playwright');
+const browsersRoot = process.env.PLAYWRIGHT_BROWSERS_PATH || (process.platform === 'darwin'
+  ? path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright')
+  : path.join(os.homedir(), '.cache', 'ms-playwright'));
 const launchBefore = fs.existsSync(browsersRoot) ? findLaunchBinary(browsersRoot) : null;
 let installProc = null;
 if (!launchBefore) {
