@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
-import { routeHandfishLocal } from './handfishLocal.js'
+import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 import { FakeSeanceServer, routeSeanceSdkLocal, routePortableImagesLocal } from './seanceLocal.js'
 // Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
 // sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
@@ -40,6 +40,9 @@ function withOnlineFeature(path = '/') {
 async function newOnlinePage(context, server, path = '/', { online = true } = {}) {
     const page = await context.newPage()
     await routeHandfishLocal(page)
+    // Same local mirror for the engine runtime so boot stays deterministic
+    // on isolated runners without CDN access.
+    await routeEngineLocal(page)
     await routeSeanceSdkLocal(page)
     await routePortableImagesLocal(page)
     await server.install(page)

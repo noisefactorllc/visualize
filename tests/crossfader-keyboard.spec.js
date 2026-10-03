@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 import { test, expect } from '@playwright/test'
-import { routeHandfishLocal } from './handfishLocal.js'
+import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 // Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
 // sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
@@ -20,6 +20,9 @@ async function boot(browser) {
     const context = await browser.newContext()
     const page = await context.newPage()
     await routeHandfishLocal(page)
+    // Same local mirror for the engine runtime so boot stays deterministic
+    // on isolated runners without CDN access.
+    await routeEngineLocal(page)
     page.on('console', msg => {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
