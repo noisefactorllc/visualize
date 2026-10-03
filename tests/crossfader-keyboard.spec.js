@@ -4,8 +4,17 @@ import { routeHandfishLocal } from './handfishLocal.js'
 // Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
 // sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
+// Spec-scoped host-load margin (see scripts/test.cjs): the emulated runner's
+// scale-3 budget measured 180s here and the spec exceeded it in a full-suite
+// run on an idle host (load 0.66/10) while the identical tree passes at
+// scale 10 in 126s in isolation and on a real GPU host, and the 274eb15a
+// check already saw 180s crossfader-keyboard timeouts under sustained load —
+// so this spec carries the same 3x budget multiplier as scenes-rename/
+// touch-targets instead of a global PW_TIMEOUT_SCALE increase. Re-tighten
+// to 1 once a non-emulated runner exists.
+const BUDGET_MARGIN = 3
 
-test.describe.configure({ timeout: 60_000 * SCALE, retries: 1 })
+test.describe.configure({ timeout: 60_000 * SCALE * BUDGET_MARGIN, retries: 1 })
 
 async function boot(browser) {
     const context = await browser.newContext()

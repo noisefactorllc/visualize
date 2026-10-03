@@ -5,8 +5,17 @@ import { FakeSeanceServer, routeSeanceSdkLocal, routePortableImagesLocal } from 
 // Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
 // sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
+// Spec-scoped host-load margin (see scripts/test.cjs): the emulated runner's
+// 360s scale-3 budget was exceeded by the join-without-page-cleanup case
+// hanging in context.close() on an idle host (load 0.66/10) in a full-suite
+// run, while the identical tree passes in isolation (582s at scale 10); the
+// wedged-SwiftShader-context close() stall is the same measured condition
+// documented for touch-targets, so this spec carries a 3x budget multiplier
+// instead of a global PW_TIMEOUT_SCALE increase. Re-tighten to 1 once a
+// non-emulated runner exists.
+const BUDGET_MARGIN = 3
 
-test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
+test.describe.configure({ timeout: 120_000 * SCALE * BUDGET_MARGIN, retries: 0 })
 
 const DSL_A1 = 'search synth, render\n\nnoise(seed: 101, ridges: true)\n  .write(o0)\n\nrender(o0)'
 const DSL_A2 = 'search synth, render\n\nnoise(seed: 202, ridges: false)\n  .write(o0)\n\nrender(o0)'
