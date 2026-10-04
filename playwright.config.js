@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: MIT
 import { defineConfig } from '@playwright/test'
 
+const port = Number(process.env.PW_PORT || 3070)
+const host = process.env.PW_PORT ? '127.0.0.1' : 'localhost'
+
 export default defineConfig({
     testDir: './tests',
     testIgnore: '**/*.node-test.js',
@@ -19,7 +22,7 @@ export default defineConfig({
     // (scripts/test.cjs runs the suite serially); direct runs stay serial.
     workers: 1,
     use: {
-        baseURL: 'http://localhost:3070',
+        baseURL: `http://${host}:${port}`,
         // PW_VIEWPORT=WxH scales the render surface for constrained CI
         // containers (SwiftShader cost is proportional to pixels); unset
         // keeps the standard 1280x720 desktop viewport.
@@ -42,8 +45,8 @@ export default defineConfig({
     webServer: {
         // Robust static server (survives aborted sockets under parallel
         // workers); http-server crashes on unhandled socket errors.
-        command: 'node scripts/dev-server.cjs 3070',
-        port: 3070,
+        command: `node scripts/dev-server.cjs ${port}`,
+        port,
         reuseExistingServer: true,
         timeout: 30_000,
     },
