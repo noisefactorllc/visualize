@@ -6,14 +6,12 @@
   "description": "Visualize desktop wrapper (uses @nf/desktop-shell).",
   "scripts": {
     "predist": "node ../scripts/fetch-noisemaker.cjs",
+    "predev": "npm install --no-save ../../scaffold/apps/desktop-shell",
     "dev": "electron .",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux"
-  },
-  "dependencies": {
-    "@nf/desktop-shell": "file:../../scaffold/apps/desktop-shell"
   },
   "devDependencies": {
     "electron": "^42.3.0",
