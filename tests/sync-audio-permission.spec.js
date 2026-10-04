@@ -22,12 +22,46 @@ test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
 // Reserve a loopback port, then release it: the pairing health check must
 // fail for the SDK's permission query to run, and a refused connection fails
 // it deterministically.
+//
+// Sandboxed runners may forbid listening on ephemeral loopback ports
+// (listen EPERM). There the helper falls back to the broker's permitted
+// loopback range and picks a port verified closed by a refused connection —
+// the same "closed port" contract, without binding it.
 async function closedLoopbackPort() {
     const server = net.createServer()
-    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-    const port = server.address().port
-    await new Promise(resolve => server.close(resolve))
-    return port
+    try {
+        await new Promise((resolve, reject) => {
+            server.once('error', reject)
+            server.listen(0, '127.0.0.1', resolve)
+        })
+        const port = server.address().port
+        await new Promise(resolve => server.close(resolve))
+        return port
+    } catch (err) {
+        if (!err || err.code !== 'EPERM') throw err
+    }
+
+    const configured = (process.env.PW_TEST_LOOPBACK_PORTS || '43117-43126')
+        .split(',').flatMap(s => {
+            const m = s.trim().match(/^(\d+)-(\d+)$/)
+            return m ? range(+m[1], +m[2]) : (+s ? [+s] : [])
+        })
+    const own = Number(process.env.PW_PORT || 0)
+    for (const port of configured.filter(p => p !== own)) {
+        const closed = await new Promise(resolve => {
+            const probe = net.connect(port, '127.0.0.1')
+            probe.once('connect', () => { probe.destroy(); resolve(false) })
+            probe.once('error', () => resolve(true))
+        })
+        if (closed) return port
+    }
+    throw new Error('no closed permitted loopback port found')
+}
+
+function range(lo, hi) {
+    const out = []
+    for (let p = Math.min(lo, hi); p <= Math.max(lo, hi); p++) out.push(p)
+    return out
 }
 
 test('Sync loopback permission denial surfaces an error and the grant path recovers', async ({ page }) => {

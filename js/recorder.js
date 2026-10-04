@@ -12,7 +12,7 @@ export class Recorder {
     constructor(canvas, { onTick, onStateChange, onWarning } = {}) {
         this.canvas = canvas
         this._recorder = null
-        this._chunks = []
+        this._session = null   // the live recording's session (chunks + UI ownership)
         this._startTime = 0
         this._tickId = null
         this._onTick = onTick || (() => {})
@@ -78,28 +78,33 @@ export class Recorder {
         const stream = this.canvas.captureStream(this._fps)
         const opts = { videoBitsPerSecond: this._bitrate }
         if (this._mimeType) opts.mimeType = this._mimeType
+        let recorder
         try {
-            this._recorder = new MediaRecorder(stream, opts)
+            recorder = new MediaRecorder(stream, opts)
         } catch (err) {
             console.error('[Recorder] failed to create MediaRecorder', err)
             return false
         }
-        this._chunks = []
-        // The recorder's identity at handler-registration time. MediaRecorder
-        // delivers dataavailable/stop for a stopped recorder as queued tasks,
-        // so a stop() immediately followed by start() (double-click on the
-        // record button, a fast toggle) leaves the superseded recorder's
-        // events pending while a newer recording owns this instance's state.
-        // Events from a superseded recorder must not touch the live
-        // recording's chunk buffer or the recording UI state.
-        const recorder = this._recorder
+        this._recorder = recorder
+        // Each recording owns an isolated session: its chunk buffer and its
+        // UI ownership travel with it. MediaRecorder delivers a stopped
+        // recorder's queued dataavailable/stop as tasks, so a stop()
+        // immediately followed by start() (double-click on the record
+        // button, a fast toggle) leaves the superseded recording's events
+        // pending while a newer recording is live. Those events keep
+        // appending to and finalizing their OWN session — the prior
+        // recording is still saved — while the record button, toasts and
+        // the elapsed timer track only the live recording.
+        const session = { chunks: [], recorder, finalized: false }
+        this._session = session
         recorder.ondataavailable = (e) => {
-            if (this._recorder !== recorder) return
-            if (e.data && e.data.size) this._chunks.push(e.data)
+            if (session.finalized) return
+            if (e.data && e.data.size) session.chunks.push(e.data)
         }
         recorder.onstop = () => {
-            if (this._recorder !== recorder) return
-            this._onStop()
+            if (session.finalized) return
+            session.finalized = true
+            this._onStop(session)
         }
         recorder.start(1000)
         this._startTime = performance.now()
@@ -136,14 +141,21 @@ export class Recorder {
         return this.start()
     }
 
-    _onStop() {
+    _onStop(session) {
         const fallbackType = this._fileExtension() === 'mp4' ? 'video/mp4' : 'video/webm'
-        const blob = new Blob(this._chunks, { type: this._mimeType || fallbackType })
-        this._chunks = []
-        this._onStateChange(false)
+        const blob = new Blob(session.chunks, { type: this._mimeType || fallbackType })
+        session.chunks = []
+        // Only the live recording's stop drives the UI: a superseded
+        // session finalizes and downloads silently so the record button,
+        // the toast and the elapsed timer keep describing the recording
+        // that is actually running.
+        if (this._session === session) {
+            this._session = null
+            this._onStateChange(false)
+            this._startTime = 0
+        }
         if (blob.size === 0) return
         this._download(blob)
-        this._startTime = 0
     }
 
     _download(blob) {

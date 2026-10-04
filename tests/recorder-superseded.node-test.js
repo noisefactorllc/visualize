@@ -1,11 +1,12 @@
-// Recorder — superseded-recorder event isolation.
+// Recorder — per-recording session isolation.
 //
 // MediaRecorder delivers a stopped recorder's final dataavailable and stop
 // as queued tasks. A stop() immediately followed by start() in the same task
 // (double-click on the record button, a fast toggle) therefore leaves the
-// superseded recorder's events pending while a newer recording is live.
-// Those stale events must not touch the live recording's chunk buffer or
-// the recording UI state.
+// superseded recording's events pending while a newer recording is live.
+// Each recording owns an isolated session: the superseded recording keeps
+// appending to and finalizing its OWN session (it is still saved), while the
+// live recording's chunk buffer and the recording UI state stay untouched.
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -84,23 +85,28 @@ test('a normal stop still finalizes the recording', async () => {
     await stopQuietly(rec)
 })
 
-test('a superseded recorder cannot flip the live recording\'s state or clock', async () => {
+test('a superseded recording is still finalized and downloaded, without touching the live recording', async () => {
     downloads.length = 0
     const { rec, stateEvents } = makeRecorder()
     assert.equal(rec.start(), true)   // recording A
-    rec._recorder.emit(chunkOf(3))
+    rec._recorder.emit(chunkOf(3))    // A captures a real chunk
     rec.stop()                        // A stops; its events queue as tasks
     assert.equal(rec.start(), true)   // recording B starts in the same task
     await settle()                    // A's stale events land while B is live
+    // A is saved from its own session: its live chunk plus its final
+    // dataavailable, downloaded even though B already started.
+    assert.equal(downloads.length, 1)
+    assert.equal(downloads[0].size, 6)
+    // A's stop must not flip the live recording's UI state or clock.
     assert.deepEqual(stateEvents, [true, true])
     assert.equal(rec.isRecording, true)
     assert.ok(rec.elapsedMs >= 0)
-    // B's pre-stale chunk must have survived; its final recording reflects it.
+    // B keeps recording into its own session and saves exactly its data.
     rec._recorder.emit(chunkOf(2))
     await stopQuietly(rec)
     assert.deepEqual(stateEvents, [true, true, false])
-    assert.equal(downloads.length, 1)
-    assert.equal(downloads[0].size, 4)
+    assert.equal(downloads.length, 2)
+    assert.equal(downloads[1].size, 4)
     downloads.length = 0
 })
 
@@ -113,13 +119,30 @@ test('a superseded recorder\'s queued chunk does not contaminate the live record
     assert.equal(rec.start(), true)   // recording B starts in the same task
     rec._recorder.emit(chunkOf(2))      // B captures its own data
     await settle()                    // A's stale events land
-    // A's 3-byte final chunk must not be spliced into B's recording, and A's
-    // stale stop must not report "recording saved" for the live recording.
+    // A's final chunk lands in A's own session, never in B's buffer, and
+    // A's stale stop must not report "recording saved" for the live recording.
     assert.deepEqual(stateEvents, [true, true])
     await stopQuietly(rec)
     assert.deepEqual(stateEvents, [true, true, false])
-    assert.equal(downloads.length, 1)
-    // Exactly B's live + final chunks (2 × 2 bytes) — A's 3-byte chunk absent.
-    assert.equal(downloads[0].size, 4)
+    // A's blob (6 bytes: live + final 3-byte chunks) and B's blob
+    // (4 bytes: live + final 2-byte chunks) — no cross-session splicing.
+    assert.equal(downloads.length, 2)
+    assert.deepEqual(downloads.map(b => b.size), [6, 4])
+    downloads.length = 0
+})
+
+test('a superseded recording with no captured data finalizes silently', async () => {
+    downloads.length = 0
+    const { rec, stateEvents } = makeRecorder()
+    assert.equal(rec.start(), true)   // recording A: stopped before its first timeslice
+    rec.stop()
+    assert.equal(rec.start(), true)   // recording B starts in the same task
+    await settle()
+    // A's session is empty: nothing to save, and no UI state change.
+    assert.deepEqual(downloads, [])
+    assert.deepEqual(stateEvents, [true, true])
+    assert.equal(rec.isRecording, true)
+    await stopQuietly(rec)
+    assert.deepEqual(stateEvents, [true, true, false])
     downloads.length = 0
 })
