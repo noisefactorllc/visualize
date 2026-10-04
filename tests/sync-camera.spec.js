@@ -43,12 +43,13 @@ test('two Sync camera decks upload owned pixels and stopping A leaves B live', a
             await media.setCamera()
         }
         state.frame = (timestamp, red, green, blue) => {
-            const bytes = new Uint8Array(16)
+            const bytes = state.frameBytes ||= new Uint8Array(16)
             for (let i = 0; i < bytes.length; i += 4) bytes.set([blue, green, red, 255], i)
-            state.deliver({ presentationTimeUs: timestamp, width: 2, height: 2, buffer: bytes.buffer })
+            state.deliver({ sequence: timestamp / 1000, presentationTimeUs: timestamp,
+                width: 2, height: 2, buffer: bytes.buffer })
         }
         state.frame(1000, 255, 0, 0)
-        state.frame(2000, 255, 0, 0)
+        state.frame(2000, 0, 255, 0)
         for (const media of state.devices) media.tick()
         state.sample = id => {
             const canvas = document.createElement('canvas')
@@ -63,12 +64,12 @@ test('two Sync camera decks upload owned pixels and stopping A leaves B live', a
     await page.evaluate(async () => {
         const state = window.cameraTest
         await state.devices[0].stop()
-        state.frame(3000, 0, 255, 0)
-        state.devices[1].tick() // The previous red frame precedes the new green frame.
+        state.frame(3000, 0, 0, 255)
+        state.devices[1].tick() // The previous green frame precedes the new blue frame.
         await Promise.resolve()
         state.devices[1].tick()
     })
-    await expect.poll(() => page.evaluate(() => window.cameraTest.sample('B'))).toEqual([0, 255, 0, 255])
+    await expect.poll(() => page.evaluate(() => window.cameraTest.sample('B'))).toEqual([0, 0, 255, 255])
     expect(await page.evaluate(() => ({ starts: window.cameraTest.starts, stops: window.cameraTest.stops, error: window.cameraTest.error })))
         .toEqual({ starts: 1, stops: 0, error: undefined })
     await page.evaluate(() => window.cameraTest.devices[1].stop())

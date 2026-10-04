@@ -28,7 +28,7 @@ export class SyncCameraFrameQueue {
         this._uploading = false
         this._uploadDone = Promise.resolve()
         this._stopped = null
-        this._watermark = previous || { timestamp: -Infinity, error: null, owner: null }
+        this._watermark = previous || { timestamp: -Infinity, sequence: -Infinity, error: null, owner: null }
         this._watermark.owner = this
         tracks.set(track, this._watermark)
         this._ended = () => this._fail(new Error('Camera frame stream ended'))
@@ -72,12 +72,16 @@ export class SyncCameraFrameQueue {
         }
         let frame = null
         try {
-            const { presentationTimeUs, width, height, buffer } = frameData
+            const { sequence, presentationTimeUs, width, height, buffer } = frameData
             const timestamp = Number(presentationTimeUs)
+            if (!Number.isSafeInteger(sequence) || sequence < 0 || sequence < this._watermark.sequence) {
+                throw new Error('Camera frame sequence is invalid or decreased')
+            }
+            if (sequence === this._watermark.sequence) return
             if (!Number.isSafeInteger(timestamp) || timestamp < this._watermark.timestamp) {
                 throw new Error('Camera frame timestamp is invalid or decreased')
             }
-            if (timestamp === this._watermark.timestamp) return
+            this._watermark.sequence = sequence
             this._watermark.timestamp = timestamp
 
             if (typeof globalThis.VideoFrame === 'function') {

@@ -219,7 +219,9 @@ test('useNativeShm streams frames via subscriber without MediaStreamTrackProcess
 
     const buf1 = new ArrayBuffer(100)
     const buf2 = new ArrayBuffer(100)
+    const duplicate = new ArrayBuffer(100)
     subscriber({ sequence: 1, presentationTimeUs: 1000, width: 1920, height: 1080, buffer: buf1 })
+    subscriber({ sequence: 1, presentationTimeUs: 2000, width: 1920, height: 1080, buffer: duplicate })
     subscriber({ sequence: 2, presentationTimeUs: 2000, width: 1920, height: 1080, buffer: buf2 })
 
     owner.consume()
@@ -229,6 +231,7 @@ test('useNativeShm streams frames via subscriber without MediaStreamTrackProcess
     owner.consume()
     assert.equal(uploads.length, 2)
     assert.equal(uploads[1].timestamp, 2000)
+    assert.equal(uploads[1].buffer, buf2, 'the new sequence wins even when its timestamp repeats')
 
     await owner.stop()
     assert.equal(unsubscribes, 1)
