@@ -21,6 +21,9 @@ on:
       - 'data/**'
       - '.github/workflows/deploy.yml'
 
+# No job uses the repo GITHUB_TOKEN; the dispatch authenticates with the app token.
+permissions: {}
+
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
