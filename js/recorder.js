@@ -85,11 +85,23 @@ export class Recorder {
             return false
         }
         this._chunks = []
-        this._recorder.ondataavailable = (e) => {
+        // The recorder's identity at handler-registration time. MediaRecorder
+        // delivers dataavailable/stop for a stopped recorder as queued tasks,
+        // so a stop() immediately followed by start() (double-click on the
+        // record button, a fast toggle) leaves the superseded recorder's
+        // events pending while a newer recording owns this instance's state.
+        // Events from a superseded recorder must not touch the live
+        // recording's chunk buffer or the recording UI state.
+        const recorder = this._recorder
+        recorder.ondataavailable = (e) => {
+            if (this._recorder !== recorder) return
             if (e.data && e.data.size) this._chunks.push(e.data)
         }
-        this._recorder.onstop = () => this._onStop()
-        this._recorder.start(1000)
+        recorder.onstop = () => {
+            if (this._recorder !== recorder) return
+            this._onStop()
+        }
+        recorder.start(1000)
         this._startTime = performance.now()
         this._warned = false
         this._tickId = setInterval(() => {
@@ -143,7 +155,10 @@ export class Recorder {
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        // The revoke timer must never keep an embedding event loop alive
+        // (node --test would otherwise stall for its full 60s duration).
+        const revoke = setTimeout(() => URL.revokeObjectURL(url), 60_000)
+        if (typeof revoke === 'object' && typeof revoke.unref === 'function') revoke.unref()
     }
 }
 
