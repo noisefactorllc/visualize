@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import test from 'node:test'
-import { embeddedImageFile, getSceneImage, migrateSceneImages, storeEmbeddedImages, storeSceneImages } from '../js/sceneImages.js'
+import { embeddedImageFile, getSceneImage, migrateSceneImages, sceneImagesMigrated, storeEmbeddedImages, storeSceneImages } from '../js/sceneImages.js'
 
 // Node has no IndexedDB: these cover the checks that run before storage is
 // opened. tests/scene-images.spec.js covers storage in Chromium.
@@ -46,4 +46,124 @@ test('without IndexedDB nothing is read or moved', async () => {
     let moved = false
     await migrateSceneImages({ moveEmbeddedImages: async () => { moved = true } })
     assert.equal(moved, false)
+})
+
+/** Run `work` with a stand-in IndexedDB, and remove it afterwards. */
+async function withIndexedDB(indexedDB, work) {
+    globalThis.indexedDB = indexedDB
+    try { return await work() } finally { delete globalThis.indexedDB }
+}
+
+const settled = promise => Promise.race([promise.then(() => true, () => true), new Promise(resolve => setTimeout(() => resolve(false), 20))])
+
+test('a save waits for the startup migration, never longer than its bound, and never fails with it', async () => {
+    assert.equal(await settled(sceneImagesMigrated()), true, 'nothing to wait for before a migration starts')
+    await withIndexedDB({}, async () => {
+        let finish
+        const migration = migrateSceneImages({ moveEmbeddedImages: () => new Promise(resolve => { finish = resolve }) })
+        const waiting = sceneImagesMigrated()
+        assert.equal(await settled(waiting), false, 'a save waits while images are moving')
+        finish(3)
+        assert.equal(await settled(waiting), true)
+        assert.equal(await migration, undefined)
+
+        const failing = migrateSceneImages({ moveEmbeddedImages: async () => { throw new Error('IndexedDB unavailable') } })
+        await assert.rejects(failing, /IndexedDB unavailable/)
+        assert.equal(await settled(sceneImagesMigrated()), true, 'a failed migration lets saves go ahead')
+
+        migrateSceneImages({ moveEmbeddedImages: () => new Promise(() => {}) })
+        assert.equal(await settled(sceneImagesMigrated(5)), true, 'a migration that never ends holds saves only up to the bound')
+    })
+})
+
+/** An IndexedDB stand-in whose open requests the test answers. */
+function fakeIndexedDB() {
+    const opens = []
+    const transactions = []
+    const records = new Map()
+    function database() {
+        const db = {
+            closed: false,
+            objectStoreNames: { contains: () => true },
+            close() { db.closed = true },
+            transaction(store, mode, options) {
+                transactions.push({ store, mode, options })
+                const tx = {
+                    objectStore: () => ({
+                        put(record) { records.set(record.id, record) },
+                        get(id) { return { result: records.get(id) } },
+                    }),
+                }
+                setTimeout(() => tx.oncomplete())
+                return tx
+            },
+        }
+        return db
+    }
+    return {
+        opens, transactions,
+        open(name, version) {
+            const request = { name, version }
+            opens.push(request)
+            return request
+        },
+        async succeed() {
+            const request = await this.next()
+            request.result = database()
+            request.onsuccess()
+            return request.result
+        },
+        async block() {
+            ;(await this.next()).onblocked()
+        },
+        answered: 0,
+        async next() {
+            while (opens.length <= this.answered) await new Promise(resolve => setTimeout(resolve))
+            return opens[this.answered++]
+        },
+    }
+}
+
+test('image storage writes durably, and reopens after another tab upgrades it or the browser closes it', async () => {
+    const idb = fakeIndexedDB()
+    const id = sha256(PNG_BYTES)
+    const blob = new Blob([PNG_BYTES], { type: 'image/png' })
+    await withIndexedDB(idb, async () => {
+        const stored = storeSceneImages([{ id, blob }])
+        const first = await idb.succeed()
+        await stored
+        assert.deepEqual(idb.transactions.at(-1), { store: 'images', mode: 'readwrite', options: { durability: 'strict' } })
+        assert.equal(await getSceneImage(id), blob)
+        assert.deepEqual(idb.transactions.at(-1), { store: 'images', mode: 'readonly', options: undefined })
+        assert.equal(idb.opens.length, 1, 'one connection serves both')
+
+        first.onversionchange()
+        assert.equal(first.closed, true, 'a newer version in another tab is let through')
+        const afterUpgrade = getSceneImage(id)
+        const second = await idb.succeed()
+        assert.equal(await afterUpgrade, blob)
+        assert.equal(idb.opens.length, 2)
+
+        second.onclose()
+        const afterClose = getSceneImage(id)
+        const third = await idb.succeed()
+        assert.equal(await afterClose, blob)
+        assert.equal(idb.opens.length, 3)
+        third.onclose()
+    })
+})
+
+test('a blocked open fails the save, and the next save opens again', async () => {
+    const idb = fakeIndexedDB()
+    const id = sha256(PNG_BYTES)
+    const blob = new Blob([PNG_BYTES], { type: 'image/png' })
+    await withIndexedDB(idb, async () => {
+        const blocked = storeSceneImages([{ id, blob }])
+        await idb.block()
+        await assert.rejects(blocked, /blocked by another Visualize tab/)
+        const retried = storeSceneImages([{ id, blob }])
+        await idb.succeed()
+        await retried
+        assert.equal(idb.opens.length, 2)
+    })
 })

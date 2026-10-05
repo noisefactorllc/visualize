@@ -10,6 +10,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { createHash } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './seanceLocal.js'
@@ -169,18 +170,53 @@ function deckPixel(page, deckId) {
     }, deckId)
 }
 
-/** Load the media program on a deck and choose an image file for it, as a user would. */
-async function chooseImage(page, deckId, image) {
+/**
+ * Load the media program on a deck and choose an image file for it, as a
+ * user would. `file` is a path on disk to pick instead of in-memory bytes.
+ */
+async function chooseImage(page, deckId, image, file = { name: 'image.png', mimeType: 'image/png', buffer: image.bytes }) {
     await page.evaluate(async ({ id, dsl }) => {
         const result = await window.__visualize.decks[id].load(dsl, 'Media Input')
         if (!result.success) throw new Error(result.error)
     }, { id: deckId, dsl: MEDIA_DSL })
-    await page.locator(`#deck-${deckId.toLowerCase()}-media-file-input`).setInputFiles({
-        name: 'image.png', mimeType: 'image/png', buffer: image.bytes,
-    })
+    await page.locator(`#deck-${deckId.toLowerCase()}-media-file-input`).setInputFiles(file)
     await expect.poll(() => page.evaluate(id => window.__visualize.decks[id].currentDsl, deckId),
         { timeout: 30_000 * SCALE }).toContain(`image:${image.id}`)
 }
+
+/**
+ * Hold every open of the scene image database until the test calls
+ * window.__releaseImageStorage(), so reads and writes of image storage take
+ * as long as the test needs. Also count writes of the saved scene list.
+ */
+async function holdImageStorage(page) {
+    await page.addInitScript(key => {
+        const open = IDBFactory.prototype.open
+        let release
+        const released = new Promise(resolve => { release = resolve })
+        window.__releaseImageStorage = () => release()
+        IDBFactory.prototype.open = function (name, ...rest) {
+            if (name !== 'visualize-scene-images') return open.call(this, name, ...rest)
+            const request = {}
+            released.then(() => {
+                const real = open.call(this, name, ...rest)
+                real.onupgradeneeded = event => { request.result = real.result; request.onupgradeneeded?.(event) }
+                real.onsuccess = event => { request.result = real.result; request.onsuccess?.(event) }
+                real.onerror = event => { request.error = real.error; request.onerror?.(event) }
+                real.onblocked = event => request.onblocked?.(event)
+            })
+            return request
+        }
+        window.__sceneWrites = 0
+        const setItem = Storage.prototype.setItem
+        Storage.prototype.setItem = function (name, value) {
+            setItem.call(this, name, value)
+            if (name === key) window.__sceneWrites++
+        }
+    }, SCENES_KEY)
+}
+
+const releaseImageStorage = page => page.evaluate(() => window.__releaseImageStorage())
 
 async function openScenes(page) {
     if (await page.locator('#scenes-drawer').getAttribute('aria-hidden') !== 'false') await page.click('#scenes-open')
@@ -305,6 +341,153 @@ test('scenes that filled localStorage with image text move it to IndexedDB on lo
         await expect.poll(() => deckPixel(page, 'B'), { timeout: 30_000 * SCALE }).toEqual([0, 255, 0, 255])
         await recallScene(page, 'Blue')
         await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([0, 0, 255, 255])
+    } finally {
+        await context.close()
+    }
+})
+
+test('a picked file that changes on disk after it is chosen still saves with the bytes that were chosen', async ({ browser }, testInfo) => {
+    const context = await browser.newContext()
+    try {
+        const page = await context.newPage()
+        await preparePage(page)
+        await page.goto('/')
+        await start(page)
+        const red = solidPng(64, 36, [255, 0, 0])
+        const path = testInfo.outputPath('picked.png')
+        writeFileSync(path, red.bytes)
+        await chooseImage(page, 'A', red, path)
+        await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+        // The user edits the picked file after choosing it.
+        writeFileSync(path, solidPng(64, 36, [0, 0, 255]).bytes)
+        await saveScene(page, 'Picked then edited')
+        expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
+
+        await page.reload()
+        await start(page)
+        await recallScene(page, 'Picked then edited')
+        await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+    } finally {
+        await context.close()
+    }
+})
+
+test('a recall still reading its images from storage loses to a newer recall', async ({ browser }) => {
+    const context = await browser.newContext()
+    try {
+        const page = await context.newPage()
+        await preparePage(page)
+        await holdImageStorage(page)
+        await page.goto('/')
+        await start(page)
+        await releaseImageStorage(page)
+        const red = solidPng(64, 36, [255, 0, 0])
+        await chooseImage(page, 'A', red)
+        await saveScene(page, 'Red picture')
+        // Not a library program, so the deck cannot show it after a reload.
+        const plain = NOISE_DSL.replace('101', '505')
+        await page.evaluate(async dsl => {
+            const result = await window.__visualize.decks.A.load(dsl, 'Noise C')
+            if (!result.success) throw new Error(result.error)
+        }, plain)
+        await saveScene(page, 'Plain')
+
+        // Every page load holds image storage until the test releases it.
+        await page.reload()
+        await start(page)
+        expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).not.toBe(plain)
+        await recallScene(page, 'Red picture')
+        await recallScene(page, 'Plain')
+        await expect.poll(() => page.evaluate(() => window.__visualize.decks.A.currentDsl), { timeout: 30_000 * SCALE }).toBe(plain)
+        await releaseImageStorage(page)
+        // Let the first recall read its image, then drain deck A's loads.
+        await expect.poll(() => storedImages(page, [red.id]), { timeout: 30_000 * SCALE }).toEqual([fileOf(red)])
+        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1000)))
+        await page.evaluate(() => window.__visualize.decks.A._loadQueue)
+        expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).toBe(plain)
+    } finally {
+        await context.close()
+    }
+})
+
+test('a save made while older scenes\' images are still moving waits for them, then saves', async ({ browser }) => {
+    const context = await browser.newContext()
+    try {
+        const page = await context.newPage()
+        await preparePage(page)
+        await holdImageStorage(page)
+        const red = solidPng(736, 414, [255, 0, 0])
+        const green = solidPng(736, 414, [0, 255, 0])
+        const blue = solidPng(736, 414, [0, 0, 255])
+        await page.goto('/data/programs.json')
+        await page.evaluate(({ key, value }) => {
+            localStorage.clear()
+            localStorage.setItem(key, value)
+        }, { key: SCENES_KEY, value: JSON.stringify([legacyScene('Red and green', red, green), legacyScene('Blue', blue)]) })
+
+        await page.goto('/')
+        await start(page)
+        // Image storage is held, so the images are still moving. Fill what
+        // localStorage has left, as the old image text did.
+        const headroom = await page.evaluate(quota => {
+            let used = 0
+            for (let i = 0; i < localStorage.length; i++) used += localStorage.key(i).length + localStorage.getItem(localStorage.key(i)).length
+            for (let length = quota - used - 3; length > 0; length -= 64) {
+                try {
+                    localStorage.setItem('pad', 'x'.repeat(length))
+                    return quota - used - 3 - length
+                } catch {}
+            }
+            throw new Error('could not fill localStorage')
+        }, QUOTA)
+        console.log(`[save during migration] ${headroom} characters left before the save`)
+
+        await openScenes(page)
+        await page.fill('#scene-name-input', 'While moving')
+        await page.click('#scene-save')
+        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 1000)))
+        await expect(page.locator('#toast')).not.toContainText('Could not save')
+        expect(await storedScenes(page)).not.toContain('While moving')
+
+        await releaseImageStorage(page)
+        await expect(page.locator('#toast')).toContainText('saved: While moving', { timeout: 30_000 * SCALE })
+        const saved = JSON.parse(await storedScenes(page))
+        expect(saved.map(scene => scene.name)).toEqual(['Red and green', 'Blue', 'While moving'])
+        expect(JSON.stringify(saved)).not.toContain('data:')
+    } finally {
+        await context.close()
+    }
+})
+
+test('saves finish in click order and keep a name typed while they run', async ({ browser }) => {
+    const context = await browser.newContext()
+    try {
+        const page = await context.newPage()
+        await preparePage(page)
+        await holdImageStorage(page)
+        await page.goto('/')
+        await start(page)
+        const writes = await page.evaluate(() => window.__sceneWrites)
+        const red = solidPng(64, 36, [255, 0, 0])
+        await chooseImage(page, 'A', red)
+        await openScenes(page)
+        // The first save stores an image and waits on image storage.
+        await page.fill('#scene-name-input', 'Same')
+        await page.click('#scene-save')
+        await page.evaluate(async dsl => {
+            const result = await window.__visualize.decks.A.load(dsl, 'Noise A')
+            if (!result.success) throw new Error(result.error)
+        }, NOISE_DSL)
+        // The second, without images, is clicked later and must land last.
+        await page.fill('#scene-name-input', 'Same')
+        await page.click('#scene-save')
+        await page.fill('#scene-name-input', 'Draft')
+        await releaseImageStorage(page)
+        await expect.poll(() => page.evaluate(() => window.__sceneWrites), { timeout: 30_000 * SCALE }).toBe(writes + 2)
+        const saved = JSON.parse(await storedScenes(page)).find(scene => scene.name === 'Same')
+        expect(saved.decks.A.dsl).toBe(NOISE_DSL)
+        await expect(page.locator('#scene-name-input')).toHaveValue('Draft')
+        expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
     } finally {
         await context.close()
     }

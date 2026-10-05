@@ -26,6 +26,8 @@
 
 const STORAGE_KEY = 'visualize.scenes.v1'
 const MAX_SCENES = 16
+// Counts recalls, so a recall that a newer one overtook stops.
+let recallGeneration = 0
 
 export { STORAGE_KEY as SCENES_STORAGE_KEY, MAX_SCENES }
 
@@ -242,6 +244,7 @@ export class Scenes {
      */
     static async apply(snapshot, { decks, setXfade, setCurve, scheduler, setFx, setAutoMixConfig, setAutoXfadeConfig, setMixerState, setDeckDensity, refreshAudio, refreshRebind }) {
         const errors = []
+        const generation = ++recallGeneration
         // Per-deck density first — it affects the renderer's buffer
         // size and must be set before compile so the new program
         // renders at the right resolution from the first frame.
@@ -260,8 +263,13 @@ export class Scenes {
                 // won't have rebind.originalDsl, so fall back to dsl.
                 const originalDsl = d.rebind?.originalDsl || d.dsl
                 decks[id].images = d.images || []
+                const loadVersion = decks[id]._loadVersion
                 // The scene names its images; their files are in image storage.
                 await decks[id].loadStoredImages?.(originalDsl)
+                // Reading image storage takes time. A newer recall owns the
+                // decks now; a program loaded meanwhile owns this one.
+                if (generation !== recallGeneration) return errors
+                if (decks[id]._loadVersion !== loadVersion) continue
                 const res = await decks[id].load(originalDsl, d.title || '')
                 if (res.superseded) continue
                 if (!res.success) {
@@ -339,7 +347,8 @@ export class Scenes {
             }
         }
         if (!stored.size) return 0
-        const scenes = this._load()
+        const scenes = this._read()
+        if (!scenes) return 0
         let moved = 0
         for (const scene of scenes) {
             for (const deck of embedded(scene)) {
@@ -349,7 +358,13 @@ export class Scenes {
                 }
             }
         }
-        if (!moved) return 0
+        if (!moved) {
+            // Another tab may have moved them already: take the list it
+            // wrote, so the next save here does not write the text back.
+            this._scenes = scenes
+            this._emit()
+            return 0
+        }
         const previous = this._scenes
         this._scenes = scenes
         if (!this._persist()) {
@@ -362,13 +377,19 @@ export class Scenes {
     }
 
     _load() {
+        return this._read() || []
+    }
+
+    /** The stored scene list, or null when storage cannot be read or parsed. */
+    _read() {
         try {
             const storage = this._storage || (typeof localStorage !== 'undefined' ? localStorage : null)
-            const raw = storage?.getItem(STORAGE_KEY)
+            if (!storage) return null
+            const raw = storage.getItem(STORAGE_KEY)
             const list = raw ? JSON.parse(raw) : []
-            return Array.isArray(list) ? list : []
+            return Array.isArray(list) ? list : null
         } catch {
-            return []
+            return null
         }
     }
 

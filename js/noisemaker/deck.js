@@ -253,11 +253,15 @@ export class Deck {
     async setImage(blob, mediaIndex = 0) {
         const dsl = this._currentDsl, version = this._loadVersion
         this._imageTools ||= await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-        const image = await this._imageTools.prepareImage(blob)
+        // Read the bytes once, into memory. A picked File is read from disk
+        // on every use, so a later scene save would fail, or store different
+        // bytes under this id, once the file on disk changed or went away.
+        const bytes = await blob.arrayBuffer()
+        const image = await this._imageTools.prepareImage(new Blob([bytes], { type: blob.type }))
         if (this._disposed || version !== this._loadVersion) return { success: false, superseded: true }
         if (!this._imageTools.getMediaSources(dsl)[mediaIndex]) throw new Error('Select a program with a media effect first')
         if (!this.images.some(asset => asset.id === image.id)) this.images.push(image)
-        this.imageBlobs.set(image.id, blob.type === image.mimeType ? blob : new Blob([blob], { type: image.mimeType }))
+        this.imageBlobs.set(image.id, new Blob([bytes], { type: image.mimeType }))
         const updated = this._imageTools.replaceMediaUrls(dsl, (url, index) => index === mediaIndex ? `image:${image.id}` : url)
         return this.load(updated, this._currentName)
     }

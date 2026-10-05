@@ -33,7 +33,7 @@ import {
 } from './syncOutput.js'
 import { createSyncOutputDialog } from './syncOutputDialog.js'
 import { Scenes } from './scenes.js'
-import { getSceneImage, migrateSceneImages, storeSceneImages } from './sceneImages.js'
+import { getSceneImage, migrateSceneImages, sceneImagesMigrated, storeSceneImages } from './sceneImages.js'
 import * as rebind from './rebind.js'
 import { AutoXfade } from './autoxfade.js'
 import { DeckMedia } from './deckMedia.js'
@@ -1907,7 +1907,8 @@ async function boot() {
     // ── Scenes ───────────────────────────────────────────────────────────
     const scenes = new Scenes()
     // Scenes saved before images had their own storage hold them as text in
-    // localStorage. Move the bytes to IndexedDB; non-blocking.
+    // localStorage. Move the bytes to IndexedDB; non-blocking, but saves
+    // wait for it (sceneImagesMigrated).
     migrateSceneImages(scenes).catch(err => console.error('[Scenes] could not move scene images', err))
     const scenesDrawer = $('scenes-drawer')
     const scenesList = $('scenes-list')
@@ -2292,7 +2293,10 @@ async function boot() {
     $('scenes-close').addEventListener('click', () => {
         closeScenesDrawer({ restoreFocus: true })
     })
-    $('scene-save').addEventListener('click', async () => {
+    // Saves run one after another, in click order, so an earlier click
+    // never finishes last and overwrites a later one.
+    let sceneSaves = Promise.resolve()
+    $('scene-save').addEventListener('click', () => {
         const name = sceneNameInput.value
         if (!name.trim()) {
             toast('name your scene first')
@@ -2300,21 +2304,34 @@ async function boot() {
             return
         }
         let snap
+        let images
         try {
             snap = Scenes.snapshot(snapshotAccessors())
-            // Images first, as files: a saved scene must never name an image
-            // that is not stored.
-            await storeSceneImages(Scenes.imageFiles(snap, state.decks))
+            images = Scenes.imageFiles(snap, state.decks)
         } catch (error) {
             toast(`Could not save scene: ${error.message}`, 5000)
             return
         }
-        if (!scenes.save(name, snap)) {
-            toast('Could not save scene: browser storage is full or unavailable', 5000)
-            return
-        }
-        sceneNameInput.value = ''
-        toast(`saved: ${name.trim()}`)
+        sceneSaves = sceneSaves.then(async () => {
+            // On a full profile there is room only once older scenes' images
+            // have moved out of localStorage, which starts at page load.
+            await sceneImagesMigrated()
+            try {
+                // Images first, as files: a saved scene must never name an
+                // image that is not stored.
+                await storeSceneImages(images)
+            } catch (error) {
+                toast(`Could not save scene: ${error.message}`, 5000)
+                return
+            }
+            if (!scenes.save(name, snap)) {
+                toast('Could not save scene: browser storage is full or unavailable', 5000)
+                return
+            }
+            // Keep a name typed for the next save while this one ran.
+            if (sceneNameInput.value === name) sceneNameInput.value = ''
+            toast(`saved: ${name.trim()}`)
+        }).catch(error => console.error('[Scenes] save failed', error))
     })
     sceneNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {

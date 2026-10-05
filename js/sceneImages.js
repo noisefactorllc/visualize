@@ -21,6 +21,7 @@ const IMAGE_ID = /^[a-f0-9]{64}$/
 const DATA_URL = /^data:(image\/[\w.+-]+);base64,([A-Za-z0-9+/]*={0,2})$/
 
 let _dbPromise = null
+let _migration = null
 
 function openDb() {
     if (_dbPromise) return _dbPromise
@@ -32,11 +33,17 @@ function openDb() {
         }
         req.onsuccess = () => {
             const db = req.result
-            // Let a newer page version upgrade the database.
-            db.onversionchange = () => { db.close(); _dbPromise = null }
+            // Let a newer version in another tab upgrade the database, and
+            // reopen on next use rather than holding a closed connection.
+            db.onversionchange = () => {
+                db.close()
+                _dbPromise = null
+            }
+            db.onclose = () => { _dbPromise = null }
             resolve(db)
         }
         req.onerror = () => reject(req.error)
+        req.onblocked = () => reject(new Error('Image storage is blocked by another Visualize tab'))
     }).catch(err => {
         // Try again on the next call: storage can come back (a freed disk,
         // a profile that leaves private mode).
@@ -48,13 +55,17 @@ function openDb() {
 
 /**
  * Run `work` in one transaction and settle when the transaction commits, so
- * a caller that awaits a write knows the bytes are on disk.
+ * a caller that awaits a write knows the bytes are on disk. Writes ask for
+ * strict durability, because a scene drops its embedded copy of an image as
+ * soon as the stored one commits.
  */
 async function transact(mode, work) {
     const db = await openDb()
     return new Promise((resolve, reject) => {
         try {
-            const tx = db.transaction(STORE, mode)
+            const tx = mode === 'readwrite'
+                ? db.transaction(STORE, mode, { durability: 'strict' })
+                : db.transaction(STORE, mode)
             const req = work(tx.objectStore(STORE))
             tx.oncomplete = () => resolve(req?.result)
             tx.onerror = () => reject(tx.error)
@@ -139,11 +150,28 @@ export async function storeEmbeddedImages(images = []) {
 
 /**
  * Move images out of scenes saved before images had their own storage,
- * which frees their localStorage. Runs once per page load.
+ * which frees their localStorage. Runs once per page load; saves wait for
+ * it (see sceneImagesMigrated), because until it finishes a full
+ * localStorage has no room for them.
  *
  * @param {import('./scenes.js').Scenes} scenes
+ * @returns {Promise<void>}
  */
-export async function migrateSceneImages(scenes) {
-    if (typeof indexedDB === 'undefined') return
-    await scenes.moveEmbeddedImages(storeEmbeddedImages)
+export function migrateSceneImages(scenes) {
+    if (typeof indexedDB === 'undefined') return Promise.resolve()
+    _migration = scenes.moveEmbeddedImages(storeEmbeddedImages).then(() => {})
+    return _migration
+}
+
+/**
+ * Settles when the startup migration has finished, failed, or run longer
+ * than `timeoutMs`. Never rejects.
+ * @param {number} [timeoutMs]
+ * @returns {Promise<void>}
+ */
+export function sceneImagesMigrated(timeoutMs = 15000) {
+    if (!_migration) return Promise.resolve()
+    let timer
+    const timeout = new Promise(resolve => { timer = setTimeout(resolve, timeoutMs) })
+    return Promise.race([_migration.catch(() => {}), timeout]).finally(() => clearTimeout(timer))
 }

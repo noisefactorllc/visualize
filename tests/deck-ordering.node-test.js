@@ -62,7 +62,11 @@ test('choosing a deck image keeps original asset bytes and replaces only the sel
     h.deck._currentDsl = 'two media slots'
     h.deck.images = [{ id: 'other', dataUrl: 'other-image-bytes' }]
     h.deck._imageTools = {
-        prepareImage: async blob => { assert.equal(blob, file); return asset },
+        prepareImage: async blob => {
+            assert.equal(blob.type, 'image/png')
+            assert.equal(await blob.text(), 'original-image-bytes')
+            return asset
+        },
         getMediaSources: () => [{}, {}],
         replaceMediaUrls: (dsl, replace) => {
             assert.equal(dsl, 'two media slots')
@@ -78,8 +82,50 @@ test('choosing a deck image keeps original asset bytes and replaces only the sel
     h.compiles[0].resolve()
     assert.equal((await selected).success, true)
     assert.deepEqual(h.deck.images, [{ id: 'other', dataUrl: 'other-image-bytes' }, asset])
-    assert.equal(h.deck.imageBlobs.get('selected'), file, 'the chosen file itself is kept for scene storage')
+    const kept = h.deck.imageBlobs.get('selected')
+    assert.equal(kept.type, 'image/png')
+    assert.equal(await kept.text(), 'original-image-bytes', 'the chosen file\'s bytes are kept for scene storage')
     assert.equal(h.deck.currentDsl, 'two bound media slots')
+})
+
+test('a chosen file is read once, so a scene save never reads it from disk again', async () => {
+    const h = harness()
+    // A picked File reads its disk file on every use; once that file is
+    // edited, moved or deleted, every read fails.
+    let reads = 0
+    class PickedFile extends Blob {
+        async arrayBuffer() {
+            if (++reads > 1) throw new DOMException('The file could not be read', 'NotReadableError')
+            return super.arrayBuffer()
+        }
+        async text() { throw new DOMException('The file could not be read', 'NotReadableError') }
+        stream() { throw new DOMException('The file could not be read', 'NotReadableError') }
+        slice() { throw new DOMException('The file could not be read', 'NotReadableError') }
+    }
+    const file = new PickedFile(['picked-image-bytes'], { type: 'image/png' })
+    const asset = { id: 'picked', dataUrl: 'picked text', mimeType: 'image/png' }
+    h.deck._currentDsl = 'one media slot'
+    h.deck._imageTools = {
+        prepareImage: async blob => {
+            assert.equal(await blob.text(), 'picked-image-bytes')
+            return asset
+        },
+        getMediaSources: () => [{}],
+        getReferencedImages: (dsl, images) => images.filter(image => image.id === 'picked'),
+        replaceMediaUrls: () => 'one bound media slot',
+        stripMediaUrls: text => text,
+        bindMediaImages: async () => {},
+    }
+    const selected = h.deck.setImage(file)
+    await flush()
+    h.compiles[0].resolve()
+    assert.equal((await selected).success, true)
+    assert.equal(reads, 1, 'the file was read once')
+    const [saved] = h.deck.getImageFiles('one bound media slot')
+    assert.equal(saved.id, 'picked')
+    assert.equal(saved.blob.type, 'image/png')
+    assert.equal(Buffer.from(await saved.blob.arrayBuffer()).toString(), 'picked-image-bytes')
+    assert.equal(reads, 1, 'saving read the bytes held in memory, not the file')
 })
 
 test('a chosen file without a type is kept as its bytes with the detected image type', async () => {

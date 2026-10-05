@@ -380,6 +380,65 @@ test('a scene saved before image storage is recalled from its embedded images', 
     assert.equal(compiled, true)
 })
 
+function deferredGate() {
+    let open
+    const gate = new Promise(resolve => { open = resolve })
+    return { gate, open }
+}
+
+/** A deck that records its loads and, like Deck, counts them in _loadVersion. */
+function recordingDeck(gates = {}) {
+    return {
+        rebind: {}, images: [], _loadVersion: 0, loads: [], setSpeed() {},
+        async loadStoredImages(dsl) { await gates[dsl] },
+        async load(dsl) {
+            this._loadVersion++
+            this.loads.push(dsl)
+            return { success: true }
+        },
+    }
+}
+
+test('a recall that waits on image storage loses to a newer recall', async () => {
+    const reading = deferredGate()
+    const decks = { A: recordingDeck({ [imageDsl(RED.id)]: reading.gate }), B: recordingDeck() }
+    const xfades = []
+    const accessors = { ...applyTo(decks), setXfade: value => xfades.push(value) }
+    const withImage = { name: 'Image', xfade: 0.1, decks: {
+        A: { title: 'Picture', dsl: imageDsl(RED.id), speed: 1 },
+        B: { title: 'Plain', dsl: 'noise(seed: 1).write(o0)', speed: 1 },
+    } }
+    const plain = { name: 'Plain', xfade: 0.9, decks: {
+        A: { title: 'Plain A', dsl: 'noise(seed: 2).write(o0)', speed: 1 },
+        B: { title: 'Plain B', dsl: 'noise(seed: 3).write(o0)', speed: 1 },
+    } }
+    const first = Scenes.apply(withImage, accessors)
+    assert.deepEqual(await Scenes.apply(plain, accessors), [])
+    reading.open()
+    assert.deepEqual(await first, [])
+    assert.deepEqual(decks.A.loads, ['noise(seed: 2).write(o0)'], 'the first recall never loads after the second')
+    assert.deepEqual(decks.B.loads, ['noise(seed: 3).write(o0)'])
+    assert.deepEqual(xfades, [0.9], 'the overtaken recall applies none of its settings')
+})
+
+test('a program loaded while a recall reads image storage keeps its deck', async () => {
+    const reading = deferredGate()
+    const decks = { A: recordingDeck({ [imageDsl(RED.id)]: reading.gate }), B: recordingDeck() }
+    const xfades = []
+    const scene = { name: 'Image', xfade: 0.4, decks: {
+        A: { title: 'Picture', dsl: imageDsl(RED.id), speed: 1 },
+        B: { title: 'Plain', dsl: 'noise(seed: 1).write(o0)', speed: 1 },
+    } }
+    const recall = Scenes.apply(scene, { ...applyTo(decks), setXfade: value => xfades.push(value) })
+    await Promise.resolve()
+    await decks.A.load('library program')
+    reading.open()
+    assert.deepEqual(await recall, [])
+    assert.deepEqual(decks.A.loads, ['library program'], 'the recall does not replace the newer program')
+    assert.deepEqual(decks.B.loads, ['noise(seed: 1).write(o0)'], 'the other deck is still recalled')
+    assert.deepEqual(xfades, [0.4])
+})
+
 test('moving embedded images strips the text only after each image is stored, once per image', async () => {
     const storage = createMockStorage()
     storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([
@@ -472,6 +531,26 @@ test('a scene list that cannot be re-read is never written back', async () => {
     assert.equal(await scenes.moveEmbeddedImages(async () => { storage.getItem = () => '{"corrupt' }), 0)
     assert.equal(writes, 0)
     assert.deepEqual(scenes.byName('Legacy').decks.A.images, [RED])
+})
+
+test('images another tab already moved are not written back by the next save here', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([legacyScene('Legacy', [RED])]))
+    const scenes = new Scenes({ storage })
+    let emitted = 0
+    scenes.onChange(() => emitted++)
+    const moved = await scenes.moveEmbeddedImages(async () => {
+        // The other tab stores the same image and strips the text first.
+        const other = new Scenes({ storage })
+        assert.equal(await other.moveEmbeddedImages(async () => {}), 1)
+    })
+    assert.equal(moved, 0)
+    assert.equal('images' in scenes.byName('Legacy').decks.A, false, 'memory takes the list the other tab wrote')
+    assert.equal(emitted, 1)
+    assert.equal(scenes.save('Saved here', createDummySnapshot('here')), true)
+    const stored = storage.dump(SCENES_STORAGE_KEY)
+    assert.deepEqual(stored.map(scene => scene.name), ['Legacy', 'Saved here'])
+    assert.equal(JSON.stringify(stored).includes('data:'), false)
 })
 
 /**
