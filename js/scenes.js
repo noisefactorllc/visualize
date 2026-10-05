@@ -16,6 +16,10 @@
  * existing 1-6 main FX shortcuts). Saving a scene with the same name
  * overwrites.
  *
+ * A scene names each image its decks show as `image:<sha256>` in its DSL;
+ * the image files are stored once each in IndexedDB by sceneImages.js,
+ * never as text in the scene.
+ *
  * Recall is a snap — no animation between current and target state. For
  * smooth scene-to-scene transitions, use Auto-VJ mode instead.
  */
@@ -97,14 +101,12 @@ export class Scenes {
                 A: {
                     title: decks.A.currentName,
                     dsl: decks.A.currentDsl,
-                    images: (decks.A.getImageAssets?.() ?? decks.A.images ?? []).map(image => ({ ...image })),
                     speed: decks.A._speed ?? 1,
                     rebind: cloneRebind(decks.A.rebind)
                 },
                 B: {
                     title: decks.B.currentName,
                     dsl: decks.B.currentDsl,
-                    images: (decks.B.getImageAssets?.() ?? decks.B.images ?? []).map(image => ({ ...image })),
                     speed: decks.B._speed ?? 1,
                     rebind: cloneRebind(decks.B.rebind)
                 }
@@ -119,6 +121,17 @@ export class Scenes {
             mixer: getMixerState?.() || null,
             deckDensity: getDeckDensity?.() || null
         }
+    }
+
+    /**
+     * The image files a snapshot's decks show, for sceneImages.js to store
+     * before the scene is saved. Call it right after snapshot(), so the
+     * files match the DSL it captured.
+     *
+     * @returns {Array<{id: string, blob: Blob}>}
+     */
+    static imageFiles(snapshot, decks) {
+        return ['A', 'B'].flatMap(id => decks[id]?.getImageFiles?.(snapshot.decks?.[id]?.dsl) ?? [])
     }
 
     save(name, snapshot) {
@@ -247,6 +260,8 @@ export class Scenes {
                 // won't have rebind.originalDsl, so fall back to dsl.
                 const originalDsl = d.rebind?.originalDsl || d.dsl
                 decks[id].images = d.images || []
+                // The scene names its images; their files are in image storage.
+                await decks[id].loadStoredImages?.(originalDsl)
                 const res = await decks[id].load(originalDsl, d.title || '')
                 if (res.superseded) continue
                 if (!res.success) {
@@ -292,6 +307,58 @@ export class Scenes {
             catch (err) { errors.push(`mixer: ${err?.message || err}`) }
         }
         return errors
+    }
+
+    /**
+     * Move images that older saves kept inside scenes, as base64 text, out
+     * to image storage, then remove the text from the stored scenes.
+     *
+     * A deck loses its embedded images only after `store` has committed
+     * every one of them, so a failure leaves it exactly as it was. Storage
+     * is re-read after the writes, because a save made meanwhile, here or in
+     * another tab, must not be overwritten by the list this started with.
+     *
+     * @param {(images: Array<{id: string, dataUrl: string}>) => Promise<void>} store
+     * @returns {Promise<number>} how many decks' images were moved
+     */
+    async moveEmbeddedImages(store) {
+        const embedded = scene => [scene?.decks?.A, scene?.decks?.B]
+            .filter(deck => Array.isArray(deck?.images) && deck.images.length > 0)
+        const stored = new Set()
+        for (const scene of this._scenes) {
+            for (const deck of embedded(scene)) {
+                for (const image of deck.images) {
+                    if (stored.has(image?.id)) continue
+                    try {
+                        await store([image])
+                        stored.add(image.id)
+                    } catch (err) {
+                        console.error(`[Scenes] could not move an image of scene "${scene.name}"`, err)
+                    }
+                }
+            }
+        }
+        if (!stored.size) return 0
+        const scenes = this._load()
+        let moved = 0
+        for (const scene of scenes) {
+            for (const deck of embedded(scene)) {
+                if (deck.images.every(image => stored.has(image?.id))) {
+                    delete deck.images
+                    moved++
+                }
+            }
+        }
+        if (!moved) return 0
+        const previous = this._scenes
+        this._scenes = scenes
+        if (!this._persist()) {
+            // Nothing was written: storage still holds the images as text.
+            this._scenes = previous
+            return 0
+        }
+        this._emit()
+        return moved
     }
 
     _load() {

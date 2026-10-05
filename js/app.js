@@ -33,6 +33,7 @@ import {
 } from './syncOutput.js'
 import { createSyncOutputDialog } from './syncOutputDialog.js'
 import { Scenes } from './scenes.js'
+import { getSceneImage, migrateSceneImages, storeSceneImages } from './sceneImages.js'
 import * as rebind from './rebind.js'
 import { AutoXfade } from './autoxfade.js'
 import { DeckMedia } from './deckMedia.js'
@@ -265,11 +266,13 @@ async function boot() {
     state.decks.A = new Deck($('deck-a-canvas'), {
         id: 'deckA', width: state.mainRes.width, height: state.mainRes.height,
         loopDuration: state.loopDuration, preferWebGPU: state.preferWebGPU,
+        storedImage: getSceneImage,
         onError: (err) => console.error('[deckA]', err)
     })
     state.decks.B = new Deck($('deck-b-canvas'), {
         id: 'deckB', width: state.mainRes.width, height: state.mainRes.height,
         loopDuration: state.loopDuration, preferWebGPU: state.preferWebGPU,
+        storedImage: getSceneImage,
         onError: (err) => console.error('[deckB]', err)
     })
 
@@ -1903,6 +1906,9 @@ async function boot() {
 
     // ── Scenes ───────────────────────────────────────────────────────────
     const scenes = new Scenes()
+    // Scenes saved before images had their own storage hold them as text in
+    // localStorage. Move the bytes to IndexedDB; non-blocking.
+    migrateSceneImages(scenes).catch(err => console.error('[Scenes] could not move scene images', err))
     const scenesDrawer = $('scenes-drawer')
     const scenesList = $('scenes-list')
     const sceneNameInput = $('scene-name-input')
@@ -2286,7 +2292,7 @@ async function boot() {
     $('scenes-close').addEventListener('click', () => {
         closeScenesDrawer({ restoreFocus: true })
     })
-    $('scene-save').addEventListener('click', () => {
+    $('scene-save').addEventListener('click', async () => {
         const name = sceneNameInput.value
         if (!name.trim()) {
             toast('name your scene first')
@@ -2296,6 +2302,9 @@ async function boot() {
         let snap
         try {
             snap = Scenes.snapshot(snapshotAccessors())
+            // Images first, as files: a saved scene must never name an image
+            // that is not stored.
+            await storeSceneImages(Scenes.imageFiles(snap, state.decks))
         } catch (error) {
             toast(`Could not save scene: ${error.message}`, 5000)
             return

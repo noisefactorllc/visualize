@@ -25,7 +25,7 @@ function harness() {
             this.rendered = dsl
         }, start() { this.isRunning = true }, stop() {},
  dispose() { this.disposeCalls = (this.disposeCalls || 0) + 1 }, }
-    const context = vm.createContext({ console, CanvasRenderer: function () { return engine },
+    const context = vm.createContext({ console, Blob, CanvasRenderer: function () { return engine },
         CDN_BASE: '', extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })
     const Deck = vm.runInContext(source + '\nDeck', context)
     const deck = new Deck({})
@@ -57,8 +57,8 @@ test('deck compiles engine text and binds original image references before start
 
 test('choosing a deck image keeps original asset bytes and replaces only the selected media call', async () => {
     const h = harness()
-    const asset = { id: 'selected', dataUrl: 'original-image-bytes' }
-    const file = new Blob(['original-image-bytes'])
+    const asset = { id: 'selected', dataUrl: 'original-image-bytes', mimeType: 'image/png' }
+    const file = new Blob(['original-image-bytes'], { type: 'image/png' })
     h.deck._currentDsl = 'two media slots'
     h.deck.images = [{ id: 'other', dataUrl: 'other-image-bytes' }]
     h.deck._imageTools = {
@@ -78,7 +78,113 @@ test('choosing a deck image keeps original asset bytes and replaces only the sel
     h.compiles[0].resolve()
     assert.equal((await selected).success, true)
     assert.deepEqual(h.deck.images, [{ id: 'other', dataUrl: 'other-image-bytes' }, asset])
+    assert.equal(h.deck.imageBlobs.get('selected'), file, 'the chosen file itself is kept for scene storage')
     assert.equal(h.deck.currentDsl, 'two bound media slots')
+})
+
+test('a chosen file without a type is kept as its bytes with the detected image type', async () => {
+    const h = harness()
+    const file = new Blob(['untyped-image-bytes'])
+    h.deck._currentDsl = 'one media slot'
+    h.deck._imageTools = {
+        prepareImage: async () => ({ id: 'untyped', dataUrl: 'untyped text', mimeType: 'image/png' }),
+        getMediaSources: () => [{}],
+        replaceMediaUrls: () => 'one bound media slot',
+        stripMediaUrls: text => text,
+        bindMediaImages: async () => {},
+    }
+    const selected = h.deck.setImage(file)
+    await flush()
+    h.compiles[0].resolve()
+    assert.equal((await selected).success, true)
+    const kept = h.deck.imageBlobs.get('untyped')
+    assert.equal(kept.type, 'image/png')
+    assert.equal(await kept.text(), 'untyped-image-bytes')
+})
+
+test('a saved scene takes the held original files and decodes only records without one', () => {
+    const h = harness()
+    const held = new Blob(['held bytes'], { type: 'image/png' })
+    const decoded = new Blob(['decoded bytes'], { type: 'image/png' })
+    const decodedFrom = []
+    h.deck.images = [{ id: 'held', dataUrl: 'held text' }, { id: 'shared', dataUrl: 'shared text' }]
+    h.deck.imageBlobs.set('held', held)
+    h.deck._imageTools = {
+        getReferencedImages: (dsl, images) => {
+            assert.equal(dsl, 'two images')
+            return images
+        },
+        imageToBlob: image => {
+            decodedFrom.push(image.id)
+            return decoded
+        },
+    }
+    const files = h.deck.getImageFiles('two images')
+    assert.equal(files.length, 2)
+    assert.equal(files[0].id, 'held')
+    assert.equal(files[0].blob, held)
+    assert.equal(files[1].id, 'shared')
+    assert.equal(files[1].blob, decoded)
+    assert.deepEqual(decodedFrom, ['shared'])
+})
+
+test('a scene save fails while a referenced image has no bytes yet', () => {
+    const h = harness()
+    h.deck._imageTools = {
+        getReferencedImages: () => { throw new Error('Image bytes are not available yet; wait for images to load and try again') },
+    }
+    assert.throws(() => h.deck.getImageFiles('media(url:"image:pending").write(o0)'), /not available yet/)
+})
+
+test('recalling a scene prepares its stored images like chosen files, before compiling', async () => {
+    const h = harness()
+    const id = 'a'.repeat(64)
+    const stored = new Blob(['stored bytes'], { type: 'image/png' })
+    const record = { id, dataUrl: 'record made in memory', mimeType: 'image/png' }
+    const asked = []
+    h.deck.storedImage = async wanted => {
+        asked.push(wanted)
+        return wanted === id ? stored : null
+    }
+    h.deck.images = [{ id: 'held', dataUrl: 'held text' }]
+    h.deck._imageTools = {
+        getMediaSources: () => [
+            { url: `image:${id}` }, { url: 'image:held' }, { url: 'image:missing' }, { url: null }, { url: 'https://example.com/a.png' },
+        ],
+        prepareImage: async blob => {
+            assert.equal(blob, stored)
+            return record
+        },
+    }
+    await h.deck.loadStoredImages('media(url:"image:...").write(o0)')
+    assert.deepEqual(asked, [id, 'missing'], 'held images and other URLs are not looked up')
+    assert.equal(h.deck.images.length, 2)
+    assert.equal(h.deck.images[1], record)
+    assert.equal(h.deck.imageBlobs.get(id), stored, 'the stored file is kept for the next save')
+    assert.equal(h.deck.imageBlobs.has('missing'), false)
+    assert.equal(h.compiles.length, 0)
+})
+
+test('recalling a scene leaves programs without images, or decks without storage, alone', async () => {
+    const h = harness()
+    h.deck._imageTools = { getMediaSources: () => { throw new Error('must not parse') } }
+    h.deck.storedImage = async () => { throw new Error('must not read storage') }
+    await h.deck.loadStoredImages('noise().write(o0)')
+    h.deck.storedImage = null
+    await h.deck.loadStoredImages('media(url:"image:x").write(o0)')
+    assert.equal(h.deck.images.length, 0)
+})
+
+test('a stored image whose bytes do not match its id fails the recall', async () => {
+    const h = harness()
+    h.deck.storedImage = async () => new Blob(['other bytes'], { type: 'image/png' })
+    h.deck._imageTools = {
+        getMediaSources: () => [{ url: `image:${'b'.repeat(64)}` }],
+        prepareImage: async () => ({ id: 'c'.repeat(64), dataUrl: 'other' }),
+    }
+    await assert.rejects(h.deck.loadStoredImages('media(url:"image:b").write(o0)'), /do not match their id/)
+    assert.equal(h.deck.images.length, 0)
+    assert.equal(h.deck.imageBlobs.size, 0)
 })
 
 for (const secondMethod of ['load', 'reloadDsl']) {

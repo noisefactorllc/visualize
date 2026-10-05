@@ -290,20 +290,244 @@ test('Scenes.prototype.rename: exact match has precedence over case-insensitive 
     assert.equal(scenes.byIndex(1).name, 'Relaxed')
 })
 
-test('scene images survive durable save and are installed before deck compilation', async () => {
-    const image = { id: 'image-id', dataUrl: 'data:image/png;base64,original' }
-    const deck = { currentDsl: 'media(url:"image:image-id").write(o0)', images: [image] }
-    const snapshot = Scenes.snapshot({ decks: { A: deck, B: deck }, getXfade: () => 0, getCurve: () => 'linear', scheduler: {}, getFxState: () => ({}), getAutoMixConfig: () => ({}) })
+const RED = { id: 'a'.repeat(64), dataUrl: 'data:image/png;base64,UkVE' }
+const GREEN = { id: 'b'.repeat(64), dataUrl: 'data:image/png;base64,R1JFRU4=' }
+const imageDsl = id => `search synth\nmedia(url: "image:${id}").write(o0)\nrender(o0)`
+const applyTo = decks => ({ decks, scheduler: {}, setXfade() {}, setCurve() {}, setFx() {}, setAutoMixConfig() {} })
+
+/** A deck as scenes saved it before images had their own storage. */
+function legacyDeck(images) {
+    const dsl = images.length ? imageDsl(images[0].id) : 'search synth\nnoise().write(o0)\nrender(o0)'
+    return { title: 'Deck', dsl, images, speed: 1, rebind: { originalDsl: dsl, bandpass: true, oscillatorCount: 0, overrides: {} } }
+}
+
+function legacyScene(name, a = [], b = []) {
+    return { name, ...createDummySnapshot(name), decks: { A: legacyDeck(a), B: legacyDeck(b) } }
+}
+
+async function quietly(work) {
+    const error = console.error
+    console.error = () => {}
+    try { return await work() } finally { console.error = error }
+}
+
+test('a saved scene keeps its image references and never image bytes', () => {
+    const file = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
+    const asked = []
+    const deck = {
+        currentDsl: imageDsl(RED.id), currentName: 'Picture', rebind: { originalDsl: imageDsl(RED.id) },
+        images: [RED],
+        getImageFiles(dsl) { asked.push(dsl); return [{ id: RED.id, blob: file }] },
+    }
+    const decks = { A: deck, B: deck }
+    const snapshot = Scenes.snapshot({ decks, getXfade: () => 0, getCurve: () => 'linear', scheduler: {}, getFxState: () => ({}), getAutoMixConfig: () => ({}) })
+    assert.deepEqual(Scenes.imageFiles(snapshot, decks), [{ id: RED.id, blob: file }, { id: RED.id, blob: file }])
+    assert.deepEqual(asked, [imageDsl(RED.id), imageDsl(RED.id)])
     const storage = createMockStorage()
     assert.equal(new Scenes({ storage }).save('Images', snapshot), true)
-    const loaded = new Scenes({ storage }).byName('Images')
-    let compiles = 0
-    const target = () => ({ rebind: {}, setSpeed() {}, async load(dsl) {
-        assert.deepEqual(this.images, [image]); assert.equal(dsl, deck.currentDsl); compiles++; return { success: true }
-    } })
-    const errors = await Scenes.apply(loaded, { decks: { A: target(), B: target() }, scheduler: {}, setXfade() {}, setCurve() {}, setFx() {}, setAutoMixConfig() {} })
-    assert.deepEqual(errors, [])
-    assert.equal(compiles, 2)
+    assert.equal(storage.getItem(SCENES_STORAGE_KEY).includes('data:'), false)
+    const saved = new Scenes({ storage }).byName('Images')
+    for (const id of ['A', 'B']) {
+        assert.equal(saved.decks[id].dsl, imageDsl(RED.id))
+        assert.equal('images' in saved.decks[id], false)
+    }
+})
+
+test('recall readies each deck\'s stored images before that deck compiles', async () => {
+    const scene = { name: 'Images', decks: {
+        A: { title: 'Picture', dsl: imageDsl(RED.id), speed: 1, rebind: { originalDsl: imageDsl(RED.id) } },
+        B: { title: 'Picture', dsl: imageDsl(GREEN.id), speed: 1, rebind: null },
+    } }
+    const order = []
+    const target = name => ({
+        rebind: {}, images: [{ id: 'previous', dataUrl: 'previous text' }], setSpeed() {},
+        async loadStoredImages(dsl) {
+            assert.deepEqual(this.images, [], 'a scene brings no embedded images')
+            order.push(`${name} images ${dsl}`)
+        },
+        async load(dsl) {
+            order.push(`${name} compile ${dsl}`)
+            return { success: true }
+        },
+    })
+    assert.deepEqual(await Scenes.apply(scene, applyTo({ A: target('A'), B: target('B') })), [])
+    assert.deepEqual(order, [
+        `A images ${imageDsl(RED.id)}`, `A compile ${imageDsl(RED.id)}`,
+        `B images ${imageDsl(GREEN.id)}`, `B compile ${imageDsl(GREEN.id)}`,
+    ])
+})
+
+test('a recall whose stored image cannot be prepared reports it and still recalls the other deck', async () => {
+    const scene = { name: 'Images', decks: {
+        A: { title: 'Picture', dsl: imageDsl(RED.id), speed: 1 },
+        B: { title: 'Plain', dsl: 'noise().write(o0)', speed: 1 },
+    } }
+    const compiled = []
+    const target = name => ({ rebind: {}, images: [], setSpeed() {},
+        async loadStoredImages() { if (name === 'A') throw new Error('Stored image bytes do not match their id') },
+        async load() { compiled.push(name); return { success: true } } })
+    const errors = await Scenes.apply(scene, applyTo({ A: target('A'), B: target('B') }))
+    assert.deepEqual(errors, ['deck A: Stored image bytes do not match their id'])
+    assert.deepEqual(compiled, ['B'])
+})
+
+test('a scene saved before image storage is recalled from its embedded images', async () => {
+    const scene = { name: 'Old', decks: { A: legacyDeck([RED]) } }
+    let compiled = false
+    const deck = { rebind: {}, images: [], setSpeed() {}, async loadStoredImages() {},
+        async load() { assert.deepEqual(this.images, [RED]); compiled = true; return { success: true } } }
+    assert.deepEqual(await Scenes.apply(scene, applyTo({ A: deck, B: deck })), [])
+    assert.equal(compiled, true)
+})
+
+test('moving embedded images strips the text only after each image is stored, once per image', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([
+        legacyScene('Red and green', [RED], [GREEN]),
+        legacyScene('Red again', [RED]),
+        legacyScene('Plain'),
+    ]))
+    const scenes = new Scenes({ storage })
+    let emitted = 0
+    scenes.onChange(() => emitted++)
+    const received = []
+    const moved = await scenes.moveEmbeddedImages(async images => {
+        assert.ok(storage.getItem(SCENES_STORAGE_KEY).includes(images[0].dataUrl), 'the text stays until its bytes are stored')
+        received.push(...images)
+    })
+    assert.equal(moved, 3)
+    assert.deepEqual(received, [RED, GREEN])
+    const stored = storage.dump(SCENES_STORAGE_KEY)
+    assert.equal(JSON.stringify(stored).includes('data:'), false)
+    assert.deepEqual(stored.map(scene => scene.name), ['Red and green', 'Red again', 'Plain'])
+    assert.equal(stored[0].decks.A.dsl, imageDsl(RED.id))
+    assert.equal(stored[0].decks.B.dsl, imageDsl(GREEN.id))
+    assert.equal('images' in stored[0].decks.A, false)
+    assert.equal('images' in stored[0].decks.B, false)
+    assert.equal('images' in stored[1].decks.A, false)
+    assert.deepEqual(stored[1].decks.B.images, [], 'an empty list carries no image and is left alone')
+    assert.equal('images' in scenes.byName('Red again').decks.A, false, 'memory matches storage')
+    assert.equal(emitted, 1)
+    assert.equal(await scenes.moveEmbeddedImages(async () => { throw new Error('nothing is left to move') }), 0)
+})
+
+test('a deck whose image cannot be stored keeps all of its embedded images', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([legacyScene('Mixed', [RED, GREEN], [RED])]))
+    const scenes = new Scenes({ storage })
+    const moved = await quietly(() => scenes.moveEmbeddedImages(async images => {
+        if (images[0].id === GREEN.id) throw new Error('IndexedDB unavailable')
+    }))
+    assert.equal(moved, 1)
+    const stored = storage.dump(SCENES_STORAGE_KEY)[0]
+    assert.deepEqual(stored.decks.A.images, [RED, GREEN])
+    assert.equal('images' in stored.decks.B, false)
+})
+
+test('nothing is written when no image can be stored', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([legacyScene('Legacy', [RED])]))
+    const before = storage.getItem(SCENES_STORAGE_KEY)
+    const scenes = new Scenes({ storage })
+    let writes = 0
+    const setItem = storage.setItem
+    storage.setItem = (...args) => { writes++; return setItem(...args) }
+    assert.equal(await quietly(() => scenes.moveEmbeddedImages(async () => { throw new Error('IndexedDB unavailable') })), 0)
+    assert.equal(writes, 0)
+    assert.equal(storage.getItem(SCENES_STORAGE_KEY), before)
+    assert.deepEqual(scenes.byName('Legacy').decks.A.images, [RED])
+})
+
+test('a scene saved while images are moving is kept', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([legacyScene('Legacy', [RED])]))
+    const scenes = new Scenes({ storage })
+    assert.equal(await scenes.moveEmbeddedImages(async () => {
+        assert.equal(new Scenes({ storage }).save('Saved meanwhile', createDummySnapshot('meanwhile')), true)
+    }), 1)
+    const stored = storage.dump(SCENES_STORAGE_KEY)
+    assert.deepEqual(stored.map(scene => scene.name), ['Legacy', 'Saved meanwhile'])
+    assert.equal('images' in stored[0].decks.A, false)
+    assert.ok(scenes.byName('Saved meanwhile'))
+})
+
+test('a failed write leaves storage and memory with the embedded images', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([legacyScene('Legacy', [RED])]))
+    const before = storage.getItem(SCENES_STORAGE_KEY)
+    const scenes = new Scenes({ storage })
+    storage.setItem = () => { throw new Error('Quota exceeded') }
+    assert.equal(await quietly(() => scenes.moveEmbeddedImages(async () => {})), 0)
+    assert.equal(storage.getItem(SCENES_STORAGE_KEY), before)
+    assert.deepEqual(scenes.byName('Legacy').decks.A.images, [RED])
+})
+
+test('a scene list that cannot be re-read is never written back', async () => {
+    const storage = createMockStorage()
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([legacyScene('Legacy', [RED])]))
+    const scenes = new Scenes({ storage })
+    let writes = 0
+    const setItem = storage.setItem
+    storage.setItem = (...args) => { writes++; return setItem(...args) }
+    assert.equal(await scenes.moveEmbeddedImages(async () => { storage.getItem = () => '{"corrupt' }), 0)
+    assert.equal(writes, 0)
+    assert.deepEqual(scenes.byName('Legacy').decks.A.images, [RED])
+})
+
+/**
+ * localStorage as Chrome bounds it: every key and value counts its characters
+ * against 5,242,880 per origin, and a write that does not grow the total is
+ * always allowed.
+ */
+function createQuotaStorage(quota = 5_242_880) {
+    const data = new Map()
+    const used = () => [...data].reduce((sum, [key, value]) => sum + key.length + value.length, 0)
+    return {
+        used,
+        getItem: key => (data.has(key) ? data.get(key) : null),
+        setItem(key, value) {
+            const text = String(value)
+            const before = used()
+            const after = before - (data.has(key) ? key.length + data.get(key).length : 0) + key.length + text.length
+            if (after > quota && after > before) {
+                throw Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' })
+            }
+            data.set(key, text)
+        },
+        removeItem: key => { data.delete(key) },
+    }
+}
+
+test('a localStorage filled by scene images is freed by moving them, and scenes save again', async () => {
+    const storage = createQuotaStorage()
+    const image = (char, length) => ({ id: char.repeat(64), dataUrl: `data:image/png;base64,${'A'.repeat(length)}` })
+    const red = image('a', 1_225_000), green = image('b', 1_225_000), blue = image('c', 1_225_000)
+    storage.setItem(SCENES_STORAGE_KEY, JSON.stringify([
+        legacyScene('Red and green', [red], [green]),
+        legacyScene('Red again', [red]),
+        legacyScene('Blue', [blue]),
+    ]))
+    storage.setItem('visualize.mixer.v1', JSON.stringify({ id: 'blend', overrides: {} }))
+    const seeded = storage.used()
+    assert.ok(seeded > 4_850_000 && seeded < 5_242_880, `seeded ${seeded} characters`)
+
+    const scenes = new Scenes({ storage })
+    const textScene = { ...createDummySnapshot('text'), decks: { A: legacyDeck([image('d', 400_000)]), B: legacyDeck([]) } }
+    assert.equal(scenes.save('Saved as text', textScene), false, 'a full localStorage refuses the old format')
+
+    const stored = []
+    assert.equal(await scenes.moveEmbeddedImages(async images => { stored.push(images[0].id) }), 4, 'four decks held images')
+    assert.deepEqual(stored, [red.id, green.id, blue.id], 'each image is stored once')
+    const freed = storage.used()
+    assert.ok(freed < 10_000, `${freed} characters left in use`)
+
+    const withImage = { ...createDummySnapshot('new'), decks: { A: { title: 'Picture', dsl: imageDsl('d'.repeat(64)), speed: 1, rebind: null }, B: legacyDeck([]) } }
+    assert.equal(scenes.save('After moving', withImage), true)
+    const reloaded = new Scenes({ storage })
+    assert.deepEqual(reloaded.scenes.map(scene => scene.name), ['Red and green', 'Red again', 'Blue', 'After moving'])
+    assert.equal(reloaded.byName('Blue').decks.A.dsl, imageDsl(blue.id))
+    assert.equal(reloaded.byName('After moving').decks.A.dsl, imageDsl('d'.repeat(64)))
+    assert.equal(JSON.stringify(reloaded.scenes).includes('data:'), false)
 })
 
 test('a refused scene image save preserves the previous durable scene and reports failure', () => {

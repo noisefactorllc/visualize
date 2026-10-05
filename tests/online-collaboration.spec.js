@@ -510,6 +510,8 @@ test('two deck image seeds and a live file replacement preserve original bytes a
         await guest.click('#scenes-open')
         await guest.fill('#scene-name-input', 'Image save boundary')
         await guest.click('#scene-save')
+        // A save stores its image files in IndexedDB before the scene itself.
+        await expect.poll(() => guest.evaluate(() => localStorage.getItem('visualize.scenes.v1') || ''), { timeout: 30000 * SCALE }).toContain('Image save boundary')
         const saved = await guest.evaluate(() => localStorage.getItem('visualize.scenes.v1'))
         await guest.evaluate(() => {
             const original = window.__fakeSeanceImageRequest

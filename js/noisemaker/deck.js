@@ -102,6 +102,10 @@ export class Deck {
         this._loadQueue = Promise.resolve()
         this._currentDsl = ''
         this.images = []
+        // Original image files by id, so a saved scene stores the file, not text.
+        this.imageBlobs = new Map()
+        // id => Blob|null: a saved scene's image from image storage.
+        this.storedImage = options.storedImage || null
         this.resolveImage = null
         this._imageTools = null
         this._currentName = ''
@@ -219,6 +223,33 @@ export class Deck {
         return this._imageTools?.getReferencedImages(dsl, this.images) || []
     }
 
+    /** The files of the images a DSL references, for a saved scene to store. */
+    getImageFiles(dsl = this._currentDsl) {
+        return this.getImageAssets(dsl).map(image => ({
+            id: image.id,
+            blob: this.imageBlobs.get(image.id) || this._imageTools.imageToBlob(image)
+        }))
+    }
+
+    /**
+     * Ready the images a saved scene's DSL references: one the deck does not
+     * hold comes from image storage and is prepared like a chosen file.
+     */
+    async loadStoredImages(dsl) {
+        if (!this.storedImage || !/\burl\b/.test(dsl)) return
+        this._imageTools ||= await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+        for (const { url } of this._imageTools.getMediaSources(dsl)) {
+            const id = url?.startsWith('image:') ? url.slice(6) : null
+            if (!id || this.images.some(asset => asset.id === id)) continue
+            const blob = await this.storedImage(id)
+            if (!blob) continue
+            const image = await this._imageTools.prepareImage(blob)
+            if (image.id !== id) throw new Error(`Stored image bytes do not match their id: ${id}`)
+            if (!this.images.some(asset => asset.id === id)) this.images.push(image)
+            this.imageBlobs.set(id, blob)
+        }
+    }
+
     async setImage(blob, mediaIndex = 0) {
         const dsl = this._currentDsl, version = this._loadVersion
         this._imageTools ||= await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
@@ -226,6 +257,7 @@ export class Deck {
         if (this._disposed || version !== this._loadVersion) return { success: false, superseded: true }
         if (!this._imageTools.getMediaSources(dsl)[mediaIndex]) throw new Error('Select a program with a media effect first')
         if (!this.images.some(asset => asset.id === image.id)) this.images.push(image)
+        this.imageBlobs.set(image.id, blob.type === image.mimeType ? blob : new Blob([blob], { type: image.mimeType }))
         const updated = this._imageTools.replaceMediaUrls(dsl, (url, index) => index === mediaIndex ? `image:${image.id}` : url)
         return this.load(updated, this._currentName)
     }
