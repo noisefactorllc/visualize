@@ -7,6 +7,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+import { IMAGE_TEXT, solidPng } from './sharingLocal.js'
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 // Serve the local handfish build (with <tempo-bar> + industrial.css) when
@@ -21,7 +22,9 @@ test('share-loader: ?code= → pick B → deck B has shared program', async ({ p
     // on the live sharing.noisedeck.app service or whatever DSL its
     // database happens to hold.
     await page.route('https://sharing.noisedeck.app/api/composition/**', async (route) => {
-        const code = route.request().url().split('/').pop()
+        const url = new URL(route.request().url())
+        expect(url.searchParams.get('images')).toBe('files')
+        const code = url.pathname.split('/').pop()
         await route.fulfill({
             status: 200,
             contentType: 'application/json',
@@ -69,6 +72,47 @@ test('share-loader: ?code= → pick B → deck B has shared program', async ({ p
     expect(new URL(page.url()).searchParams.has('code')).toBe(false)
 
     expect(pageErrors, pageErrors.join('\n')).toEqual([])
+})
+
+test('share-loader: image files listed with the composition are read as binary and drawn', async ({ page }) => {
+    const red = solidPng([255, 0, 0])
+    const sent = []
+    page.on('request', request => sent.push(request.postData() || ''))
+    await page.route('https://sharing.noisedeck.app/api/composition/**', async (route) => {
+        expect(new URL(route.request().url()).searchParams.get('images')).toBe('files')
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                code: 'REDIMG',
+                title: 'shared red image',
+                dsl: `search synth\nmedia(url: "image:${red.id}").write(o0)\nrender(o0)`,
+                hasEffects: false,
+                effects: [],
+                images: [{ id: red.id, url: `https://sharing.noisedeck.app/api/images/${red.id}`, mimeType: 'image/png', width: 2, height: 2 }],
+            }),
+        })
+    })
+    let imageReads = 0
+    await page.route(`https://sharing.noisedeck.app/api/images/${red.id}`, async (route) => {
+        imageReads++
+        await route.fulfill({ status: 200, contentType: 'image/png', body: red.bytes })
+    })
+
+    await page.goto('/?code=REDIMG')
+    await expect(page.locator('#boot-share-a')).toBeEnabled({ timeout: 20_000 * SCALE })
+    await page.click('#boot-share-a')
+    await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent === 'shared red image',
+        null, { timeout: 30_000 * SCALE })
+    await expect.poll(() => page.evaluate(() => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const context = canvas.getContext('2d')
+        context.drawImage(window.__visualize.decks.A.canvas, 0, 0, 1, 1)
+        return [...context.getImageData(0, 0, 1, 1).data]
+    }), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+    expect(imageReads).toBe(1)
+    for (const body of sent) expect(body).not.toMatch(IMAGE_TEXT)
 })
 
 test('share-loader: composition with hasEffects=true announces install', async ({ page }) => {

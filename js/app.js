@@ -41,7 +41,7 @@ import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { calculateCrossfadeNudge, CrossfadeNudgeTracker, parseCrossfadeCurve } from './crossfader.js'
-import { clearCodeFromUrl } from './sharingLoader.js'
+import { clearCodeFromUrl, loadSharedImages } from './sharingLoader.js'
 import { getUserEffectsManager, isQuotaExceededError } from './userEffects.js'
 import {
     handleEscapeKey,
@@ -204,7 +204,7 @@ async function prepareShareDialog() {
 
     let composition
     try {
-        composition = await promise
+        composition = await loadSharedImages(await promise)
     } catch (err) {
         if (prompt) prompt.textContent = `couldn't load shared program (${code})`
         if (hint) hint.textContent = String(err.message || err)

@@ -760,7 +760,7 @@
                 var shareTimer = setTimeout(function () { shareCtrl.abort() }, 10000)
                 var clearShareTimer = function () { clearTimeout(shareTimer) }
                 window.__visualizeSharePromise = fetch(
-                    'https://sharing.noisedeck.app/api/composition/' + encodeURIComponent(code),
+                    'https://sharing.noisedeck.app/api/composition/' + encodeURIComponent(code) + '?images=files',
                     { signal: shareCtrl.signal }
                 ).then(function (r) {
                     clearShareTimer()
