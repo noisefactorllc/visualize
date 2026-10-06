@@ -8,8 +8,9 @@
  */
 
 export const DEFAULT_SEANCE_URL = 'https://seance.noisefactor.io'
-// Bypass browsers that cached the older alias without Cache-Control.
-export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929'
+// Bypass browsers that cached the older alias without Cache-Control, and SDKs
+// from before seed images could be Blobs.
+export const DEFAULT_SEANCE_SDK_URL = 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20261006'
 
 export const DECK_DOC_IDS = {
     A: 'deck:A',

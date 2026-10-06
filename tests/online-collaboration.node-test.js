@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { createVisualizeOnlineCollaboration, DEFAULT_SEANCE_SDK_URL } from '../js/onlineCollaboration.js'
 
 test('the rolling SDK URL bypasses previously cached releases', () => {
-    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20260929')
+    assert.equal(DEFAULT_SEANCE_SDK_URL, 'https://seance.noisefactor.io/sdk/0/index.js?v=images-20261006')
 })
 
 async function harness(options = {}) {

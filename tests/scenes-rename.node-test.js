@@ -371,13 +371,42 @@ test('a recall whose stored image cannot be prepared reports it and still recall
     assert.deepEqual(compiled, ['B'])
 })
 
-test('a scene saved before image storage is recalled from its embedded images', async () => {
+test('a scene saved before image storage hands its embedded images to the deck to read as bytes', async () => {
     const scene = { name: 'Old', decks: { A: legacyDeck([RED]) } }
     let compiled = false
-    const deck = { rebind: {}, images: [], setSpeed() {}, async loadStoredImages() {},
-        async load() { assert.deepEqual(this.images, [RED]); compiled = true; return { success: true } } }
+    const handed = []
+    const deck = { rebind: {}, images: [{ id: 'previous', blob: new Blob(['previous']) }], setSpeed() {},
+        async loadStoredImages(dsl, embedded) {
+            assert.deepEqual(this.images, [], 'the deck never holds the scene\'s text images')
+            handed.push({ dsl, embedded })
+        },
+        async load() { compiled = true; return { success: true } } }
     assert.deepEqual(await Scenes.apply(scene, applyTo({ A: deck, B: deck })), [])
+    assert.deepEqual(handed, [{ dsl: imageDsl(RED.id), embedded: [RED] }])
     assert.equal(compiled, true)
+})
+
+test('a saved scene files the images its programs give inline, as text, and names them by id', async () => {
+    const inline = 'data:image/png;base64,UkVE'
+    const inlineDsl = `search synth\nmedia(url: "${inline}").write(o0)\nrender(o0)`
+    const file = new Blob(['RED'], { type: 'image/png' })
+    const snapshot = { decks: {
+        A: { dsl: inlineDsl, rebind: { originalDsl: inlineDsl } },
+        B: { dsl: imageDsl(GREEN.id), rebind: { originalDsl: imageDsl(GREEN.id) } },
+    } }
+    const converted = []
+    const files = await Scenes.fileInlineImages(snapshot, async dsl => {
+        converted.push(dsl)
+        return { dsl: dsl.replace(inline, `image:${RED.id}`), images: [{ id: RED.id, blob: file, mimeType: 'image/png' }] }
+    })
+    assert.deepEqual(converted, [inlineDsl, inlineDsl], 'programs without inline images are left alone')
+    assert.deepEqual(files, [{ id: RED.id, blob: file }, { id: RED.id, blob: file }])
+    assert.equal(snapshot.decks.A.dsl, imageDsl(RED.id))
+    assert.equal(snapshot.decks.A.rebind.originalDsl, imageDsl(RED.id))
+    assert.equal(snapshot.decks.B.dsl, imageDsl(GREEN.id))
+    const storage = createMockStorage()
+    assert.equal(new Scenes({ storage }).save('Inline', snapshot), true)
+    assert.equal(storage.getItem(SCENES_STORAGE_KEY).includes('data:'), false)
 })
 
 function deferredGate() {

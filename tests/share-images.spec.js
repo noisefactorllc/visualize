@@ -58,6 +58,11 @@ test.describe('shared image programs', () => {
             null, { timeout: 60_000 * SCALE })
 
         expect(await page.evaluate(() => window.__visualize.decks.B.currentDsl)).toContain(`image:${RED.id}`)
+        // The deck holds the image as its bytes in a Blob, never as text.
+        expect(await page.evaluate(() => Promise.all(window.__visualize.decks.B.images.map(async image => ({
+            id: image.id, blob: image.blob instanceof Blob, text: 'dataUrl' in image,
+            bytes: [...new Uint8Array(await image.blob.arrayBuffer())],
+        }))))).toEqual([{ id: RED.id, blob: true, text: false, bytes: [...RED.bytes] }])
         await expect.poll(() => deckPixel(page, 'B'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
         console.log('deck B pixel:', JSON.stringify(await deckPixel(page, 'B')))
 

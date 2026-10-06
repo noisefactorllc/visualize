@@ -501,8 +501,15 @@ test('two deck image seeds and a live file replacement preserve original bytes a
             await setEditorText(host, deckId, `search synth\nmedia(url:"${sources[index]}").write(o0)\nrender(o0)`)
             await expect.poll(() => currentDsl(host, deckId), { timeout: 30000 * SCALE }).toContain(sources[index])
         }
+        // The canvas sources are test fixtures; the app sends and holds their bytes.
+        const sourceHex = sources.map(source => Buffer.from(source.split(',')[1], 'base64').toString('hex'))
         const sessionId = await takeOnline(host)
-        expect([...server.sessions.get(sessionId).images.values()].map(image => image.dataUrl).sort()).toEqual(sources.slice(0, 2).sort())
+        const seeded = [...server.sessions.get(sessionId).images.values()]
+        expect(seeded.map(image => image.bytes.toString('hex')).sort()).toEqual(sourceHex.slice(0, 2).sort())
+        expect(seeded.map(image => image.mimeType)).toEqual(['image/png', 'image/png'])
+        expect(server.imageText, 'the seed carries no image text').toEqual([])
+        for (const deckId of ['A', 'B']) expect(await currentDsl(host, deckId)).not.toContain('data:')
+        expect((await heldImages(host, 'A')).concat(await heldImages(host, 'B')).map(image => image.hex).sort()).toEqual(sourceHex.slice(0, 2).sort())
         const guest = await newOnlinePage(context, server, `/?seance=${sessionId}`)
         await waitForOnlineJoin(guest)
         await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 * SCALE }).toEqual([255, 0, 0, 255])
@@ -531,12 +538,32 @@ test('two deck image seeds and a live file replacement preserve original bytes a
             expect(await guest.evaluate(() => localStorage.getItem('visualize.scenes.v1'))).toEqual(saved)
         } finally { await guest.evaluate(() => window.__releaseImage()) }
         await expect.poll(() => deckImagePixel(guest, 'A'), { timeout: 30000 * SCALE }).toEqual([0, 0, 255, 255])
-        expect(await guest.evaluate(() => window.__visualize.decks.A.images.map(image => image.dataUrl))).toContain(sources[2])
+        expect((await heldImages(guest, 'A')).map(image => image.hex)).toContain(sourceHex[2])
         expect(await currentDsl(guest, 'A')).not.toContain('data:')
         const uploaded = [...server.sessions.get(sessionId).images.values()]
-        expect(uploaded.map(image => image.dataUrl)).toContain(sources[2])
+        expect(uploaded.map(image => image.bytes.toString('hex'))).toContain(sourceHex[2])
+        expect(server.imageText).toEqual([])
     } finally { await context.close() }
 })
+
+/**
+ * The images a deck holds, as hex of their bytes. Fails unless every one
+ * holds its bytes as a Blob and none holds them as text.
+ */
+async function heldImages(page, deckId) {
+    const held = await page.evaluate(id => Promise.all(window.__visualize.decks[id].images.map(async image => ({
+        id: image.id,
+        blob: image.blob instanceof Blob,
+        text: Object.values(image).some(value => typeof value === 'string' && value.startsWith('data:')) || 'dataUrl' in image,
+        hex: image.blob instanceof Blob
+            ? [...new Uint8Array(await image.blob.arrayBuffer())].map(byte => byte.toString(16).padStart(2, '0')).join('') : '',
+    }))), deckId)
+    for (const image of held) {
+        expect(image.blob, `deck ${deckId} image ${image.id} holds a Blob`).toBe(true)
+        expect(image.text, `deck ${deckId} image ${image.id} holds no text`).toBe(false)
+    }
+    return held
+}
 
 async function deckImagePixel(page, deckId) {
     return page.evaluate(id => {

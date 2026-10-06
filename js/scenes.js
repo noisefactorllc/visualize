@@ -136,6 +136,30 @@ export class Scenes {
         return ['A', 'B'].flatMap(id => decks[id]?.getImageFiles?.(snapshot.decks?.[id]?.dsl) ?? [])
     }
 
+    /**
+     * A program can name an image inline, as a base64 data: URL. A saved
+     * scene stores that image as a file instead: `convert` returns the
+     * program naming it image:<id>, and its files, which the caller stores
+     * with the scene's other images before saving. Changes the snapshot's
+     * programs in place.
+     *
+     * @param {(dsl: string) => Promise<{dsl: string, images: Array<{id: string, blob: Blob}>}>} convert
+     * @returns {Promise<Array<{id: string, blob: Blob}>>}
+     */
+    static async fileInlineImages(snapshot, convert) {
+        const files = []
+        for (const id of ['A', 'B']) {
+            const deck = snapshot.decks?.[id]
+            for (const [holder, key] of [[deck, 'dsl'], [deck?.rebind, 'originalDsl']]) {
+                if (typeof holder?.[key] !== 'string' || !holder[key].includes('data:')) continue
+                const filed = await convert(holder[key])
+                holder[key] = filed.dsl
+                for (const image of filed.images) files.push({ id: image.id, blob: image.blob })
+            }
+        }
+        return files
+    }
+
     save(name, snapshot) {
         if (!name) return false
         const trimmed = name.trim().slice(0, 40)
@@ -262,10 +286,12 @@ export class Scenes {
                 // override map. Snapshots from before rebind shipped
                 // won't have rebind.originalDsl, so fall back to dsl.
                 const originalDsl = d.rebind?.originalDsl || d.dsl
-                decks[id].images = d.images || []
+                decks[id].images = []
                 const loadVersion = decks[id]._loadVersion
                 // The scene names its images; their files are in image storage.
-                await decks[id].loadStoredImages?.(originalDsl)
+                // A scene saved before that carries them as text, which the
+                // deck reads once, as bytes.
+                await decks[id].loadStoredImages?.(originalDsl, Array.isArray(d.images) ? d.images : [])
                 // Reading image storage takes time. A newer recall owns the
                 // decks now; a program loaded meanwhile owns this one.
                 if (generation !== recallGeneration) return errors

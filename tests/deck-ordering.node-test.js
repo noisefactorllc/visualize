@@ -55,18 +55,24 @@ test('deck compiles engine text and binds original image references before start
     assert.equal(h.deck.currentDsl, original)
 })
 
-test('choosing a deck image keeps original asset bytes and replaces only the selected media call', async () => {
+// The image tools' imageToBlob: a record's own Blob, or a legacy record's text decoded.
+const imageToBlob = image => image.blob instanceof Blob ? image.blob : new Blob([`decoded ${image.dataUrl}`], { type: 'image/png' })
+
+test('choosing a deck image holds its original bytes as a Blob and replaces only the selected media call', async () => {
     const h = harness()
-    const asset = { id: 'selected', dataUrl: 'original-image-bytes', mimeType: 'image/png' }
     const file = new Blob(['original-image-bytes'], { type: 'image/png' })
+    let asset
     h.deck._currentDsl = 'two media slots'
-    h.deck.images = [{ id: 'other', dataUrl: 'other-image-bytes' }]
+    const other = { id: 'other', blob: new Blob(['other-image-bytes'], { type: 'image/png' }) }
+    h.deck.images = [other]
     h.deck._imageTools = {
-        prepareImage: async blob => {
+        prepareImageFile: async blob => {
             assert.equal(blob.type, 'image/png')
             assert.equal(await blob.text(), 'original-image-bytes')
+            asset = { id: 'selected', blob, mimeType: 'image/png', width: 1, height: 1 }
             return asset
         },
+        prepareImage: async () => { throw new Error('a text image must not be made') },
         getMediaSources: () => [{}, {}],
         replaceMediaUrls: (dsl, replace) => {
             assert.equal(dsl, 'two media slots')
@@ -81,10 +87,10 @@ test('choosing a deck image keeps original asset bytes and replaces only the sel
     await flush()
     h.compiles[0].resolve()
     assert.equal((await selected).success, true)
-    assert.deepEqual(h.deck.images, [{ id: 'other', dataUrl: 'other-image-bytes' }, asset])
-    const kept = h.deck.imageBlobs.get('selected')
-    assert.equal(kept.type, 'image/png')
-    assert.equal(await kept.text(), 'original-image-bytes', 'the chosen file\'s bytes are kept for scene storage')
+    assert.deepEqual(h.deck.images, [other, asset])
+    assert.ok(h.deck.images[1].blob instanceof Blob)
+    assert.equal(await h.deck.images[1].blob.text(), 'original-image-bytes', 'the chosen file\'s bytes are held for scene storage')
+    assert.equal('dataUrl' in h.deck.images[1], false, 'the image is not held as text')
     assert.equal(h.deck.currentDsl, 'two bound media slots')
 })
 
@@ -103,15 +109,15 @@ test('a chosen file is read once, so a scene save never reads it from disk again
         slice() { throw new DOMException('The file could not be read', 'NotReadableError') }
     }
     const file = new PickedFile(['picked-image-bytes'], { type: 'image/png' })
-    const asset = { id: 'picked', dataUrl: 'picked text', mimeType: 'image/png' }
     h.deck._currentDsl = 'one media slot'
     h.deck._imageTools = {
-        prepareImage: async blob => {
-            assert.equal(await blob.text(), 'picked-image-bytes')
-            return asset
+        prepareImageFile: async blob => {
+            assert.equal(blob instanceof PickedFile, false, 'the tools get the bytes in memory, not the file')
+            return { id: 'picked', blob: new Blob([await blob.arrayBuffer()], { type: 'image/png' }), mimeType: 'image/png' }
         },
         getMediaSources: () => [{}],
         getReferencedImages: (dsl, images) => images.filter(image => image.id === 'picked'),
+        imageToBlob,
         replaceMediaUrls: () => 'one bound media slot',
         stripMediaUrls: text => text,
         bindMediaImages: async () => {},
@@ -128,12 +134,18 @@ test('a chosen file is read once, so a scene save never reads it from disk again
     assert.equal(reads, 1, 'saving read the bytes held in memory, not the file')
 })
 
-test('a chosen file without a type is kept as its bytes with the detected image type', async () => {
+test('a chosen file without a type reaches the image tools as its bytes, and the deck holds their record', async () => {
     const h = harness()
     const file = new Blob(['untyped-image-bytes'])
+    let record
     h.deck._currentDsl = 'one media slot'
     h.deck._imageTools = {
-        prepareImage: async () => ({ id: 'untyped', dataUrl: 'untyped text', mimeType: 'image/png' }),
+        prepareImageFile: async blob => {
+            assert.equal(blob.type, '')
+            assert.equal(await blob.text(), 'untyped-image-bytes')
+            record = { id: 'untyped', blob: new Blob([await blob.arrayBuffer()], { type: 'image/png' }), mimeType: 'image/png' }
+            return record
+        },
         getMediaSources: () => [{}],
         replaceMediaUrls: () => 'one bound media slot',
         stripMediaUrls: text => text,
@@ -143,26 +155,25 @@ test('a chosen file without a type is kept as its bytes with the detected image 
     await flush()
     h.compiles[0].resolve()
     assert.equal((await selected).success, true)
-    const kept = h.deck.imageBlobs.get('untyped')
-    assert.equal(kept.type, 'image/png')
-    assert.equal(await kept.text(), 'untyped-image-bytes')
+    assert.equal(h.deck.images.length, 1)
+    assert.equal(h.deck.images[0], record)
+    assert.equal(h.deck.images[0].blob.type, 'image/png')
+    assert.equal(await h.deck.images[0].blob.text(), 'untyped-image-bytes')
 })
 
-test('a saved scene takes the held original files and decodes only records without one', () => {
+test('a saved scene takes each image\'s own Blob and decodes only a record without one', () => {
     const h = harness()
     const held = new Blob(['held bytes'], { type: 'image/png' })
-    const decoded = new Blob(['decoded bytes'], { type: 'image/png' })
     const decodedFrom = []
-    h.deck.images = [{ id: 'held', dataUrl: 'held text' }, { id: 'shared', dataUrl: 'shared text' }]
-    h.deck.imageBlobs.set('held', held)
+    h.deck.images = [{ id: 'held', blob: held }, { id: 'shared', dataUrl: 'shared text' }]
     h.deck._imageTools = {
         getReferencedImages: (dsl, images) => {
             assert.equal(dsl, 'two images')
             return images
         },
         imageToBlob: image => {
-            decodedFrom.push(image.id)
-            return decoded
+            if (!image.blob) decodedFrom.push(image.id)
+            return imageToBlob(image)
         },
     }
     const files = h.deck.getImageFiles('two images')
@@ -170,7 +181,7 @@ test('a saved scene takes the held original files and decodes only records witho
     assert.equal(files[0].id, 'held')
     assert.equal(files[0].blob, held)
     assert.equal(files[1].id, 'shared')
-    assert.equal(files[1].blob, decoded)
+    assert.ok(files[1].blob instanceof Blob)
     assert.deepEqual(decodedFrom, ['shared'])
 })
 
@@ -186,29 +197,59 @@ test('recalling a scene prepares its stored images like chosen files, before com
     const h = harness()
     const id = 'a'.repeat(64)
     const stored = new Blob(['stored bytes'], { type: 'image/png' })
-    const record = { id, dataUrl: 'record made in memory', mimeType: 'image/png' }
+    const record = { id, blob: new Blob(['stored bytes'], { type: 'image/png' }), mimeType: 'image/png' }
     const asked = []
     h.deck.storedImage = async wanted => {
         asked.push(wanted)
         return wanted === id ? stored : null
     }
-    h.deck.images = [{ id: 'held', dataUrl: 'held text' }]
+    h.deck.images = [{ id: 'held', blob: new Blob(['held bytes'], { type: 'image/png' }) }]
     h.deck._imageTools = {
         getMediaSources: () => [
             { url: `image:${id}` }, { url: 'image:held' }, { url: 'image:missing' }, { url: null }, { url: 'https://example.com/a.png' },
         ],
-        prepareImage: async blob => {
+        prepareImageFile: async blob => {
             assert.equal(blob, stored)
             return record
         },
+        prepareImage: async () => { throw new Error('a text image must not be made') },
     }
     await h.deck.loadStoredImages('media(url:"image:...").write(o0)')
     assert.deepEqual(asked, [id, 'missing'], 'held images and other URLs are not looked up')
     assert.equal(h.deck.images.length, 2)
-    assert.equal(h.deck.images[1], record)
-    assert.equal(h.deck.imageBlobs.get(id), stored, 'the stored file is kept for the next save')
-    assert.equal(h.deck.imageBlobs.has('missing'), false)
+    assert.equal(h.deck.images[1], record, 'the stored file is held as a Blob for the next save')
     assert.equal(h.compiles.length, 0)
+})
+
+test('recalling a scene saved with text images reads each one once, as bytes, when storage lacks it', async () => {
+    const h = harness()
+    const inStorage = 'a'.repeat(64), onlyText = 'b'.repeat(64)
+    const stored = new Blob(['stored bytes'], { type: 'image/png' })
+    const embedded = [{ id: inStorage, dataUrl: 'stored text' }, { id: onlyText, dataUrl: 'legacy text' }]
+    h.deck.storedImage = async wanted => wanted === inStorage ? stored : null
+    const decoded = []
+    h.deck._imageTools = {
+        getMediaSources: () => [{ url: `image:${inStorage}` }, { url: `image:${onlyText}` }],
+        imageToBlob: image => { decoded.push(image.id); return imageToBlob(image) },
+        // Each id names its bytes, as a SHA-256 would.
+        prepareImageFile: async blob => ({
+            id: (await blob.text()).includes('stored') ? inStorage : onlyText,
+            blob: new Blob([await blob.arrayBuffer()], { type: 'image/png' }), mimeType: 'image/png',
+        }),
+    }
+    await h.deck.loadStoredImages('media(url:"image:...").write(o0)', embedded)
+    assert.deepEqual(decoded, [onlyText], 'the stored file wins over the scene\'s text')
+    assert.deepEqual([...h.deck.images].map(image => image.id), [inStorage, onlyText])
+    assert.ok(h.deck.images.every(image => image.blob instanceof Blob && !('dataUrl' in image)), 'no image is held as text')
+    assert.equal(await h.deck.images[1].blob.text(), 'decoded legacy text')
+
+    // A deck without image storage still reads a scene's text images, as bytes.
+    const bare = harness()
+    bare.deck._imageTools = h.deck._imageTools
+    decoded.length = 0
+    await bare.deck.loadStoredImages('media(url:"image:...").write(o0)', embedded)
+    assert.deepEqual(decoded, [inStorage, onlyText])
+    assert.ok(bare.deck.images.every(image => image.blob instanceof Blob && !('dataUrl' in image)))
 })
 
 test('recalling a scene leaves programs without images, or decks without storage, alone', async () => {
@@ -226,11 +267,10 @@ test('a stored image whose bytes do not match its id fails the recall', async ()
     h.deck.storedImage = async () => new Blob(['other bytes'], { type: 'image/png' })
     h.deck._imageTools = {
         getMediaSources: () => [{ url: `image:${'b'.repeat(64)}` }],
-        prepareImage: async () => ({ id: 'c'.repeat(64), dataUrl: 'other' }),
+        prepareImageFile: async blob => ({ id: 'c'.repeat(64), blob }),
     }
     await assert.rejects(h.deck.loadStoredImages('media(url:"image:b").write(o0)'), /do not match their id/)
     assert.equal(h.deck.images.length, 0)
-    assert.equal(h.deck.imageBlobs.size, 0)
 })
 
 for (const secondMethod of ['load', 'reloadDsl']) {

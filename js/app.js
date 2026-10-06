@@ -41,7 +41,7 @@ import { mountThemePicker } from './handfish-theme.js'
 import { aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { calculateCrossfadeNudge, CrossfadeNudgeTracker, parseCrossfadeCurve } from './crossfader.js'
-import { clearCodeFromUrl, loadSharedImages } from './sharingLoader.js'
+import { PORTABLE_IMAGES_URL, clearCodeFromUrl, fileInlineImages, loadSharedImages } from './sharingLoader.js'
 import { getUserEffectsManager, isQuotaExceededError } from './userEffects.js'
 import {
     handleEscapeKey,
@@ -2317,9 +2317,11 @@ async function boot() {
             // have moved out of localStorage, which starts at page load.
             await sceneImagesMigrated()
             try {
+                // A program's inline (text) images are stored as files too.
+                const inline = await Scenes.fileInlineImages(snap, async dsl => fileInlineImages(dsl, await import(PORTABLE_IMAGES_URL)))
                 // Images first, as files: a saved scene must never name an
                 // image that is not stored.
-                await storeSceneImages(images)
+                await storeSceneImages([...images, ...inline])
             } catch (error) {
                 toast(`Could not save scene: ${error.message}`, 5000)
                 return
@@ -2544,13 +2546,14 @@ async function boot() {
                 prepareImages: async (deckId, dsl) => {
                     if (deckMedia[deckId].hasLiveMedia) throw new Error('Only images can be shared; camera and video sources remain local')
                     if (!/\burl\b/.test(dsl)) return { dsl, images: [] }
-                    const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
+                    const tools = await import(PORTABLE_IMAGES_URL)
                     const deck = state.decks[deckId]
-                    const prepared = await tools.prepareImagesForShare(dsl, tools.getReferencedImages(dsl, deck.images))
+                    // files: every image comes back holding its bytes as a Blob.
+                    const prepared = await tools.prepareImagesForShare(dsl, tools.getReferencedImages(dsl, deck.images), { files: true })
                     for (const image of prepared.images) if (!deck.images.some(asset => asset.id === image.id)) deck.images.push(image)
                     return prepared
                 },
-                imageBlob: async image => (await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')).imageToBlob(image),
+                imageBlob: async image => (await import(PORTABLE_IMAGES_URL)).imageToBlob(image),
                 dialog: $('seance-dialog'),
                 toast,
                 location: window.location,
@@ -2561,8 +2564,8 @@ async function boot() {
             for (const deck of Object.values(state.decks)) {
                 deck.resolveImage = async id => {
                     const blob = await online.getImage(id)
-                    const tools = await import('https://sharing.noisedeck.app/js/portableImages.js?v=images-20260929')
-                    const image = await tools.prepareImage(blob)
+                    const tools = await import(PORTABLE_IMAGES_URL)
+                    const image = await tools.prepareImageFile(blob)
                     if (!deck.images.some(asset => asset.id === image.id)) deck.images.push(image)
                     return blob
                 }

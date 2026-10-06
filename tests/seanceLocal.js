@@ -5,6 +5,7 @@
 // The app imports the browser SDK from the production rolling-major URL. These
 // tests route that URL to the sibling Seance checkout and inject a tiny in-test
 // Seance server so no live service or local daemon is required.
+import { createHash } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
 
@@ -67,16 +68,27 @@ export class FakeSeanceServer {
         this._seq = 1
         this.sessions = new Map()
         this.sockets = new Map()
+        // Every session seed that carried an image as text. Images travel as bytes.
+        this.imageText = []
+    }
+
+    storeImage(session, { mimeType, bytes }) {
+        const data = Buffer.from(bytes)
+        const image = { id: createHash('sha256').update(data).digest('hex'), mimeType, bytes: data }
+        session.images.set(image.id, image)
+        return image
     }
 
     async install(page) {
         const pageKey = `page-${this._nextPage++}`
         await page.exposeFunction('__fakeSeanceCreateSession', (body) => this.createSession(body))
-        await page.exposeFunction('__fakeSeanceImageRequest', (sessionId, id, image) => {
+        // Images cross this boundary as byte arrays: the SDK uploads an
+        // image as its own bytes, and the server names it by their SHA-256.
+        await page.exposeFunction('__fakeSeanceImageRequest', (sessionId, id, upload) => {
             const session = this.sessions.get(sessionId)
             if (!session) throw new Error('Unknown session')
-            if (image) session.images.set(image.id, image)
-            return session.images.get(image?.id || id) || null
+            const image = upload ? this.storeImage(session, upload) : session.images.get(id)
+            return image ? { id: image.id, mimeType: image.mimeType, bytes: [...image.bytes] } : null
         })
         await page.exposeFunction('__fakeSeanceSocketOpen', (socketId, url) => this.openSocket(page, socketId, url))
         await page.exposeFunction('__fakeSeanceSocketSend', (socketId, data) => this.receiveSocketData(socketId, data))
@@ -136,15 +148,24 @@ export class FakeSeanceServer {
                 fetch: async (url, init = {}) => {
                     const href = String(url)
                     const imagePath = new URL(href).pathname.match(/^\/v1\/sessions\/([^/]+)\/images(?:\/([a-f0-9]{64}))?$/)
+                    const bytesOf = async blob => [...new Uint8Array(await blob.arrayBuffer())]
                     if (imagePath) {
                         const upload = String(init.method || 'GET').toUpperCase() === 'POST'
-                        const image = await window.__fakeSeanceImageRequest(imagePath[1], imagePath[2], upload ? JSON.parse(init.body) : null)
+                        if (upload && !(init.body instanceof Blob)) return new Response('images upload as bytes', { status: 400 })
+                        const image = await window.__fakeSeanceImageRequest(imagePath[1], imagePath[2],
+                            upload ? { mimeType: new Headers(init.headers).get('Content-Type'), bytes: await bytesOf(init.body) } : null)
                         if (!image) return new Response('', { status: 404 })
                         if (upload) return new Response(JSON.stringify({ id: image.id }), { headers: { 'Content-Type': 'application/json' } })
-                        return fetch(image.dataUrl)
+                        return new Response(new Uint8Array(image.bytes), { headers: { 'Content-Type': image.mimeType } })
                     }
                     if (href === `${seanceUrl}/v1/sessions` && String(init.method || 'GET').toUpperCase() === 'POST') {
-                        const body = JSON.parse(init.body || '{}')
+                        // A seed with images is multipart: the JSON seed, then each image as a file part.
+                        let body
+                        if (init.body instanceof FormData) {
+                            body = JSON.parse(await init.body.get('session').text())
+                            body.files = await Promise.all(init.body.getAll('image').map(async file =>
+                                ({ name: file.name, mimeType: file.type, bytes: await bytesOf(file) })))
+                        } else body = JSON.parse(init.body || '{}')
                         const response = await window.__fakeSeanceCreateSession(body)
                         return new Response(JSON.stringify(response), {
                             status: 200,
@@ -181,8 +202,13 @@ export class FakeSeanceServer {
                 rev: 0,
             })
         }
-        const images = new Map((body.images || []).map(image => [image.id, image]))
-        this.sessions.set(sessionId, { id: sessionId, docs, images, sockets: new Set() })
+        if (body.images || /data:image|;base64,/.test(JSON.stringify(body.snapshot || {}))) this.imageText.push(sessionId)
+        const session = { id: sessionId, docs, images: new Map(), sockets: new Set() }
+        for (const file of body.files || []) {
+            const image = this.storeImage(session, file)
+            if (file.name !== image.id) throw new Error(`seed image ${file.name} does not match its bytes`)
+        }
+        this.sessions.set(sessionId, session)
         return { session_id: sessionId, anon_token: `anon-${sessionId}` }
     }
 

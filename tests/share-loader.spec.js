@@ -8,11 +8,26 @@
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
 import { IMAGE_TEXT, solidPng } from './sharingLocal.js'
+import { routePortableImagesLocal } from './seanceLocal.js'
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 // Serve the local handfish build (with <tempo-bar> + industrial.css) when
 // HANDFISH_LOCAL is set; otherwise hit the real CDN. No machine path committed.
 installHandfishLocal(test)
+// The image tools from the sibling sharing checkout, when there is one.
+test.beforeEach(async ({ page }) => { await routePortableImagesLocal(page) })
+
+/** The images deck `id` holds: each must hold its bytes as a Blob, never as text. */
+async function heldImages(page, id) {
+    const held = await page.evaluate(deckId => Promise.all(window.__visualize.decks[deckId].images.map(async image => ({
+        id: image.id,
+        blob: image.blob instanceof Blob,
+        text: 'dataUrl' in image || Object.values(image).some(value => typeof value === 'string' && value.startsWith('data:')),
+        bytes: image.blob instanceof Blob ? [...new Uint8Array(await image.blob.arrayBuffer())] : [],
+    }))), id)
+    for (const image of held) expect(image.blob && !image.text, `image ${image.id} is held as a Blob`).toBe(true)
+    return held
+}
 
 const SAMPLE_DSL = 'search synth, render\n\nnoise(seed: 7, ridges: true)\n  .write(o0)\n\nrender(o0)'
 const SAMPLE_TITLE = 'sample share program'
@@ -112,7 +127,48 @@ test('share-loader: image files listed with the composition are read as binary a
         return [...context.getImageData(0, 0, 1, 1).data]
     }), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
     expect(imageReads).toBe(1)
+    expect(await heldImages(page, 'A')).toEqual([{ id: red.id, blob: true, text: false, bytes: [...red.bytes] }])
     for (const body of sent) expect(body).not.toMatch(IMAGE_TEXT)
+})
+
+test('share-loader: a response from before image files is read into Blob images, never held as text', async ({ page }) => {
+    // Fixtures in the older response shape: one { id, dataUrl } image and one
+    // inline data: media URL.
+    const red = solidPng([255, 0, 0])
+    const green = solidPng([0, 255, 0])
+    const dataUrl = image => `data:image/png;base64,${image.bytes.toString('base64')}`
+    await page.route('https://sharing.noisedeck.app/api/composition/**', route => route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+            code: 'OLDIMG',
+            title: 'older image share',
+            dsl: `search synth\nmedia(url: "image:${red.id}").write(o0)\nmedia(url: "${dataUrl(green)}").write(o1)\nrender(o0)`,
+            hasEffects: false,
+            effects: [],
+            images: [{ id: red.id, dataUrl: dataUrl(red) }],
+        }),
+    }))
+    await page.goto('/?code=OLDIMG')
+    await expect(page.locator('#boot-share-a')).toBeEnabled({ timeout: 20_000 * SCALE })
+    await page.click('#boot-share-a')
+    await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent === 'older image share',
+        null, { timeout: 30_000 * SCALE })
+    await expect.poll(() => page.evaluate(() => {
+        const canvas = document.createElement('canvas')
+        canvas.width = canvas.height = 1
+        const context = canvas.getContext('2d')
+        context.drawImage(window.__visualize.decks.A.canvas, 0, 0, 1, 1)
+        return [...context.getImageData(0, 0, 1, 1).data]
+    }), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+    const dsl = await page.evaluate(() => window.__visualize.decks.A.currentDsl)
+    expect(dsl).toContain(`image:${red.id}`)
+    expect(dsl).toContain(`image:${green.id}`)
+    expect(dsl).not.toContain('data:')
+    const held = await heldImages(page, 'A')
+    expect(held.map(image => image.id).sort()).toEqual([red.id, green.id].sort())
+    expect(held.find(image => image.id === red.id).bytes).toEqual([...red.bytes])
+    expect(held.find(image => image.id === green.id).bytes).toEqual([...green.bytes])
 })
 
 test('share-loader: composition with hasEffects=true announces install', async ({ page }) => {

@@ -218,6 +218,23 @@ async function holdImageStorage(page) {
 
 const releaseImageStorage = page => page.evaluate(() => window.__releaseImageStorage())
 
+/** The images deck `id` holds. Each must hold its exact bytes as a Blob, and none as text. */
+async function heldImages(page, id) {
+    const held = await page.evaluate(deckId => Promise.all(window.__visualize.decks[deckId].images.map(async image => ({
+        id: image.id,
+        blob: image.blob instanceof Blob,
+        text: 'dataUrl' in image || Object.values(image).some(value => typeof value === 'string' && value.startsWith('data:')),
+        sha256: image.blob instanceof Blob
+            ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', await image.blob.arrayBuffer())), byte => byte.toString(16).padStart(2, '0')).join('')
+            : null,
+    }))), id)
+    for (const image of held) {
+        expect(image.blob && !image.text, `deck ${id} image ${image.id} is held as a Blob`).toBe(true)
+        expect(image.sha256, `deck ${id} image ${image.id} holds the bytes its id names`).toBe(image.id)
+    }
+    return held.map(image => image.id)
+}
+
 async function openScenes(page) {
     if (await page.locator('#scenes-drawer').getAttribute('aria-hidden') !== 'false') await page.click('#scenes-open')
 }
@@ -254,6 +271,7 @@ test('a saved scene keeps its image as a file in IndexedDB and shows it again af
         expect(saved.decks.A.images).toBeUndefined()
         expect(saved.decks.B.images).toBeUndefined()
         expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
+        expect(await heldImages(page, 'A')).toEqual([red.id])
 
         await page.reload()
         await start(page)
@@ -261,6 +279,75 @@ test('a saved scene keeps its image as a file in IndexedDB and shows it again af
         await recallScene(page, 'Red picture')
         await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
         expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).toContain(`image:${red.id}`)
+        expect(await heldImages(page, 'A')).toEqual([red.id])
+    } finally {
+        await context.close()
+    }
+})
+
+test('a program that names its image inline, as text, saves the image as a file and the scene by id', async ({ browser }) => {
+    const context = await browser.newContext()
+    try {
+        const page = await context.newPage()
+        await preparePage(page)
+        await page.goto('/')
+        await start(page)
+        const red = solidPng(64, 36, [255, 0, 0])
+        // A program a user typed with an inline data: URL (a test fixture).
+        const inline = `search synth\nmedia(url: "${red.dataUrl}").write(o0)\nrender(o0)`
+        await page.evaluate(async dsl => {
+            const result = await window.__visualize.decks.A.load(dsl, 'Inline picture')
+            if (!result.success) throw new Error(result.error)
+        }, inline)
+        await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+        await saveScene(page, 'Inline picture')
+
+        const text = await storedScenes(page)
+        expect(text).not.toContain('data:')
+        const saved = JSON.parse(text).find(scene => scene.name === 'Inline picture')
+        expect(saved.decks.A.dsl).toBe(imageDsl(red.id))
+        expect(saved.decks.A.rebind.originalDsl).toBe(imageDsl(red.id))
+        expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
+
+        await page.reload()
+        await start(page)
+        await recallScene(page, 'Inline picture')
+        await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+        expect(await heldImages(page, 'A')).toEqual([red.id])
+    } finally {
+        await context.close()
+    }
+})
+
+test('a scene saved with its images as text recalls them as Blobs when image storage cannot be opened', async ({ browser }) => {
+    const context = await browser.newContext()
+    try {
+        const page = await context.newPage()
+        await preparePage(page)
+        // Image storage refuses to open, so the text cannot move and the recall reads it.
+        await page.addInitScript(() => {
+            const open = IDBFactory.prototype.open
+            IDBFactory.prototype.open = function (name, ...rest) {
+                if (name !== 'visualize-scene-images') return open.call(this, name, ...rest)
+                const request = {}
+                setTimeout(() => { request.error = new DOMException('refused', 'UnknownError'); request.onerror?.({}) }, 0)
+                return request
+            }
+        })
+        const red = solidPng(64, 36, [255, 0, 0])
+        const green = solidPng(64, 36, [0, 255, 0])
+        await page.goto('/data/programs.json')
+        await page.evaluate(({ key, value }) => { localStorage.clear(); localStorage.setItem(key, value) },
+            { key: SCENES_KEY, value: JSON.stringify([legacyScene('Old red and green', red, green)]) })
+
+        await page.goto('/')
+        await start(page)
+        await recallScene(page, 'Old red and green')
+        await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
+        await expect.poll(() => deckPixel(page, 'B'), { timeout: 30_000 * SCALE }).toEqual([0, 255, 0, 255])
+        expect(await heldImages(page, 'A')).toEqual([red.id])
+        expect(await heldImages(page, 'B')).toEqual([green.id])
+        expect(await storedScenes(page), 'the scene keeps its text until storage can take it').toContain('data:')
     } finally {
         await context.close()
     }
