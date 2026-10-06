@@ -2,6 +2,12 @@
 
 Thanks for your interest in contributing!
 
+Contributions follow the Noise Factor
+[contributing policy](https://github.com/noisefactorllc/.github/blob/main/CONTRIBUTING.md) and
+[Code of Conduct](https://github.com/noisefactorllc/.github/blob/main/CODE_OF_CONDUCT.md). The policy covers which pull requests we
+accept and what LLM-assisted pull requests need to include. This page adds
+what's specific to Visualize.
+
 ## Getting Set Up
 
 ```bash
@@ -51,10 +57,11 @@ For audio-reactive programs, declare `let name = audio(band: 0|1|2, min: ..., ma
 
 ## Submitting Changes
 
-1. Fork the repo and create a branch from `main`.
-2. Make your changes — keep PRs focused, one concern each.
-3. Run `npm run lint` to syntax-check JS, and `npm test` for the smoke test.
-4. Open a pull request with a short description of what changed and why. Screenshots of any UI work are appreciated.
+1. Pick an issue labelled `help wanted` and comment on it to say you're working on it.
+2. Fork the repo and create a branch from `main`.
+3. Make your changes — keep PRs focused on that issue.
+4. Run `npm run lint` to syntax-check JS, and `npm test` for the smoke test.
+5. Open a pull request and fill in the template. Screenshots of any UI work are appreciated.
 
 ## Reporting Issues
 
