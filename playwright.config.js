@@ -3,6 +3,23 @@ import { defineConfig } from '@playwright/test'
 
 const port = Number(process.env.PW_PORT || 3070)
 const host = process.env.PW_PORT ? '127.0.0.1' : 'localhost'
+// Sandboxed runners (supervisor test gates, the macOS host broker) route all
+// egress through an HTTP proxy and deny direct sockets: Chromium on macOS
+// ignores proxy environment variables, so it must be told the proxy
+// explicitly, or every CDN fetch (fonts, shaders, handfish, engine) fails
+// with ERR_ACCESS_DENIED and each test burns its boot budget. The loopback
+// dev server stays direct. Playwright's bypass list is comma-separated.
+const proxyServer = process.env.HTTPS_PROXY || process.env.https_proxy
+    || process.env.HTTP_PROXY || process.env.http_proxy || ''
+const proxy = proxyServer
+    ? {
+        server: proxyServer,
+        bypass: [...new Set([
+            'localhost', '127.0.0.1',
+            ...(process.env.NO_PROXY || '').split(',').map(s => s.trim()).filter(Boolean),
+        ])].join(','),
+    }
+    : undefined
 
 export default defineConfig({
     testDir: './tests',
@@ -23,6 +40,7 @@ export default defineConfig({
     workers: 1,
     use: {
         baseURL: `http://${host}:${port}`,
+        proxy,
         // PW_VIEWPORT=WxH scales the render surface for constrained CI
         // containers (SwiftShader cost is proportional to pixels); unset
         // keeps the standard 1280x720 desktop viewport.

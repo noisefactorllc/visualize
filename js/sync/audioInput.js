@@ -1,6 +1,6 @@
 import { SyncBridgeClient } from './audio.js'
 import { syncCredentialStore } from './credentials.js'
-import { SyncLifecycleError, SyncUnavailableError } from './sdk/0.3.0/browser/index.js'
+import { SyncLifecycleError, SyncUnavailableError } from './sdk/0.3.3/browser/index.js'
 
 export const SYNC_AUDIO_PREFIX = 'sync-audio:'
 export function isSyncAudioSource(id) {
@@ -108,7 +108,7 @@ export function createSyncAudioInput({
                 client?.close()
                 client = new Client({ token: credential.token })
                 const welcome = await client.connect()
-                if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.available && provider.selected))
+                if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.direction === 'receive' && provider.available && provider.selected))
                     throw new Error('Update Sync to a version that supports audio input')
                 return client.listAudioSources()
             }
@@ -163,7 +163,7 @@ export function createSyncAudioInput({
         try {
             client = new Client({ token: credential.token })
             const welcome = await client.connect()
-            if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.available && provider.selected)) {
+            if (!welcome.capabilities.providers.some(provider => provider.id === 'audio' && provider.direction === 'receive' && provider.available && provider.selected)) {
                 if (generation === discoveryGeneration) devices = devices.map(device => ({ ...device, connected: false }))
                 return getSyncAudioDevices()
             }

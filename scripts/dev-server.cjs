@@ -90,6 +90,6 @@ process.on('uncaughtException', (err) => {
     console.error('[dev-server] recovered from:', err && err.message);
 });
 
-server.listen(port, process.env.PW_PORT ? '127.0.0.1' : undefined, () => {
+server.listen(port, '127.0.0.1', () => {
     console.log(`[dev-server] serving ${root} on http://localhost:${port}`);
 });

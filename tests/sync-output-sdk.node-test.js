@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
@@ -49,14 +49,26 @@ test('vendored Sync browser SDK matches its pinned checksums', async () => {
 })
 
 
-test('native audio SDK matches the reviewed immutable manifest', async () => {
-    const directory = resolve(sdkDir, '../0.3.0')
-    const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), 'fb85d80c57b39a63839afe9d1e507ff8e03b719928132e25aba7cfb8c248ceaf')
-    for (const line of manifest.trim().split('\n')) {
-        const [expected, filename] = line.split('  ')
-        assert.equal(createHash('sha256').update(await readFile(resolve(directory, filename))).digest('hex'), expected, filename)
+test('every Sync SDK consumer loads the pinned 0.3.3 snapshot', async () => {
+    const jsRoot = resolve(sdkDir, '../../../..', 'js')
+    const sources = []
+    for (const entry of await readdir(jsRoot, { withFileTypes: true, recursive: true })) {
+        if (entry.isFile() && entry.name.endsWith('.js') && !entry.parentPath.split('/').includes('node_modules')) {
+            sources.push({ file: entry.parentPath, contents: await readFile(resolve(entry.parentPath, entry.name), 'utf8') })
+        }
     }
+    const consumers = new Map()
+    for (const { file, contents } of sources) {
+        for (const match of contents.matchAll(/sdk\/(\d+\.\d+\.\d+)\//g)) {
+            consumers.set(`${file}:${match.index}`, match[1])
+        }
+    }
+    assert.ok(consumers.size >= 3, 'bundle, audio and audioInput must reference a snapshot')
+    for (const [location, version] of consumers) {
+        assert.equal(version, '0.3.3', `${location} must load the pinned 0.3.3 snapshot`)
+    }
+    await assert.rejects(stat(resolve(sdkDir, '../0.3.0')), { code: 'ENOENT' },
+        'the retired 0.3.0 audio snapshot must be gone')
 })
 
 test('h264 browser SDK matches the reviewed immutable manifest', async () => {

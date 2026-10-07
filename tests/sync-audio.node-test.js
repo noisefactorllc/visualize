@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { createSyncAudioInput, syncAudioBufferFrames } from '../js/sync/audioInput.js'
 import { createSyncCredentialStore } from '../js/sync/credentials.js'
 
-const welcome = { capabilities: { providers: [{ id: 'audio', available: true, selected: true }] } }
+const welcome = { capabilities: { providers: [{ id: 'audio', direction: 'receive', available: true, selected: true }] } }
 const sources = [{ id: 'interface', name: 'Studio interface', channelCount: 8, sampleRate: 48000 }]
 
 test('native audio discovery pairs only on explicit connect and shares the resulting grant', async () => {

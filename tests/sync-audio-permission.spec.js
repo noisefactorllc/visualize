@@ -77,7 +77,7 @@ test('Sync loopback permission denial surfaces an error and the grant path recov
     // so each phase can flip them without reloading the page.
     await page.route('**/js/sync/audio.js', route => route.fulfill({
         contentType: 'text/javascript',
-        body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.0/browser/index.js';
+        body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.3/browser/index.js';
             export class SyncBridgeClient extends Base {
                 constructor(options) {
                     super({ timeoutMs: 15000, ...options, endpoint: window.__syncEndpoint,

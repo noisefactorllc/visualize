@@ -29,9 +29,14 @@ test.use({
     },
 })
 
-test.beforeAll(async () => {
+test.beforeAll(async ({ baseURL }) => {
     test.skip(!daemonPath || !fs.existsSync(daemonPath), 'Set SYNC_AUDIO_TEST_SERVER to the native Sync audio fixture')
-    daemon = spawn(daemonPath, ['--test-origin', process.env.SYNC_AUDIO_TEST_ORIGIN || 'http://localhost:3070', '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
+    // The fixture daemon allow-lists one page origin; derive it from the
+    // configured baseURL so the spec works on any host/port (the wrapper
+    // picks a sandbox-permitted port in restricted runners).
+    const pageOrigin = process.env.SYNC_AUDIO_TEST_ORIGIN
+        || (baseURL ? new URL(baseURL).origin : 'http://localhost:3070')
+    daemon = spawn(daemonPath, ['--test-origin', pageOrigin, '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
     endpoint = await new Promise((resolve, reject) => {
         let output = ''
         const timer = setTimeout(() => reject(new Error('Audio daemon startup timed out')), 5000)
@@ -66,7 +71,7 @@ async function setup(page, fullApp = false) {
     }
     await page.route('**/js/sync/audio.js', route => route.fulfill({
         contentType: 'text/javascript',
-        body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.0/browser/index.js';
+        body: `import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.3/browser/index.js';
             export class SyncBridgeClient extends Base {
                 constructor(options) { super({ timeoutMs: 15000, ...options, endpoint: ${JSON.stringify(endpoint)}, permissions: { query: async () => ({ state: 'granted' }) } }); }
                 async pair() { return { token: 'audio-test-token' }; }

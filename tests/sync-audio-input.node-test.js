@@ -15,7 +15,7 @@
 //   drops under renderer load cannot starve playback and meters.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SyncLifecycleError, SyncUnavailableError } from '../js/sync/sdk/0.3.0/browser/index.js'
+import { SyncLifecycleError, SyncUnavailableError } from '../js/sync/sdk/0.3.3/browser/index.js'
 import {
     isTransientConnectLoss,
     retryUnavailable,
@@ -190,13 +190,15 @@ function fakeClient(handlers) {
         async pair(name) { return handlers.pair?.(name) ?? { token: 't' } },
         async connect() {
             if (handlers.connect) return handlers.connect()
-            return { capabilities: { providers: [{ id: 'audio', available: true, selected: true }] } }
+            return { capabilities: { providers: RECEIVE_AUDIO_PROVIDERS } }
         },
         async listAudioSources() {
             return [{ id: 'audio_1', name: 'Device 1', channelCount: 2, sampleRate: 48000 }]
         }
     }
 }
+
+const RECEIVE_AUDIO_PROVIDERS = [{ id: 'audio', direction: 'receive', available: true, selected: true }]
 
 test('discovery recovers from a transient control-connection loss and closes the stale client', async () => {
     const store = fakeCredentialStore()
@@ -208,7 +210,7 @@ test('discovery recovers from a transient control-connection loss and closes the
                 async connect() {
                     connectCalls++
                     if (connectCalls === 1) throw new SyncLifecycleError('control connection closed')
-                    return { capabilities: { providers: [{ id: 'audio', available: true, selected: true }] } }
+                    return { capabilities: { providers: RECEIVE_AUDIO_PROVIDERS } }
                 }
             }) }
             close() { this.inner.close() }
@@ -250,4 +252,27 @@ test('discovery surfaces a persistent control-connection loss as a failure', asy
     await assert.rejects(syncAudio.connectSyncAudio(), /pairing connection failed/)
     assert.equal(connectCalls, 3)
     assert.deepEqual(syncAudio.getSyncAudioDevices(), [])
+})
+
+test('a send-direction audio provider is not offered as an input device', async () => {
+    const store = fakeCredentialStore()
+    let listed = 0
+    const syncAudio = createSyncAudioInput({
+        Client: class {
+            constructor() { this.inner = fakeClient({
+                async connect() {
+                    return { capabilities: { providers: [{ id: 'audio', direction: 'send', available: true, selected: true }] } }
+                },
+                async listAudioSources() { listed++; return [] }
+            }) }
+            close() { this.inner.close() }
+            pair(name) { return this.inner.pair(name) }
+            connect() { return this.inner.connect() }
+            listAudioSources() { return this.inner.listAudioSources() }
+        },
+        credentialStore: store,
+        appName: 'Test'
+    })
+    await assert.rejects(syncAudio.connectSyncAudio(), /supports audio input/)
+    assert.equal(listed, 0, 'a send-direction audio provider must not be enumerated as input')
 })
