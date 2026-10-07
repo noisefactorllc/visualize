@@ -147,6 +147,36 @@ function storedImages(page, ids) {
     }, ids)
 }
 
+/**
+ * The record IndexedDB holds for an image, read without the app: its media
+ * type, whether it keeps the file's bytes in an ArrayBuffer, and the SHA-256
+ * of those bytes. WebKit's private browsing, and Playwright's default WebKit
+ * context, refuse a Blob or File in IndexedDB but take an ArrayBuffer.
+ */
+function storedRecord(page, id) {
+    return page.evaluate(id => new Promise((resolve, reject) => {
+        const open = indexedDB.open('visualize-scene-images')
+        open.onerror = () => reject(open.error)
+        open.onsuccess = () => {
+            const db = open.result
+            const get = db.transaction('images', 'readonly').objectStore('images').get(id)
+            get.onerror = () => { db.close(); reject(get.error) }
+            get.onsuccess = async () => {
+                db.close()
+                const record = get.result
+                if (!record) return resolve(null)
+                const arrayBuffer = record.bytes instanceof ArrayBuffer
+                const digest = arrayBuffer ? new Uint8Array(await crypto.subtle.digest('SHA-256', record.bytes)) : null
+                resolve({
+                    type: record.type,
+                    arrayBuffer,
+                    sha256: digest && Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join(''),
+                })
+            }
+        }
+    }), id)
+}
+
 function storedImageCount(page) {
     return page.evaluate(() => new Promise((resolve, reject) => {
         const open = indexedDB.open('visualize-scene-images')
@@ -280,6 +310,9 @@ test('a saved scene keeps its image as a file in IndexedDB and shows it again af
         await expect.poll(() => deckPixel(page, 'A'), { timeout: 30_000 * SCALE }).toEqual([255, 0, 0, 255])
         expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).toContain(`image:${red.id}`)
         expect(await heldImages(page, 'A')).toEqual([red.id])
+        // The stored bytes are the chosen file's, kept as an ArrayBuffer.
+        expect(await storedRecord(page, red.id)).toEqual({ type: 'image/png', arrayBuffer: true, sha256: red.id })
+        expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
     } finally {
         await context.close()
     }

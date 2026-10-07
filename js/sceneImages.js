@@ -5,8 +5,11 @@
  * A saved scene's DSL names each image it shows as `image:<sha256>`. The
  * scene itself lives in localStorage and holds only that DSL plus its small
  * settings; the image is stored here, in IndexedDB, as the original file's
- * bytes in a Blob. There is one record, { id, blob, storedAt }, per image
- * however many scenes use it. Nothing here deletes an image.
+ * bytes in an ArrayBuffer with its media type. There is one record,
+ * { id, type, bytes, storedAt }, per image however many scenes use it.
+ * Nothing here deletes an image. WebKit's private browsing refuses a Blob or
+ * File in IndexedDB but takes an ArrayBuffer; records saved earlier as a
+ * Blob, { id, blob, storedAt }, still read.
  *
  * Scenes used to carry their images as base64 text inside localStorage, one
  * copy per scene. Chrome allows 5,242,880 characters per origin, shared with
@@ -77,8 +80,8 @@ async function transact(mode, work) {
 }
 
 /** SHA-256 of a file's bytes as lowercase hex: the image id. */
-async function imageDigest(blob) {
-    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))
+async function imageDigest(bytes) {
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     return Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
@@ -92,16 +95,20 @@ async function imageDigest(blob) {
  */
 export async function storeSceneImages(images = []) {
     if (!images.length) return
-    const files = new Map()
+    // Each file is read once, here, before the transaction opens: awaiting
+    // inside it would let it commit early. The bytes that hash to the id are
+    // the bytes stored.
+    const records = new Map()
     for (const { id, blob } of images) {
         if (!IMAGE_ID.test(id) || !(blob instanceof Blob)) throw new Error('Invalid scene image')
-        if (files.has(id)) continue
-        if (await imageDigest(blob) !== id) throw new Error(`Image bytes do not match their id: ${id}`)
-        files.set(id, blob)
+        if (records.has(id)) continue
+        const bytes = await blob.arrayBuffer()
+        if (await imageDigest(bytes) !== id) throw new Error(`Image bytes do not match their id: ${id}`)
+        records.set(id, { id, type: blob.type, bytes })
     }
     const storedAt = Date.now()
     await transact('readwrite', store => {
-        for (const [id, blob] of files) store.put({ id, blob, storedAt })
+        for (const record of records.values()) store.put({ ...record, storedAt })
     })
 }
 
@@ -115,6 +122,7 @@ export async function getSceneImage(id) {
     if (typeof indexedDB === 'undefined' || !IMAGE_ID.test(id)) return null
     try {
         const record = await transact('readonly', store => store.get(id))
+        if (record?.bytes instanceof ArrayBuffer) return new Blob([record.bytes], { type: record.type || '' })
         return record?.blob instanceof Blob ? record.blob : null
     } catch (err) {
         console.warn('[sceneImages] read failed', err)

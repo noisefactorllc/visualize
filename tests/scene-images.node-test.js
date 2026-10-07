@@ -101,7 +101,7 @@ function fakeIndexedDB() {
         return db
     }
     return {
-        opens, transactions,
+        opens, transactions, records,
         open(name, version) {
             const request = { name, version }
             opens.push(request)
@@ -124,6 +124,43 @@ function fakeIndexedDB() {
     }
 }
 
+/** The media type and bytes of a stored image file, or null. */
+async function fileOf(file) {
+    const blob = await file
+    if (!blob) return null
+    assert.ok(blob instanceof Blob)
+    return { type: blob.type, bytes: Buffer.from(await blob.arrayBuffer()) }
+}
+
+test('an image is stored as its bytes in an ArrayBuffer, which WebKit private browsing accepts, and read as a Blob', async () => {
+    const idb = fakeIndexedDB()
+    const id = sha256(PNG_BYTES)
+    await withIndexedDB(idb, async () => {
+        const stored = storeSceneImages([{ id, blob: new File([PNG_BYTES], 'picked.png', { type: 'image/png' }) }])
+        const db = await idb.succeed()
+        await stored
+        const record = idb.records.get(id)
+        assert.deepEqual(Object.keys(record).sort(), ['bytes', 'id', 'storedAt', 'type'])
+        assert.ok(record.bytes instanceof ArrayBuffer)
+        assert.equal(record.type, 'image/png')
+        assert.deepEqual(Buffer.from(record.bytes), PNG_BYTES)
+        assert.deepEqual(await fileOf(getSceneImage(id)), { type: 'image/png', bytes: PNG_BYTES })
+        db.onclose()
+    })
+})
+
+test('an image stored earlier as a Blob still reads', async () => {
+    const idb = fakeIndexedDB()
+    const id = sha256(PNG_BYTES)
+    idb.records.set(id, { id, blob: new Blob([PNG_BYTES], { type: 'image/png' }), storedAt: 1 })
+    await withIndexedDB(idb, async () => {
+        const read = getSceneImage(id)
+        const db = await idb.succeed()
+        assert.deepEqual(await fileOf(read), { type: 'image/png', bytes: PNG_BYTES })
+        db.onclose()
+    })
+})
+
 test('image storage writes durably, and reopens after another tab upgrades it or the browser closes it', async () => {
     const idb = fakeIndexedDB()
     const id = sha256(PNG_BYTES)
@@ -133,7 +170,7 @@ test('image storage writes durably, and reopens after another tab upgrades it or
         const first = await idb.succeed()
         await stored
         assert.deepEqual(idb.transactions.at(-1), { store: 'images', mode: 'readwrite', options: { durability: 'strict' } })
-        assert.equal(await getSceneImage(id), blob)
+        assert.deepEqual(await fileOf(getSceneImage(id)), await fileOf(blob))
         assert.deepEqual(idb.transactions.at(-1), { store: 'images', mode: 'readonly', options: undefined })
         assert.equal(idb.opens.length, 1, 'one connection serves both')
 
@@ -141,13 +178,13 @@ test('image storage writes durably, and reopens after another tab upgrades it or
         assert.equal(first.closed, true, 'a newer version in another tab is let through')
         const afterUpgrade = getSceneImage(id)
         const second = await idb.succeed()
-        assert.equal(await afterUpgrade, blob)
+        assert.deepEqual(await fileOf(afterUpgrade), await fileOf(blob))
         assert.equal(idb.opens.length, 2)
 
         second.onclose()
         const afterClose = getSceneImage(id)
         const third = await idb.succeed()
-        assert.equal(await afterClose, blob)
+        assert.deepEqual(await fileOf(afterClose), await fileOf(blob))
         assert.equal(idb.opens.length, 3)
         third.onclose()
     })
