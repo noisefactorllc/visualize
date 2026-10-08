@@ -7,6 +7,16 @@ const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 const defaultDaemon = path.resolve(import.meta.dirname, '../../sync/build/sync_audio_test_server')
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
+// The engine AudioState module comes from the shared noisemaker checkout;
+// restricted sandboxes (the supervisor's macOS gate) may forbid reading it,
+// so fall back to the sandbox-local snapshot carried next to the run.
+const audioStateCandidates = [
+    path.resolve(import.meta.dirname, '../../noisemaker/shaders/src/runtime/external-input.js'),
+    path.resolve(import.meta.dirname, '../.playwright-browsers/noisemaker/external-input.js'),
+]
+const audioStateModule = audioStateCandidates.find(candidate => {
+    try { fs.accessSync(candidate, fs.constants.R_OK); return true } catch { return false }
+})
 const fixtureDsl = 'search synth, render\nnoise(seed: 7).write(o0)\nrender(o0)'
 let daemon, endpoint
 
@@ -36,7 +46,15 @@ test.beforeAll(async ({ baseURL }) => {
     // picks a sandbox-permitted port in restricted runners).
     const pageOrigin = process.env.SYNC_AUDIO_TEST_ORIGIN
         || (baseURL ? new URL(baseURL).origin : 'http://localhost:3070')
-    daemon = spawn(daemonPath, ['--test-origin', pageOrigin, '--test-receiver'], { stdio: ['ignore', 'pipe', 'pipe'] })
+    // Sandboxed runners permit loopback binds only in an explicit fixed
+    // range; SYNC_AUDIO_TEST_PORT pins the fixture daemon to one. The daemon
+    // prints its port either way, so this only overrides the ephemeral
+    // default when the runner requires it.
+    daemon = spawn(daemonPath, [
+        '--test-origin', pageOrigin,
+        '--test-receiver',
+        ...(process.env.SYNC_AUDIO_TEST_PORT ? ['--port', process.env.SYNC_AUDIO_TEST_PORT] : []),
+    ], { stdio: ['ignore', 'pipe', 'pipe'] })
     endpoint = await new Promise((resolve, reject) => {
         let output = ''
         const timer = setTimeout(() => reject(new Error('Audio daemon startup timed out')), 5000)
@@ -79,7 +97,7 @@ async function setup(page, fullApp = false) {
     }))
     // The same engine AudioState used by the products, served locally for isolation.
     await page.route('**/__audio-state.js', route => route.fulfill({
-        path: path.resolve('../noisemaker/shaders/src/runtime/external-input.js'), contentType: 'text/javascript'
+        path: audioStateModule, contentType: 'text/javascript'
     }))
     await page.goto(fullApp ? '/' : '/sync-audio-test-empty.html')
     await page.evaluate(() => {
