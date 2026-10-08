@@ -37,6 +37,7 @@ Open <http://localhost:3007>. Click **START SET**. Click **⚙ → audio device*
 - **Main FX**: strobe (beat-synced), invert, B&W, zoom, freeze, flash. Invert/B&W use CSS filters on the main canvas (cheap). The compositor draw loop handles strobe/flash/freeze.
 - **Auto-VJ mode**: every N bars, picks a fresh random program, loads into the off-side deck, and fades to it over the chosen curve.
 - **Scenes**: save a full snapshot (both decks' programs + speeds, crossfader, BPM, FX, auto-VJ config) as a named scene. Recall instantly via the panel or Shift+1…9. Stored in browser localStorage.
+- **Session recovery**: the live set — both decks, crossfader, FX, BPM, mixer effect, auto-VJ config — is saved continuously and restored when the page reloads, so a mid-gig refresh is no longer a silent total loss.
 - **Recording**: capture the main canvas to a webm/mp4 via `MediaRecorder`. Warns at 15 min, hard-stops at 60 min to protect browser memory.
 - **Output window**: dedicated popup that mirrors the main canvas for second-display / projector use.
 - **Fullscreen main** (F key).

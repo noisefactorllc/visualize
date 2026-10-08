@@ -9,7 +9,8 @@ import { connectSyncAudio, refreshSyncAudioDevices } from './sync/audioInput.js'
  * Boot flow:
  *   1. Render boot overlay; wait for user gesture (required for audio).
  *   2. Initialize both decks (loads shader manifest from CDN).
- *   3. Load library and pre-fill A/B with two random programs.
+ *   3. Load library and pre-fill A/B with the last saved working set
+ *      (or two random programs when none was saved).
  *   4. Start compositor + scheduler. Audio/MIDI stay opt-in (settings).
  */
 
@@ -33,6 +34,7 @@ import {
 } from './syncOutput.js'
 import { createSyncOutputDialog } from './syncOutputDialog.js'
 import { Scenes } from './scenes.js'
+import { loadWorkingSet, saveWorkingSet } from './workingSet.js'
 import { getSceneImage, migrateSceneImages, sceneImagesMigrated, storeSceneImages } from './sceneImages.js'
 import * as rebind from './rebind.js'
 import { AutoXfade } from './autoxfade.js'
@@ -261,6 +263,16 @@ async function boot() {
     // is held so post-gesture code can load the composition without
     // re-fetching.
     const sharePromise = prepareShareDialog()
+
+    // The working set is the last live state this browser saw (deck DSLs,
+    // crossfader, FX, BPM, …). Read it once: it decides both the boot
+    // hint and whether START SET restores that set instead of pre-filling
+    // two random programs.
+    const bootWorkingSet = loadWorkingSet()
+    if (bootWorkingSet) {
+        const hint = document.querySelector('.boot-default .boot-hint')
+        if (hint) hint.textContent = 'press start to restore your last set, then enable audio input'
+    }
 
     // Construct decks
     state.decks.A = new Deck($('deck-a-canvas'), {
@@ -2054,6 +2066,18 @@ async function boot() {
                 refreshDeckMediaUi('A')
                 refreshDeckMediaUi('B')
                 publishAllDecks('scene-recall')
+                // Scenes.apply loads decks directly, bypassing
+                // loadProgram's label write — keep the headers and the
+                // speed sliders on the state the decks actually run now.
+                for (const deckId of ['A', 'B']) {
+                    const labels = deckLabels[deckId]
+                    if (labels) labels.name.textContent = state.decks[deckId].currentName || '—'
+                    const speed = state.decks[deckId]._speed ?? 1
+                    const slider = $(`speed-${deckId.toLowerCase()}`)
+                    const val = $(`speed-${deckId.toLowerCase()}-val`)
+                    if (slider) slider.value = String(speed)
+                    if (val) val.textContent = `${speed.toFixed(1)}×`
+                }
             }
         }
     }
@@ -2262,6 +2286,84 @@ async function boot() {
 
     scenes.onChange(() => renderScenes())
     renderScenes()
+
+    // ── Working set: persist the live state for reload/crash recovery ────
+    // The whole live set is already snapshot-able (Scenes.snapshot) and
+    // restorable (Scenes.apply) — the scenes feature just never wires it
+    // to anything automatic. Poll a fingerprint of the live snapshot and
+    // save it (debounced) whenever it drifts. Polling rather than hooking
+    // every mutation point keeps DSL edits, MIDI moves, auto-VJ swaps and
+    // any future mutation covered without new plumbing.
+    const WORKING_SET_POLL_MS = 1000
+    const WORKING_SET_SAVE_DEBOUNCE_MS = 1500
+
+    /** Live snapshot + a fingerprint that ignores snapshot().createdAt. */
+    function captureWorkingSet() {
+        try {
+            const { createdAt, ...snapshot } = Scenes.snapshot(snapshotAccessors())
+            // createdAt changes on every call — the fingerprint must not.
+            return { snapshot, fingerprint: JSON.stringify(snapshot) }
+        } catch {
+            return null
+        }
+    }
+
+    let workingSetFingerprint = null
+    let workingSetDirtySince = 0
+    // Image ids are sha256 digests of their bytes, so an unchanged id set
+    // means the stored files are already current — skip re-writing them
+    // on every debounced save of a fast-drifting set.
+    let workingSetStoredImageIds = null
+    // Saves run one after another so a slow image store never lets an
+    // older snapshot finish last and overwrite a newer one.
+    let workingSetSaves = Promise.resolve()
+
+    function persistWorkingSet(snapshot) {
+        workingSetSaves = workingSetSaves.then(async () => {
+            let files = []
+            try {
+                // Images first, as files: a restored set must never name
+                // an image that is not stored (same rule as scene saves).
+                await sceneImagesMigrated()
+                const images = Scenes.imageFiles(snapshot, state.decks)
+                const inline = await Scenes.fileInlineImages(snapshot, async dsl => fileInlineImages(dsl, await import(PORTABLE_IMAGES_URL)))
+                files = [...images, ...inline]
+            } catch (err) {
+                console.warn('[working set] could not store deck images', err)
+                return
+            }
+            const imageIds = files.map(file => file.id).sort().join(',')
+            if (imageIds !== workingSetStoredImageIds) {
+                try {
+                    await storeSceneImages(files)
+                    workingSetStoredImageIds = imageIds
+                } catch (err) {
+                    console.warn('[working set] could not store deck images', err)
+                    return
+                }
+            }
+            if (!saveWorkingSet(snapshot)) {
+                console.warn('[working set] persist failed — storage full or unavailable')
+            }
+        }).catch(err => console.warn('[working set] save failed', err))
+    }
+
+    setInterval(() => {
+        const capture = captureWorkingSet()
+        if (!capture) return
+        // Neither deck has a program yet: the pre-start state is not a
+        // set worth persisting, so treat it as the baseline instead.
+        const empty = !capture.snapshot.decks?.A?.dsl && !capture.snapshot.decks?.B?.dsl
+        if (empty || capture.fingerprint !== workingSetFingerprint) {
+            workingSetFingerprint = capture.fingerprint
+            if (empty) { workingSetDirtySince = 0; return }
+            if (!workingSetDirtySince) workingSetDirtySince = Date.now()
+        }
+        if (workingSetDirtySince && Date.now() - workingSetDirtySince >= WORKING_SET_SAVE_DEBOUNCE_MS) {
+            workingSetDirtySince = 0
+            persistWorkingSet(capture.snapshot)
+        }
+    }, WORKING_SET_POLL_MS)
 
     function openScenesDrawer() {
         if (typeof closeSettings === 'function') closeSettings()
@@ -2524,13 +2626,27 @@ async function boot() {
         if (document.hidden) xfadeNudgeTracker.reset()
     })
 
-    // Initial load: random into both decks. Serialize (not Promise.all) —
-    // the shader bundle's loadEffects() shares manifest state and parallel
-    // first-time loads sometimes race into ERR_COMPILATION_FAILED.
-    const startA = library.random()
-    const startB = library.randomExcept(startA?.title)
-    await loadProgram('A', startA)
-    await loadProgram('B', startB)
+    // Initial load: restore the last saved working set when one exists, so
+    // a reload (or crash) resumes the operator's live set instead of a
+    // fresh random pair; otherwise pre-fill A/B with two random programs.
+    // Serialize the deck loads either way (not Promise.all) — the shader
+    // bundle's loadEffects() shares manifest state and parallel first-time
+    // loads sometimes race into ERR_COMPILATION_FAILED.
+    if (bootWorkingSet) {
+        const errors = await Scenes.apply(bootWorkingSet, applyAccessors())
+        if (errors.length) {
+            // Scenes.apply applies as much as it can and reports the rest.
+            console.warn('[working set] restore errors', errors)
+            toast('some programs did not restore — pick from the library', 4000)
+        } else {
+            toast('restored your last set')
+        }
+    } else {
+        const startA = library.random()
+        const startB = library.randomExcept(startA?.title)
+        await loadProgram('A', startA)
+        await loadProgram('B', startB)
+    }
     updateLiveIndicator()
     setStatusPill('midi-status', 'midi off', 'off')
 

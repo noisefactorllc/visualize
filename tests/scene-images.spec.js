@@ -14,6 +14,7 @@ import { writeFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './seanceLocal.js'
+import { WORKING_SET_STORAGE_KEY } from '../js/workingSet.js'
 
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 test.describe.configure({ timeout: 180_000 * SCALE, retries: 0 })
@@ -303,6 +304,10 @@ test('a saved scene keeps its image as a file in IndexedDB and shows it again af
         expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
         expect(await heldImages(page, 'A')).toEqual([red.id])
 
+        // Session recovery restores the live decks across a reload; drop
+        // the saved working set so this boot starts fresh and the spec
+        // keeps testing the scene-recall path alone.
+        await page.evaluate(key => localStorage.removeItem(key), WORKING_SET_STORAGE_KEY)
         await page.reload()
         await start(page)
         expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).not.toContain(red.id)
@@ -342,6 +347,10 @@ test('a program that names its image inline, as text, saves the image as a file 
         expect(saved.decks.A.rebind.originalDsl).toBe(imageDsl(red.id))
         expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
 
+        // Session recovery restores the live decks across a reload; drop
+        // the saved working set so this boot starts fresh and the spec
+        // keeps testing the scene-recall path alone.
+        await page.evaluate(key => localStorage.removeItem(key), WORKING_SET_STORAGE_KEY)
         await page.reload()
         await start(page)
         await recallScene(page, 'Inline picture')
@@ -452,6 +461,10 @@ test('scenes that filled localStorage with image text move it to IndexedDB on lo
         expect(await storedImages(page, [yellow.id])).toEqual([fileOf(yellow)])
         expect(await usedCharacters(page)).toBeLessThan(20_000)
 
+        // Session recovery restores the live decks across a reload; drop
+        // the saved working set so this boot starts fresh and the spec
+        // keeps testing the scene-recall path alone.
+        await page.evaluate(key => localStorage.removeItem(key), WORKING_SET_STORAGE_KEY)
         await page.reload()
         await start(page)
         await recallScene(page, 'After moving')
@@ -483,6 +496,10 @@ test('a picked file that changes on disk after it is chosen still saves with the
         await saveScene(page, 'Picked then edited')
         expect(await storedImages(page, [red.id])).toEqual([fileOf(red)])
 
+        // Session recovery restores the live decks across a reload; drop
+        // the saved working set so this boot starts fresh and the spec
+        // keeps testing the scene-recall path alone.
+        await page.evaluate(key => localStorage.removeItem(key), WORKING_SET_STORAGE_KEY)
         await page.reload()
         await start(page)
         await recallScene(page, 'Picked then edited')
@@ -513,6 +530,10 @@ test('a recall still reading its images from storage loses to a newer recall', a
         await saveScene(page, 'Plain')
 
         // Every page load holds image storage until the test releases it.
+        // Session recovery restores the live decks across a reload; drop
+        // the saved working set so this boot starts fresh and the spec
+        // keeps testing the scene-recall path alone.
+        await page.evaluate(key => localStorage.removeItem(key), WORKING_SET_STORAGE_KEY)
         await page.reload()
         await start(page)
         expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).not.toBe(plain)
