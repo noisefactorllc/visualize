@@ -24,7 +24,7 @@
     "noisemaker"
   ],
   "scripts": {
-    "dev": "npx http-server . -p 3007 -c-1",
+    "dev": "node scripts/dev-server.cjs 3007 .",
     "test": "node scripts/test.cjs",
     "test:node": "node --test tests/*.node-test.js",
     "lint": "node --check js/*.js js/ui/*.js js/noisemaker/*.js"

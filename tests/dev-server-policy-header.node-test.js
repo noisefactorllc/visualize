@@ -5,9 +5,10 @@
 // the application's own server must serve
 // `Permissions-Policy: loopback-network=(self)` on every response, so the
 // SDK's loopback-network permission query reflects this origin instead of
-// dead-ending on an undelegated feature. scripts/dev-server.cjs serves the
-// web app for local dev and the Playwright webServer, so it carries the
-// header on success and error responses alike.
+// dead-ending on an undelegated feature. scripts/dev-server.cjs is the
+// application's own server — the documented `npm run dev` local-dev server
+// and the Playwright webServer — so it carries the header on success and
+// error responses alike (200, 403, 404, and the recovery-path 500).
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -117,4 +118,30 @@ test('dev-server serves the Sync loopback-network policy on error responses', as
     } finally {
         await rm(root, { recursive: true, force: true })
     }
+})
+
+test('dev-server serves the Sync loopback-network policy on the recovery 500', async t => {
+    const port = await bindablePort()
+    if (!port) return t.skip('no bindable loopback port in the permitted range')
+    const root = await mkdtemp(path.join(tmpdir(), 'dev-server-root-'))
+    try {
+        const { child, port: bound } = await startServer(root, port)
+        try {
+            // An invalid percent-escape throws in the handler's URL decode,
+            // exercising the catch-path 500 response.
+            const broken = await request(bound, '/%')
+            assert.equal(broken.status, 500)
+            assert.equal(broken.headers['permissions-policy'], 'loopback-network=(self)')
+        } finally {
+            child.kill()
+            await once(child, 'exit')
+        }
+    } finally {
+        await rm(root, { recursive: true, force: true })
+    }
+})
+
+test('the documented npm run dev serves the app through the header-carrying server', () => {
+    const pkg = require('../package.json')
+    assert.match(pkg.scripts.dev, /dev-server\.cjs/)
 })

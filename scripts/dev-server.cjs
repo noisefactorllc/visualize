@@ -41,13 +41,13 @@ const TYPES = {
 };
 
 const server = http.createServer((req, res) => {
+    // Sync's pairing contract (docs/developers.md, browser/README.md):
+    // the top-level application serves this policy so the SDK's
+    // loopback-network permission query reflects this origin's grant.
+    const headers = {
+        'Permissions-Policy': 'loopback-network=(self)',
+    };
     try {
-        // Sync's pairing contract (docs/developers.md, browser/README.md):
-        // the top-level application serves this policy so the SDK's
-        // loopback-network permission query reflects this origin's grant.
-        const headers = {
-            'Permissions-Policy': 'loopback-network=(self)',
-        };
         const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
         let filePath = path.normalize(path.join(root, urlPath));
         if (filePath !== root && !filePath.startsWith(root + path.sep)) {
@@ -80,7 +80,7 @@ const server = http.createServer((req, res) => {
         stream.pipe(res);
     } catch (err) {
         try {
-            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.writeHead(500, { ...headers, 'Content-Type': 'text/plain' });
             res.end('server error');
         } catch { /* socket already gone */ }
     }
