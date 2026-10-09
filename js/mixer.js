@@ -31,7 +31,7 @@ const MIX_W = 1280
 const MIX_H = 720
 
 export class MixerRenderer {
-    constructor({ width = MIX_W, height = MIX_H } = {}) {
+    constructor({ width = MIX_W, height = MIX_H, preferWebGPU = false } = {}) {
         this.width = width
         this.height = height
 
@@ -46,6 +46,7 @@ export class MixerRenderer {
             canvas: this.canvas,
             width, height,
             basePath: CDN_BASE,
+            preferWebGPU: preferWebGPU === true,
             useBundles: true,
             bundlePath: `${CDN_BASE}/effects`,
             onError: (err) => console.warn('[mixer]', err?.message || err),
@@ -87,6 +88,26 @@ export class MixerRenderer {
      * the 2D fallback rather than blit nothingness.
      */
     get ready() { return this._initialized && this._uploadedAtLeastOnce }
+
+    /**
+     * The REQUESTED backend, mirroring the operator's renderer preference
+     * exactly as the decks report it. This does NOT prove WebGPU engaged —
+     * the engine silently falls back to WebGL2 when WebGPU is unavailable;
+     * read `activeBackend` for the truth.
+     */
+    get preferWebGPU() { return this.renderer?.backend === 'wgsl' }
+
+    /**
+     * The backend the live pipeline actually built (same honest signal as
+     * the decks': read from the pipeline's backend object, falling back to
+     * the requested preference before the first compile).
+     */
+    get activeBackend() {
+        const name = this.renderer?.pipeline?.backend?.getName?.()
+        if (name === 'WebGPU') return 'webgpu'
+        if (name === 'WebGL2') return 'webgl2'
+        return this.preferWebGPU ? 'webgpu' : 'webgl2'
+    }
 
     /** Load the manifest + media effect + the default mixer effect. */
     async init() {

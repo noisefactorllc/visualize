@@ -343,6 +343,7 @@ async function boot() {
     const mixer = new MixerRenderer({
         width: state.mainRes.width,
         height: state.mainRes.height,
+        preferWebGPU: state.preferWebGPU,
     })
     mixer.bindDecks(state.decks.A.canvas, state.decks.B.canvas)
 

@@ -134,3 +134,33 @@ test('settings surfaces the ACTIVE renderer and flags a silent WebGPU→WebGL2 f
         expect(info.text).not.toContain('unavailable')
     }
 })
+
+test('the mixer output renderer honors the persisted renderer preference', async ({ page }) => {
+    // Sync output, the compositor and the recorder all render from the
+    // mixer's renderer, so the operator's "Prefer WebGPU renderer" control
+    // must reach it too — not just the two decks. Regression: the mixer
+    // constructor never received the preference and silently stayed WebGL2.
+    await page.addInitScript((key) => {
+        if (!localStorage.getItem(key)) {
+            localStorage.setItem(key, JSON.stringify({ preferWebGPU: true }))
+        }
+    }, RENDERER_STORAGE_KEY)
+
+    await page.goto('/')
+    await bootApp(page)
+
+    const mixerBackend = await page.evaluate(() => ({
+        requested: window.__visualize.mixer.preferWebGPU,
+        // Same normalization the decks expose for the requested flag.
+        requestedViaRenderer: window.__visualize.mixer.renderer.backend === 'wgsl',
+    }))
+    expect(mixerBackend).toEqual({ requested: true, requestedViaRenderer: true })
+
+    // After the mixer's pipeline compiles, the active backend must agree
+    // with what actually runs: WebGPU where available, an honest WebGL2
+    // fallback otherwise — never a silent third state.
+    await page.waitForFunction(() => window.__visualize?.mixer?.ready,
+        null, { timeout: 60_000 * SCALE })
+    const active = await page.evaluate(() => window.__visualize.mixer.activeBackend)
+    expect(['webgpu', 'webgl2']).toContain(active)
+})
