@@ -42,10 +42,16 @@ const TYPES = {
 
 const server = http.createServer((req, res) => {
     try {
+        // Sync's pairing contract (docs/developers.md, browser/README.md):
+        // the top-level application serves this policy so the SDK's
+        // loopback-network permission query reflects this origin's grant.
+        const headers = {
+            'Permissions-Policy': 'loopback-network=(self)',
+        };
         const urlPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
         let filePath = path.normalize(path.join(root, urlPath));
         if (filePath !== root && !filePath.startsWith(root + path.sep)) {
-            res.writeHead(403).end('forbidden');
+            res.writeHead(403, headers).end('forbidden');
             return;
         }
         let stat = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
@@ -54,10 +60,11 @@ const server = http.createServer((req, res) => {
             stat = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
         }
         if (!stat || !stat.isFile()) {
-            res.writeHead(404, { 'Content-Type': 'text/plain' }).end('not found');
+            res.writeHead(404, { ...headers, 'Content-Type': 'text/plain' }).end('not found');
             return;
         }
         res.writeHead(200, {
+            ...headers,
             'Content-Type': TYPES[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
             'Content-Length': stat.size,
             'Cache-Control': 'no-cache',
@@ -91,5 +98,5 @@ process.on('uncaughtException', (err) => {
 });
 
 server.listen(port, '127.0.0.1', () => {
-    console.log(`[dev-server] serving ${root} on http://localhost:${port}`);
+    console.log(`[dev-server] serving ${root} on http://localhost:${server.address().port}`);
 });
