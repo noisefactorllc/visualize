@@ -304,12 +304,23 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
     const receiverStatus = () => page.evaluate(async () => {
         const output = window.__visualize.syncOutputController
         const client = output._client, sender = output._sender
-        if (!sender) return { state: output.state, accepted: false }
-        const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
-            { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
-        window.nativeReceiverStats = stats
-        return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
-            accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
+        // The receiver's bounded queue may end the sender between polls; the
+        // closed client's control exchange then throws a lifecycle error. That
+        // is the not-yet-accepted state the poll already tolerates, not a
+        // failure of the acceptance criterion.
+        if (!client || !sender) return { state: output.state, accepted: false }
+        try {
+            const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
+                { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
+            window.nativeReceiverStats = stats
+            return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
+                accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
+        } catch (error) {
+            if (error?.name === 'SyncLifecycleError' || error?.code === 'SYNC_LIFECYCLE') {
+                return { state: output.state, accepted: false }
+            }
+            throw error
+        }
     })
     try {
         await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 15_000 * SCALE }).toBe(true)
