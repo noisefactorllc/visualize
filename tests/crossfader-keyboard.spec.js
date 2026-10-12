@@ -33,6 +33,53 @@ async function boot(browser) {
     return { context, page }
 }
 
+test('focused Handfish controls consume keys without triggering global actions', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const trigger = page.locator('#mixer-effect .select-trigger')
+        await trigger.focus()
+        const before = await page.evaluate(() => window.__visualize.state.crossfade)
+        await page.keyboard.press('Space')
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+        expect(await page.evaluate(() => window.__visualize.autoMix.enabled)).toBe(false)
+        await trigger.focus()
+        await page.keyboard.press('End')
+        expect(await page.evaluate(() => window.__visualize.state.crossfade)).toBe(before)
+        await page.keyboard.press('Home')
+        expect(await page.evaluate(() => window.__visualize.state.crossfade)).toBe(before)
+        await page.keyboard.press('r')
+        await expect(page.locator('#record-toggle')).toHaveAttribute('data-state', 'off')
+
+        await page.click('#settings-toggle')
+        const track = page.locator('#prefer-webgpu .ts-track')
+        await track.focus()
+        const checkedBefore = await page.locator('#prefer-webgpu').evaluate(el => el.checked)
+        await page.keyboard.press('Space')
+        expect(await page.locator('#prefer-webgpu').evaluate(el => el.checked)).toBe(!checkedBefore)
+        expect(await page.evaluate(() => window.__visualize.autoMix.enabled)).toBe(false)
+    } finally {
+        await context.close()
+    }
+})
+
+test('Escape closes an open settings dropdown before the settings drawer', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        await page.click('#settings-toggle')
+        const trigger = page.locator('#main-resolution .select-trigger')
+        await trigger.focus()
+        await page.keyboard.press('Space')
+        await expect(trigger).toHaveAttribute('aria-expanded', 'true')
+        await page.keyboard.press('Escape')
+        await expect(trigger).toHaveAttribute('aria-expanded', 'false')
+        await expect(page.locator('#settings-drawer')).toHaveAttribute('aria-hidden', 'false')
+        await page.keyboard.press('Escape')
+        await expect(page.locator('#settings-drawer')).toHaveAttribute('aria-hidden', 'true')
+    } finally {
+        await context.close()
+    }
+})
+
 test('crossfader arrow keys: 5% standard nudge and 1% fine shift nudge', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {

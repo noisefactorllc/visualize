@@ -33,7 +33,7 @@ import {
     createSyncOutputConnectionProvider
 } from './syncOutput.js'
 import { createSyncOutputDialog } from './syncOutputDialog.js'
-import { Scenes } from './scenes.js'
+import { Scenes, MAX_SCENES } from './scenes.js'
 import { loadWorkingSet, saveWorkingSet } from './workingSet.js'
 import { getSceneImage, migrateSceneImages, sceneImagesMigrated, storeSceneImages } from './sceneImages.js'
 import * as rebind from './rebind.js'
@@ -57,8 +57,6 @@ import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollab
 // toolbar button), and the <seance-dialog> element (declared in index.html;
 // registers automatically once this module evaluates).
 import { SEANCE_LOGO_SVG, dslTokenizer } from 'handfish'
-// Injects Visualize's code-editor skin. Editor behavior comes from Handfish.
-import './ui/codeEditor.js'
 
 const ONLINE_COLLABORATION_FEATURE = 'onlineCollaboration'
 const $ = (id) => document.getElementById(id)
@@ -1026,6 +1024,7 @@ async function boot() {
         setTooltip(btn, on
             ? "Bandpass on: EQ rebind stays in this program's bands"
             : 'Bandpass off: EQ rebind picks any band')
+        btn.setAttribute('aria-label', btn.dataset.title)
     }
 
     function updateOscCountBtn(deckId) {
@@ -1564,6 +1563,7 @@ async function boot() {
     // user-set number of seconds instead of a bars-derived value.
     const fadeDurEl = $('fade-duration')
     if (fadeDurEl) {
+        fadeDurEl.querySelector('.slider')?.setAttribute('aria-label', 'Fade time in seconds')
         fadeDurEl.value = state.fadeDurSec
         fadeDurEl.addEventListener('input', () => {
             const v = Number(fadeDurEl.value)
@@ -1799,6 +1799,7 @@ async function boot() {
         const on = await midi.toggle()
         $('midi-enable').textContent = on ? 'disable MIDI' : 'enable MIDI'
     })
+    $('midi-clock-enable').checked = midi.followClock
     $('midi-clock-enable').addEventListener('change', (e) => {
         midi.followClock = e.target.checked
         toast(midi.followClock ? 'following MIDI clock for BPM' : 'BPM is manual / tap')
@@ -2416,6 +2417,10 @@ async function boot() {
             return
         }
         sceneSaves = sceneSaves.then(async () => {
+            if (scenes.scenes.length >= MAX_SCENES && !scenes.byName(name.trim().slice(0, 40))) {
+                toast('scene list is full — delete or rename a scene first', 5000)
+                return
+            }
             // On a full profile there is room only once older scenes' images
             // have moved out of localStorage, which starts at page load.
             await sceneImagesMigrated()
@@ -2450,7 +2455,15 @@ async function boot() {
     })
 
     // ── Keyboard shortcuts ────────────────────────────────────────────────
+    // Handfish closes an open select on Escape without preventing the key.
+    // Mark it handled before the select closes so the drawer stays open.
     document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && e.target?.closest?.('select-dropdown.dropdown-open')) {
+            e.preventDefault()
+        }
+    }, true)
+    document.addEventListener('keydown', (e) => {
+        if (e.defaultPrevented) return
         // ignore when typing in text inputs or code editors
         const tag = e.target?.tagName
         const isTextInput = tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable ||

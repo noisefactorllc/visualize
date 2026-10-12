@@ -5,13 +5,12 @@
  * Key:   short SHA prefix of the DSL text — cache auto-invalidates when
  *        an entry's DSL changes (e.g. curated tweak, re-imported feed
  *        entry) without any explicit busting.
- * Value: { blob: Blob (image/webp), ts: <ms>, dsl: <truncated for debug> }
+ * Value: { bytes: ArrayBuffer, type: <media type>, ts: <ms> }
  * TTL:   14 days — well past how often the library changes, short enough
  *        that stale shader-bundle differences eventually flush.
  *
- * Modeled on shuffleset gallery.js:85-114, but stores Blobs rather than
- * dataURL strings (smaller on disk, and createObjectURL keeps the
- * decode off the hot path).
+ * Stores file bytes in IndexedDB so WebKit private browsing can cache them.
+ * Older records containing a Blob remain readable.
  */
 
 const DB_NAME = 'visualize-thumb-cache'
@@ -95,12 +94,10 @@ export async function getCachedThumb(key) {
                 const entry = req.result
                 if (!entry) return resolve(null)
                 if (Date.now() - entry.ts > TTL_MS) return resolve(null)
-                // Guard against corrupt / old-shape records: a non-Blob would
-                // throw in createObjectURL at the call site (library.js
-                // _loadThumb), surviving only because that caller wraps the
-                // load in .catch — miss cleanly here and let the tile render.
-                if (!(entry.blob instanceof Blob)) return resolve(null)
-                resolve(entry.blob)
+                if (entry.bytes instanceof ArrayBuffer) {
+                    return resolve(new Blob([entry.bytes], { type: entry.type || '' }))
+                }
+                resolve(entry.blob instanceof Blob ? entry.blob : null)
             }
             req.onerror = () => resolve(null)
         } catch {
@@ -111,12 +108,15 @@ export async function getCachedThumb(key) {
 
 /** Write a thumbnail Blob to the cache. Best-effort — errors are swallowed. */
 export async function putCachedThumb(key, blob) {
+    if (!(blob instanceof Blob)) return
+    let bytes
+    try { bytes = await blob.arrayBuffer() } catch { return }
     const db = await openDb()
     if (!db) return
     return new Promise((resolve) => {
         try {
             const tx = db.transaction(STORE, 'readwrite')
-            tx.objectStore(STORE).put({ blob, ts: Date.now() }, key)
+            tx.objectStore(STORE).put({ bytes, type: blob.type, ts: Date.now() }, key)
             tx.oncomplete = () => resolve()
             tx.onerror = () => resolve()
         } catch {

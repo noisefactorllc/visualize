@@ -4,6 +4,13 @@ import test from 'node:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
+test('deck code editor uses Handfish theme styles without a second stylesheet', () => {
+    const html = readFileSync(resolve(process.cwd(), 'index.html'), 'utf8')
+    assert.match(html, /<code-editor\b/)
+    const app = readFileSync(resolve(process.cwd(), 'js/app.js'), 'utf8')
+    assert.doesNotMatch(app, /import\s+['"]\.\/ui\/codeEditor\.js['"]/)
+})
+
 function stripCssComments(css) {
     return css.replace(/\/\*[\s\S]*?\*\//g, '')
 }

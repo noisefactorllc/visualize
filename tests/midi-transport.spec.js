@@ -58,6 +58,23 @@ async function bootWithFakeMidi(browser) {
     return { context, page }
 }
 
+test('MIDI clock-follow setting survives reload and is reflected in the drawer', async ({ browser }) => {
+    const { context, page } = await bootWithFakeMidi(browser)
+    try {
+        await page.click('#settings-toggle')
+        await page.click('#midi-clock-enable')
+        await expect(page.locator('#midi-clock-enable')).toHaveAttribute('checked', '')
+        await page.reload()
+        await page.click('#boot-start')
+        await page.waitForFunction(() => !!window.__visualize?.midi, null, { timeout: 30_000 * SCALE })
+        await page.click('#settings-toggle')
+        await expect(page.locator('#midi-clock-enable')).toHaveAttribute('checked', '')
+        expect(await page.evaluate(() => window.__visualize.midi.followClock)).toBe(true)
+    } finally {
+        await context.close()
+    }
+})
+
 test('MIDI transport Start/Continue/Stop drive the scheduler without re-anchoring a running grid', async ({ browser }) => {
     const { context, page } = await bootWithFakeMidi(browser)
 

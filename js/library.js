@@ -327,6 +327,9 @@ export class Library {
             }
             section.appendChild(sectionGrid)
             this._gridEl.appendChild(section)
+            for (const toggle of section.querySelectorAll('.pc-include')) {
+                toggle.querySelector('.ts-track')?.setAttribute('aria-label', 'Include in Auto-VJ pool')
+            }
         }
 
         if (this._countEl) {

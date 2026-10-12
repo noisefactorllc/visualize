@@ -74,6 +74,26 @@ test('browser: performance shortcuts appear in tooltips across all controls', as
     }
 })
 
+test('icon actions and custom app controls expose readable accessible names', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        for (const selector of ['.deck-rebind-eq', '.deck-rebind-midi', '.deck-bandpass', '.deck-edit-toggle', '.deck-load-random', '.quick-cut']) {
+            for (const button of await page.locator(selector).all()) {
+                const tooltip = await button.getAttribute('data-title')
+                await expect(button).toHaveAccessibleName(tooltip)
+            }
+        }
+        const includeToggles = page.locator('.pc-include .ts-track')
+        expect(await includeToggles.count()).toBeGreaterThan(0)
+        for (const toggle of await includeToggles.all()) {
+            await expect(toggle).toHaveAccessibleName('Include in Auto-VJ pool')
+        }
+        await expect(page.locator('#fade-duration .slider')).toHaveAccessibleName('Fade time in seconds')
+    } finally {
+        await context.close()
+    }
+})
+
 test('browser: swept drawer, library, and Sync dialog controls carry tooltips', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {

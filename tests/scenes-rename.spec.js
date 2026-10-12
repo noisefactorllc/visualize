@@ -27,6 +27,28 @@ async function boot(browser) {
     return { context, page }
 }
 
+test('seventeenth scene save is refused visibly without shifting recall slots', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        await page.click('#scenes-open')
+        for (let i = 1; i <= 16; i++) {
+            await page.fill('#scene-name-input', `Scene ${i}`)
+            await page.click('#scene-save')
+            await expect(page.locator('#scenes-list .scene-row')).toHaveCount(i)
+        }
+        await page.fill('#scene-name-input', 'Scene 17')
+        await page.click('#scene-save')
+        await expect(page.locator('#toast')).toContainText(/full|delete|rename/i)
+        const names = await page.locator('#scenes-list .sr-name').allTextContents()
+        expect(names).toHaveLength(16)
+        expect(names[0]).toBe('Scene 1')
+        expect(names).not.toContain('Scene 17')
+        expect(await page.evaluate(() => window.__visualize.scenes.byIndex(0).name)).toBe('Scene 1')
+    } finally {
+        await context.close()
+    }
+})
+
 test('scenes drawer inline rename validates against empty/duplicate names and persists across reloads', async ({ browser }) => {
     const { context, page } = await boot(browser)
 

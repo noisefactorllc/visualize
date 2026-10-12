@@ -890,9 +890,8 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
 
 /* DSL editor — per-deck overlay. Fills the .deck-content container,
    which means it stretches across the whole deck panel below the
-   head, not just the canvas's 16:9 region. Per-segment darkening
-   (injected by js/ui/codeEditor.js) keeps code legible over the
-   live canvas content behind it. Font size knocked down a notch
+   head, not just the canvas's 16:9 region. Handfish supplies the
+   editor styling. Font size knocked down a notch
    from the default 0.875rem since the deck columns are narrow. */
 .deck-editor {
     position: absolute;

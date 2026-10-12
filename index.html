@@ -244,11 +244,11 @@
                         <span class="osc-value">×0</span>
                     </button>
                     <div class="deck-head-actions">
-                        <button class="deck-rebind-eq tooltip" data-deck="A" data-title="Reshuffle audio bindings (E)" title="Reshuffle audio bindings (E)"><span class="icon">graphic_eq</span></button>
-                        <button class="deck-rebind-midi tooltip" data-deck="A" data-title="Reshuffle MIDI bindings (M)" title="Reshuffle MIDI bindings (M)"><span class="icon">piano</span></button>
-                        <button class="deck-bandpass tooltip" data-deck="A" data-title="Bandpass: EQ rebind stays in this program's bands" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
-                        <button class="deck-edit-toggle tooltip" data-deck="A" data-title="Edit DSL" title="Edit DSL"><span class="icon">code</span></button>
-                        <button class="deck-load-random tooltip" data-deck="A" data-title="Load random program (Q)" title="Load random program (Q)"><span class="icon">shuffle</span></button>
+                        <button class="deck-rebind-eq tooltip" data-deck="A" data-title="Reshuffle audio bindings (E)" title="Reshuffle audio bindings (E)" aria-label="Reshuffle audio bindings (E)"><span class="icon">graphic_eq</span></button>
+                        <button class="deck-rebind-midi tooltip" data-deck="A" data-title="Reshuffle MIDI bindings (M)" title="Reshuffle MIDI bindings (M)" aria-label="Reshuffle MIDI bindings (M)"><span class="icon">piano</span></button>
+                        <button class="deck-bandpass tooltip" data-deck="A" data-title="Bandpass: EQ rebind stays in this program's bands" title="Bandpass: EQ rebind stays in this program's bands" aria-label="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
+                        <button class="deck-edit-toggle tooltip" data-deck="A" data-title="Edit DSL" title="Edit DSL" aria-label="Edit DSL"><span class="icon">code</span></button>
+                        <button class="deck-load-random tooltip" data-deck="A" data-title="Load random program (Q)" title="Load random program (Q)" aria-label="Load random program (Q)"><span class="icon">shuffle</span></button>
                     </div>
                 </div>
                 <div class="deck-head-row2">
@@ -324,11 +324,11 @@
                         <span class="osc-value">×0</span>
                     </button>
                     <div class="deck-head-actions">
-                        <button class="deck-rebind-eq tooltip" data-deck="B" data-title="Reshuffle audio bindings (Shift+E)" title="Reshuffle audio bindings (Shift+E)"><span class="icon">graphic_eq</span></button>
-                        <button class="deck-rebind-midi tooltip" data-deck="B" data-title="Reshuffle MIDI bindings (Shift+M)" title="Reshuffle MIDI bindings (Shift+M)"><span class="icon">piano</span></button>
-                        <button class="deck-bandpass tooltip" data-deck="B" data-title="Bandpass: EQ rebind stays in this program's bands" title="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
-                        <button class="deck-edit-toggle tooltip" data-deck="B" data-title="Edit DSL" title="Edit DSL"><span class="icon">code</span></button>
-                        <button class="deck-load-random tooltip" data-deck="B" data-title="Load random program (W)" title="Load random program (W)"><span class="icon">shuffle</span></button>
+                        <button class="deck-rebind-eq tooltip" data-deck="B" data-title="Reshuffle audio bindings (Shift+E)" title="Reshuffle audio bindings (Shift+E)" aria-label="Reshuffle audio bindings (Shift+E)"><span class="icon">graphic_eq</span></button>
+                        <button class="deck-rebind-midi tooltip" data-deck="B" data-title="Reshuffle MIDI bindings (Shift+M)" title="Reshuffle MIDI bindings (Shift+M)" aria-label="Reshuffle MIDI bindings (Shift+M)"><span class="icon">piano</span></button>
+                        <button class="deck-bandpass tooltip" data-deck="B" data-title="Bandpass: EQ rebind stays in this program's bands" title="Bandpass: EQ rebind stays in this program's bands" aria-label="Bandpass: EQ rebind stays in this program's bands"><span class="icon">filter_alt</span></button>
+                        <button class="deck-edit-toggle tooltip" data-deck="B" data-title="Edit DSL" title="Edit DSL" aria-label="Edit DSL"><span class="icon">code</span></button>
+                        <button class="deck-load-random tooltip" data-deck="B" data-title="Load random program (W)" title="Load random program (W)" aria-label="Load random program (W)"><span class="icon">shuffle</span></button>
                     </div>
                 </div>
                 <div class="deck-head-row2">
@@ -388,14 +388,14 @@
                             </select-dropdown>
                         </div>
                         <div class="xfader-cuts">
-                            <button class="quick-cut tooltip" id="cut-a" data-title="Cut to A (Z)" title="Cut to A (Z)"><span class="icon">first_page</span></button>
-                            <button class="quick-cut tooltip" id="auto-fade" data-title="Auto-fade (X)" title="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
-                            <button class="quick-cut tooltip" id="cut-b" data-title="Cut to B (C)" title="Cut to B (C)"><span class="icon">last_page</span></button>
+                            <button class="quick-cut tooltip" id="cut-a" data-title="Cut to A (Z)" title="Cut to A (Z)" aria-label="Cut to A (Z)"><span class="icon">first_page</span></button>
+                            <button class="quick-cut tooltip" id="auto-fade" data-title="Auto-fade (X)" title="Auto-fade (X)" aria-label="Auto-fade (X)"><span class="icon">swap_horiz</span></button>
+                            <button class="quick-cut tooltip" id="cut-b" data-title="Cut to B (C)" title="Cut to B (C)" aria-label="Cut to B (C)"><span class="icon">last_page</span></button>
                         </div>
                         <div class="xfader-fade xfader-fade-right">
                             <span class="xfader-fade-label">fade time</span>
                             <div class="xfader-fade-duration-wrap">
-                                <slider-value id="fade-duration" class="xfader-fade-duration tooltip" type="float" min="0.1" max="16" step="0.1" value="3" data-title="Fade time in seconds" title="Fade time in seconds"></slider-value>
+                                <slider-value id="fade-duration" class="xfader-fade-duration tooltip" type="float" min="0.1" max="16" step="0.1" value="3" data-title="Fade time in seconds" title="Fade time in seconds" aria-label="Fade time in seconds"></slider-value>
                             </div>
                         </div>
                     </div>

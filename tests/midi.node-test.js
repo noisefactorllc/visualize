@@ -12,6 +12,23 @@ import {
     transportAction
 } from '../js/midi.js'
 
+test('followClock preference survives a fresh SharedMidi instance', () => {
+    const store = new Map()
+    globalThis.localStorage = {
+        getItem: key => store.get(key) ?? null,
+        setItem: (key, value) => store.set(key, String(value)),
+    }
+    try {
+        const midi = new SharedMidi()
+        midi.followClock = true
+        assert.equal(new SharedMidi().followClock, true)
+        midi.followClock = false
+        assert.equal(new SharedMidi().followClock, false)
+    } finally {
+        delete globalThis.localStorage
+    }
+})
+
 describe('computeEdgeToggle pure helper', () => {
     it('fires on rising edge (off -> on)', () => {
         const res = computeEdgeToggle(false, true)

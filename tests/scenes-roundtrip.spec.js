@@ -13,6 +13,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+import { WORKING_SET_STORAGE_KEY } from '../js/workingSet.js'
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
@@ -337,6 +338,13 @@ test('mixer enum control: shows the active choice + persists/restores it across 
             try { return JSON.parse(localStorage.getItem('visualize.mixer.v1') || 'null') } catch { return null }
         })
         expect(persisted?.overrides?.mode).toBe(chosen)
+        // The automatic working-set snapshot also restores mixer state on
+        // boot. Wait for its slower debounce before reloading.
+        await page.waitForFunction(({ key, expected }) => {
+            try {
+                return JSON.parse(localStorage.getItem(key) || 'null')?.mixer?.overrides?.mode === expected
+            } catch { return false }
+        }, { key: WORKING_SET_STORAGE_KEY, expected: chosen }, { timeout: 15_000 * SCALE })
 
         // Reload → boot-restore must rebuild the panel showing the restored
         // choice (exercises persistence + the name→value display mapping).
@@ -347,6 +355,10 @@ test('mixer enum control: shows the active choice + persists/restores it across 
             const el = document.querySelector(q)
             return el && typeof el.getOptions === 'function' && el.getOptions().length > 1
         }, sel, { timeout: 30_000 * SCALE })
+        await page.waitForFunction(({ q, expected }) => {
+            const el = document.querySelector(q)
+            return el?.getOptions?.().find(option => option.value === el.value)?.text === expected
+        }, { q: sel, expected: chosen }, { timeout: 30_000 * SCALE })
 
         const restored = await page.evaluate((q) => {
             const el = document.querySelector(q)
@@ -363,4 +375,3 @@ test('mixer enum control: shows the active choice + persists/restores it across 
         await context.close()
     }
 })
-

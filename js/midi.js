@@ -19,6 +19,7 @@
  */
 
 const STORAGE_KEY = 'visualize.midi.learn.v1'
+const CLOCK_STORAGE_KEY = 'visualize.midi.clock.v1'
 const PICKUP_EPS = 0.02   // soft-takeover catch tolerance (0..1)
 
 // MIDI System Real-Time. Public so unit tests can pin the constants.
@@ -190,7 +191,11 @@ export class SharedMidi {
         this._learnWindowMs = 2000   // observe range this long after first CC
         this._learnCommitTimer = null
 
-        this._followClock = false
+        try {
+            this._followClock = localStorage.getItem(CLOCK_STORAGE_KEY) === 'true'
+        } catch {
+            this._followClock = false
+        }
         // Sliding window of recent clock-tick timestamps (one beat's
         // worth = 24 ticks). EMA smoothing on top absorbs USB jitter
         // without lagging real tempo changes.
@@ -240,6 +245,9 @@ export class SharedMidi {
         const next = !!v
         if (next === this._followClock) return
         this._followClock = next
+        try {
+            localStorage.setItem(CLOCK_STORAGE_KEY, String(next))
+        } catch { /* storage can be unavailable */ }
         // Reset estimate so a stale BPM doesn't carry across a toggle.
         this._tickTimes = []
         this._smoothedBpm = null

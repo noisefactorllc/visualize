@@ -80,6 +80,7 @@ test('a save waits for the startup migration, never longer than its bound, and n
 function fakeIndexedDB() {
     const opens = []
     const transactions = []
+    const transactionHandles = []
     const records = new Map()
     function database() {
         const db = {
@@ -94,6 +95,7 @@ function fakeIndexedDB() {
                         get(id) { return { result: records.get(id) } },
                     }),
                 }
+                transactionHandles.push(tx)
                 setTimeout(() => tx.oncomplete())
                 return tx
             },
@@ -101,7 +103,7 @@ function fakeIndexedDB() {
         return db
     }
     return {
-        opens, transactions, records,
+        opens, transactions, transactionHandles, records,
         open(name, version) {
             const request = { name, version }
             opens.push(request)
@@ -123,6 +125,24 @@ function fakeIndexedDB() {
         },
     }
 }
+
+test('a transaction error rejects with the request error before abort supplies tx.error', async () => {
+    const idb = fakeIndexedDB()
+    const id = sha256(PNG_BYTES)
+    const error = new DOMException('Image write failed', 'UnknownError')
+    await withIndexedDB(idb, async () => {
+        const storing = storeSceneImages([{ id, blob: new Blob([PNG_BYTES], { type: 'image/png' }) }])
+        const db = await idb.succeed()
+        while (!idb.transactionHandles.length) await new Promise(resolve => setTimeout(resolve))
+        const tx = idb.transactionHandles.at(-1)
+        tx.error = null
+        tx.onerror({ target: { error } })
+        tx.error = error
+        tx.onabort()
+        await assert.rejects(storing, actual => actual === error)
+        db.onclose()
+    })
+})
 
 /** The media type and bytes of a stored image file, or null. */
 async function fileOf(file) {

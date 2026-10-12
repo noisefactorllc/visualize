@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { Scenes, validateSceneName, SCENES_STORAGE_KEY } from '../js/scenes.js'
+import { Scenes, validateSceneName, SCENES_STORAGE_KEY, MAX_SCENES } from '../js/scenes.js'
 
 function createMockStorage(initial = {}) {
     const data = new Map(Object.entries(initial))
@@ -43,6 +43,21 @@ function createDummySnapshot(tag = 'test') {
         deckDensity: null
     }
 }
+
+test('saving beyond capacity preserves scene order and hotkey slots', () => {
+    const storage = createMockStorage()
+    const scenes = new Scenes({ storage })
+    for (let i = 1; i <= MAX_SCENES; i++) {
+        assert.equal(scenes.save(`Scene ${i}`, createDummySnapshot(String(i))), true)
+    }
+    const before = storage.dump(SCENES_STORAGE_KEY)
+    assert.equal(scenes.save('Scene 17', createDummySnapshot('17')), false)
+    assert.deepEqual(storage.dump(SCENES_STORAGE_KEY), before)
+    assert.equal(scenes.byIndex(0).name, 'Scene 1')
+    assert.equal(scenes.byName('Scene 17'), null)
+    assert.equal(scenes.save('Scene 1', createDummySnapshot('updated')), true)
+    assert.equal(scenes.byIndex(0).decks.A.title, 'Deck A updated')
+})
 
 test('validateSceneName: rejects empty and whitespace-only names', () => {
     const emptyResults = [

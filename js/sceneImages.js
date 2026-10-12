@@ -71,7 +71,7 @@ async function transact(mode, work) {
                 : db.transaction(STORE, mode)
             const req = work(tx.objectStore(STORE))
             tx.oncomplete = () => resolve(req?.result)
-            tx.onerror = () => reject(tx.error)
+            tx.onerror = event => reject(tx.error || event?.target?.error || req?.error || new DOMException('Transaction failed', 'UnknownError'))
             tx.onabort = () => reject(tx.error || new DOMException('Transaction aborted', 'AbortError'))
         } catch (err) {
             reject(err)
