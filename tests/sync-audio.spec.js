@@ -263,8 +263,18 @@ test('an older cancelled audio selection cannot clear the newer selection', asyn
     expect(await page.locator('#audio-device').evaluate(element => element.value)).toBe('B')
 })
 
-test('native receiver accepts mixer bytes while audio and video share the grant', async ({ page }) => {
+// The native receiver fixture run for one render backend. preferWebGPU seeds
+// the persisted renderer preference before boot; the WebGPU leg additionally
+// requires the mixer's live pipeline to actually run on WebGPU, and skips
+// honestly when this runner's browser cannot provide it (the fallback must
+// never be reported as the WebGPU path).
+async function nativeReceiverAcceptance(page, preferWebGPU) {
     test.slow()
+    if (preferWebGPU) {
+        await page.addInitScript(key => {
+            localStorage.setItem(key, JSON.stringify({ preferWebGPU: true }))
+        }, 'visualize.renderer.v1')
+    }
     await page.route('**/js/sync/bundle.js', route => route.fulfill({
         contentType: 'text/javascript',
         body: `export * from '/js/sync/sdk/0.3.3/browser/index.js';
@@ -293,6 +303,18 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
         const app = window.__visualize
         return app?.online && app.mixer?.ready && Object.values(app.decks).every(deck => deck.currentDsl === dsl)
     }, fixtureDsl)
+    if (preferWebGPU) {
+        // The WebGPU leg is only meaningful when the mixer's live pipeline
+        // really renders on WebGPU: an honest WebGL2 fallback is the WebGL2
+        // path, which the default leg already covers. Skip with the reason
+        // instead of passing a fallback off as the WebGPU observation.
+        const backend = await page.evaluate(() => ({
+            gpu: Boolean(navigator.gpu),
+            active: window.__visualize.mixer.activeBackend,
+        }))
+        test.skip(!backend.gpu || backend.active !== 'webgpu',
+            `mixer backend is ${backend.active} (gpu: ${backend.gpu}); no WebGPU observation on this runner`)
+    }
     await page.evaluate(async () => {
         const sync = await import('/js/sync/audioInput.js')
         await sync.connectSyncAudio()
@@ -334,4 +356,12 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
     await page.evaluate(() => window.__visualize.syncOutputController.stop())
     expect(await page.evaluate(() => window.__visualize.audio.enabled)).toBe(true)
     await page.evaluate(() => window.__visualize.audio.disable())
+}
+
+test('native receiver accepts mixer bytes while audio and video share the grant', async ({ page }) => {
+    await nativeReceiverAcceptance(page, false)
+})
+
+test('native receiver accepts mixer bytes rendered on WebGPU', async ({ page }) => {
+    await nativeReceiverAcceptance(page, true)
 })
