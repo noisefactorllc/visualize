@@ -25,6 +25,7 @@ const INCLUDE_STORAGE_KEY = 'visualize.library.included.v1'
 // section per non-empty category in this exact order.
 const CATEGORY_ORDER = Object.freeze([
     'user',
+    'curated',
     'abstract',
     'attractor',
     'geometric',
@@ -37,6 +38,7 @@ const CATEGORY_ORDER = Object.freeze([
 
 const CATEGORY_LABELS = Object.freeze({
     'user': 'user',
+    'curated': 'curated',
     'abstract': 'abstract',
     'attractor': 'attractor',
     'geometric': 'geometric',

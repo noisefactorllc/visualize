@@ -1,3 +1,4 @@
+import { routeLegacyPrograms } from './legacyPrograms.js'
 // SPDX-License-Identifier: MIT
 /**
  * Rebind smoke test. Boots the full app, loads a known bass-tagged
@@ -23,6 +24,7 @@ async function bootAndLoad(browser, programTitle) {
         if (message.type() === 'error') console.error('[browser]', message.text())
     })
     await routeHandfishLocal(page)
+    await routeLegacyPrograms(page)
     await page.goto('/')
     await page.click('#boot-start')
     // Boot loads random programs into BOTH decks late in startup

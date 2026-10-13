@@ -6,6 +6,7 @@ import vm from 'node:vm'
 // Execute the production Deck class, replacing only its CDN engine boundary.
 const source = readFileSync(new URL('../js/noisemaker/deck.js', import.meta.url), 'utf8')
     .replace(/import \{[\s\S]*?\} from '\.\/bundle.js'/, '')
+    .replace(/import \{ registerCuratedEffects, curatedRuntimeDsl \} from '\.\/curatedEffects.js'\n/, '')
     .replace(/export /g, '')
 const appSource = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8')
 function deferred() {
@@ -26,7 +27,7 @@ function harness() {
         }, start() { this.isRunning = true }, stop() {},
  dispose() { this.disposeCalls = (this.disposeCalls || 0) + 1 }, }
     const context = vm.createContext({ console, Blob, CanvasRenderer: function () { return engine },
-        CDN_BASE: '', extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })
+        CDN_BASE: '', curatedRuntimeDsl: dsl => dsl, extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })
     const Deck = vm.runInContext(source + '\nDeck', context)
     const deck = new Deck({})
     deck._initialized = true
@@ -436,6 +437,7 @@ test('cancelPending invalidates an in-flight load while loading effects before c
         console,
         CanvasRenderer: function () { return engine },
         CDN_BASE: '',
+        curatedRuntimeDsl: dsl => dsl,
         extractEffectNamesFromDsl: () => [{ effectId: 'fx1' }]
     })
     const Deck = vm.runInContext(source + '\nDeck', context)
@@ -624,7 +626,7 @@ function stateHarness() {
     h.toFiniteNumber = (() => {
         let Deck
         const context = vm.createContext({ console, CanvasRenderer: function () { return h.engine },
-            CDN_BASE: '', extractEffectNamesFromDsl: () => [] })
+            CDN_BASE: '', curatedRuntimeDsl: dsl => dsl, extractEffectNamesFromDsl: () => [] })
         Deck = vm.runInContext(source + '\ntoFiniteNumber', context)
         return Deck
     })()
@@ -723,3 +725,40 @@ test('resize and syncTimeOrigin reject corrupt values keeping live state', () =>
     assert.equal(h.deck._renderer._loopStartTime, 1234, 'NaN time origin must not corrupt the loop clock')
 })
 
+
+test('deck initialization makes bundled custom effects available before a program can compile', async () => {
+    const { registerCuratedEffects, curatedRuntimeDsl } = await import('../js/noisemaker/curatedEffects.js')
+    const registry = new Map()
+    const namespaces = new Set()
+    const engine = { manifest: {}, _loadedEffects: new Map(),
+        async loadManifest() {}, setLoopDuration() {},
+        registerEffectsFromBundle({ namespace, effects }) {
+            for (const [name, instance] of Object.entries(effects)) {
+                registry.set(`${namespace}/${name}`, instance)
+                this._loadedEffects.set(`${namespace}/${name}`, { namespace, name, instance })
+            }
+        },
+    }
+    const deckSource = source.replace(/import \{ registerCuratedEffects, curatedRuntimeDsl \} from '\.\/curatedEffects.js'\n/, '')
+    const context = vm.createContext({ console, Blob, CanvasRenderer: function () { return engine },
+        CDN_BASE: '', getEffect: id => registry.get(id), registerCuratedEffects, curatedRuntimeDsl,
+        registerNamespace: id => namespaces.add(id), Effect: function (payload) { Object.assign(this, payload) }, registerEffect: (id, effect) => registry.set(id, effect), unregisterEffect: id => registry.delete(id),
+        extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })
+    const Deck = vm.runInContext(deckSource + '\nDeck', context)
+    const savedFetch = globalThis.fetch
+    globalThis.fetch = async url => ({ ok: true, json: async () => JSON.parse(readFileSync(url.pathname.endsWith('curated-effects.json') ? new URL('../data/curated-effects.json', import.meta.url) : new URL('../data/programs.json', import.meta.url))) })
+    try {
+        const userVersion = { func: 'prismaticChemtrails', description: 'installed user version' }
+        registry.set('user/prismaticChemtrails', userVersion)
+        await new Deck({}).init()
+        assert.equal(registry.get('user/prismaticChemtrails'), userVersion)
+        registry.delete('user/prismaticChemtrails')
+        assert.ok(registry.has('curated/prismaticChemtrails'))
+        const authored = JSON.parse(readFileSync(new URL('../data/programs.json', import.meta.url))).find(p => p.source?.code === '7INvow').dsl
+        assert.ok(curatedRuntimeDsl(authored).startsWith('search curated'))
+        assert.equal(curatedRuntimeDsl('search user\nprismaticChemtrails(driftAmount: 99)'), 'search user\nprismaticChemtrails(driftAmount: 99)')
+        assert.ok(namespaces.has('curated'))
+        assert.equal(engine._loadedEffects.size, 4)
+        assert.ok(engine._loadedEffects.has('curated/prismaticChemtrails'))
+    } finally { globalThis.fetch = savedFetch }
+})

@@ -1,3 +1,4 @@
+import { curatedRuntimeDsl } from './noisemaker/curatedEffects.js'
 import { connectSyncAudio, refreshSyncAudioDevices } from './sync/audioInput.js'
 /**
  * Visualize — main entry point.
@@ -812,7 +813,7 @@ async function boot() {
         deckEditorText[deckId] = String(text ?? '')
         if (!syncOpen) return
         const { panel, editor } = deckEditorElements(deckId)
-        if (panel && !panel.hidden && editor) editor.value = deckEditorText[deckId]
+        if (panel && !panel.hidden && editor) editor.value = curatedRuntimeDsl(deckEditorText[deckId])
     }
 
     function resetCollaborativeDeckText(deckId, { syncOpen = true } = {}) {
@@ -1311,7 +1312,7 @@ async function boot() {
                 panel.hidden = !opening
                 toggleBtn.classList.toggle('active', opening)
                 if (opening) {
-                    editor.value = collaborativeDeckText(deckId)
+                    editor.value = curatedRuntimeDsl(collaborativeDeckText(deckId))
                     requestAnimationFrame(() => editor.focus?.())
                 }
             })
@@ -1366,7 +1367,7 @@ async function boot() {
     function syncDeckEditor(deckId) {
         const { panel, editor } = deckEditorElements(deckId)
         if (!panel || !editor || panel.hidden) return
-        editor.value = collaborativeDeckText(deckId)
+        editor.value = curatedRuntimeDsl(collaborativeDeckText(deckId))
     }
 
     wireDeckEditors()

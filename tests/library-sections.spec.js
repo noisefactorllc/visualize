@@ -13,8 +13,7 @@ const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 installHandfishLocal(test)
 
 const EXPECTED_ORDER = [
-    'user', 'abstract', 'attractor', 'geometric', 'life', 'particles',
-    'built-in', 'noiseblaster', 'util',
+    'user', 'curated', 'util',
 ]
 
 test('library renders sectioned + ordered', async ({ page }) => {
@@ -25,8 +24,7 @@ test('library renders sectioned + ordered', async ({ page }) => {
     await page.click('#boot-start')
 
     // Wait for curated categories to appear (loaded from programs.json).
-    await page.waitForSelector('.lib-section[data-category="abstract"]', { timeout: 30_000 * SCALE })
-    await page.waitForSelector('.lib-section[data-category="particles"]', { timeout: 30_000 * SCALE })
+    await page.waitForSelector('.lib-section[data-category="curated"]', { timeout: 30_000 * SCALE })
 
     const sections = await page.$$eval('.lib-section', els =>
         els.map(el => el.dataset.category))
@@ -46,20 +44,22 @@ test('library renders sectioned + ordered', async ({ page }) => {
         expect(sections, `missing section: ${cat}`).toContain(cat)
     }
 
+    expect(sections).not.toContain('user')
+
     // All sections open by default
     const allOpen = await page.$$eval('.lib-section', els => els.every(el => el.open))
     expect(allOpen).toBe(true)
 
     // Summary toggles a section
-    await page.click('.lib-section[data-category="built-in"] > summary')
+    await page.click('.lib-section[data-category="curated"] > summary')
     const builtInOpen = await page.$eval(
-        '.lib-section[data-category="built-in"]',
+        '.lib-section[data-category="curated"]',
         el => el.open
     )
     expect(builtInOpen).toBe(false)
 
     // Cards land in the right section. Util programs (camera, solid,
-    // scope) should NOT appear in the built-in grid.
+    // scope) should NOT appear in the curated grid.
     const utilTitlesInUtilSection = await page.$$eval(
         '.lib-section[data-category="util"] .program-card',
         els => els.map(el => el.dataset.title)
@@ -67,34 +67,21 @@ test('library renders sectioned + ordered', async ({ page }) => {
     expect(utilTitlesInUtilSection.length).toBeGreaterThan(0)
 
     const utilTitlesInBuiltIn = await page.$$eval(
-        '.lib-section[data-category="built-in"] .program-card',
+        '.lib-section[data-category="curated"] .program-card',
         els => els.map(el => el.dataset.title)
     )
     for (const title of utilTitlesInUtilSection) {
         expect(utilTitlesInBuiltIn).not.toContain(title)
     }
 
-    // Curated categories have their expected programs.
-    const abstractTitles = await page.$$eval(
-        '.lib-section[data-category="abstract"] .program-card',
+    const curatedTitles = await page.$$eval(
+        '.lib-section[data-category="curated"] .program-card',
         els => els.map(el => el.dataset.title)
     )
-    expect(abstractTitles).toContain('Color Flow')
-    expect(abstractTitles).toContain('Wave Rider')
-
-    const attractorTitles = await page.$$eval(
-        '.lib-section[data-category="attractor"] .program-card',
-        els => els.map(el => el.dataset.title)
-    )
-    expect(attractorTitles).toContain('Dark Attractor')
-    expect(attractorTitles).toContain('Infinite Flow')
-
-    const particleTitles = await page.$$eval(
-        '.lib-section[data-category="particles"] .program-card',
-        els => els.map(el => el.dataset.title)
-    )
-    expect(particleTitles).toContain('Flowing Sparks')
-    expect(particleTitles).toContain('Particle Life')
+    expect(curatedTitles).toHaveLength(157)
+    expect(curatedTitles).toContain('chaos voxicles 2')
+    expect(curatedTitles).toContain('aqua fresh')
+    expect(curatedTitles).not.toContain('Bass Bloom')
 
     // Footer count reflects the sum across sections
     const libCount = await page.textContent('#library-count')

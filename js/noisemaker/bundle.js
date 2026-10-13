@@ -24,6 +24,7 @@ export const CDN_BASE = SHADER_CDN
 export const {
     CanvasRenderer,
     Effect,
+    registerNamespace,
     registerEffect,
     unregisterEffect,
     getEffect,

@@ -24,6 +24,7 @@
     "noisemaker"
   ],
   "scripts": {
+    "import:curated": "node scripts/import-curated.mjs",
     "dev": "node scripts/dev-server.cjs 3007 .",
     "test": "node scripts/test.cjs",
     "test:node": "node --test tests/*.node-test.js",

@@ -1,3 +1,4 @@
+import { curatedRuntimeDsl } from './noisemaker/curatedEffects.js'
 // SPDX-License-Identifier: MIT
 /**
  * Rebind — per-deck reshuffle of audio/MIDI parameter bindings.
@@ -62,7 +63,7 @@ export function homeBandsForProgram(program) {
  * parameter.
  */
 export function collectRebindableParams(originalDsl) {
-    const effects = extractEffectsFromDsl(originalDsl) || []
+    const effects = extractEffectsFromDsl(curatedRuntimeDsl(originalDsl)) || []
     const out = []
     for (const eff of effects) {
         const def = getEffect(eff.effectKey)
@@ -200,7 +201,7 @@ function overridesToUnparseShape(overrideMap) {
 export function regenerateDsl(originalDsl, overrideMap) {
     let compiled
     try {
-        compiled = compile(originalDsl)
+        compiled = compile(curatedRuntimeDsl(originalDsl))
     } catch (err) {
         console.warn('[rebind] compile failed:', err?.message || err)
         return null

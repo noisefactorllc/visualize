@@ -1,3 +1,4 @@
+import { routeLegacyPrograms } from './legacyPrograms.js'
 // SPDX-License-Identifier: MIT
 /**
  * DIAGNOSTIC: scene save → reload-app-state → recall round-trip.
@@ -25,6 +26,7 @@ async function boot(browser) {
     page.on('console', msg => {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
+    await routeLegacyPrograms(page)
     await page.goto('/')
     await page.click('#boot-start')
     await page.waitForFunction(() =>

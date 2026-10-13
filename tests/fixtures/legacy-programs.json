@@ -1,0 +1,46 @@
+[
+  {
+    "title": "Color Flow",
+    "tagline": "Warped noise edges through CRT and snow",
+    "tint": "#ff8b3d",
+    "tags": [
+      "abstract"
+    ],
+    "category": "abstract",
+    "dsl": "search synth, filter, render, points, mixer, classicNoisedeck\n\nlet osc1 = osc(type: oscKind.saw)\nlet osc2 = osc(type: oscKind.noise, min: 0.65, max: 0.9, seed: 4220)\n\nnoise(\n  type: catmullRom3x3,\n  octaves: 1,\n  scaleX: 100,\n  scaleY: 1,\n  loopOffset: verticalScan,\n  loopScale: 100,\n  speed: -100\n)\n  .seamless(repeat: 1)\n  .translate(y: osc1)\n  .posterize(\n    levels: 16,\n    gamma: 0.7,\n    _skip: true\n  )\n  .wormhole(\n    kink: 0.1,\n    stride: 2,\n    rotation: -22\n  )\n  .edge(\n    size: kernel7x7,\n    amount: 500,\n    mix: 0\n  )\n  .subchain(name: \"lens effects\", id: \"c9dk\") {\n    .snow(alpha: 0.86, density: 9.93)\n    .chromaticAberration(aberration: 13.6, passthru: 74.69)\n    .crt(alpha: 0.57)\n    .bloom(\n      threshold: 0.75,\n      softKnee: 0.11,\n      intensity: 0.55,\n      taps: 32\n    )\n    .lens(displacement: -0.5)\n    .vignette(brightness: 0.26, alpha: 0.72)\n    .motionBlur()\n    .smooth()\n  }\n  .adjust(saturation: 0.83, contrast: 0.82)\n  .write(o0)\n\nrender(o0)"
+  },
+  {
+    "title": "Bass Bloom",
+    "tagline": "Bass swirls the hue; sub flexes the scale",
+    "tint": "#4ea8ff",
+    "tags": [
+      "reactive",
+      "bass",
+      "noise"
+    ],
+    "dsl": "search classicNoisedeck, synth, filter\nlet sub = audio(band: 0, min: 50, max: 130)\nlet bassHue = audio(band: 0, min: 0, max: 360)\nnoise(hueRange: 60, hueRotation: bassHue, speed: 35, refractAmt: 70, ridges: true, wrap: true, xScale: sub, yScale: sub, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
+  },
+  {
+    "title": "Mid Mirror",
+    "tagline": "Mids open the kaleidoscope and sweep the hue",
+    "tint": "#ff5fc0",
+    "tags": [
+      "reactive",
+      "mid",
+      "kaleido"
+    ],
+    "dsl": "search classicNoisedeck, synth, filter\nlet mid = audio(band: 1, min: 1, max: 8)\nlet vol = audio(band: 1, min: 0, max: 80)\nnoise(hueRotation: vol, kaleido: mid, metric: circle, palette: vaporwave, wrap: true, type: catmullRom3x3, colorMode: palette, xScale: 85, yScale: 85, octaves: 1).write(o0)\nrender(o0)"
+  },
+  {
+    "title": "Full Spectrum",
+    "tagline": "Bass scales, mids refract, highs sweep the hue",
+    "tint": "#4ed99b",
+    "tags": [
+      "reactive",
+      "bass",
+      "mid",
+      "high"
+    ],
+    "dsl": "search classicNoisedeck, synth, filter\nlet bass = audio(band: 0, min: 30, max: 110)\nlet mid = audio(band: 1, min: 0, max: 180)\nlet hi = audio(band: 2, min: 0, max: 360)\nnoise(hueRange: 100, hueRotation: hi, speed: 100, refractAmt: mid, ridges: true, wrap: true, xScale: bass, yScale: bass, type: simplex, colorMode: hsv, kaleido: 1, octaves: 1).write(o0)\nrender(o0)"
+  }
+]

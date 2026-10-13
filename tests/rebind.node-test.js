@@ -6,8 +6,9 @@ import vm from 'node:vm'
 // Exercise the production generator without loading the browser-only CDN.
 const source = readFileSync(new URL('../js/rebind.js', import.meta.url), 'utf8')
     .replace(/import \{[\s\S]*?\} from '\.\/noisemaker\/bundle.js'/, '')
+    .replace(/import \{ curatedRuntimeDsl \} from '\.\/noisemaker\/curatedEffects.js'\n/, '')
     .replace(/export /g, '')
-const generators = vm.runInNewContext(source + '\n({ buildAudioOverrides, buildMidiOverrides, clampOscillatorCount })', { console })
+const generators = vm.runInNewContext(source + '\n({ buildAudioOverrides, buildMidiOverrides, clampOscillatorCount })', { console, curatedRuntimeDsl: dsl => dsl })
 
 for (const generator of ['buildAudioOverrides', 'buildMidiOverrides']) {
     test(`${generator} supplies the resolved oscillator offset required for valid DSL`, () => {

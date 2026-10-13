@@ -1,3 +1,4 @@
+import { routeLegacyPrograms } from './legacyPrograms.js'
 // SPDX-License-Identifier: MIT
 /**
  * Session recovery — the live working set survives a reload.
@@ -34,6 +35,7 @@ test('the live set is restored after a reload', async ({ page }) => {
     })
     page.on('pageerror', (err) => pageErrors.push(err.message))
 
+    await routeLegacyPrograms(page)
     await page.goto('/')
     await page.click('#boot-start')
 

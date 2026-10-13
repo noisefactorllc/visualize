@@ -17,8 +17,10 @@ import {
     CanvasRenderer,
     CDN_BASE,
     extractEffectNamesFromDsl,
-    extractEffectsFromDsl
+    extractEffectsFromDsl,
+    getEffect, Effect, registerNamespace, registerEffect, unregisterEffect
 } from './bundle.js'
+import { registerCuratedEffects, curatedRuntimeDsl } from './curatedEffects.js'
 
 const IMAGE_TOOLS_URL = 'https://sharing.noisedeck.app/js/portableImages.js?v=images-20261006'
 
@@ -194,6 +196,7 @@ export class Deck {
     async init() {
         if (this._initialized) return
         await this._renderer.loadManifest()
+        await registerCuratedEffects(this._renderer, { getEffect, Effect, registerNamespace, registerEffect, unregisterEffect })
         this._renderer.setLoopDuration(this.loopDuration)
         this._initialized = true
     }
@@ -292,7 +295,8 @@ export class Deck {
             if (!this._initialized) await this.init()
             if (version !== this._loadVersion) return superseded()
             if (/\burl\b/.test(dsl) && !this._imageTools) this._imageTools = await import(IMAGE_TOOLS_URL)
-            const engineDsl = this._imageTools?.stripMediaUrls(dsl) ?? dsl
+            const runtimeDsl = curatedRuntimeDsl(dsl)
+            const engineDsl = this._imageTools?.stripMediaUrls(runtimeDsl) ?? runtimeDsl
             const effectData = extractEffectNamesFromDsl(engineDsl, this._renderer.manifest || {})
             const effectIds = effectData.map(e => e.effectId)
             if (effectIds.length > 0) {

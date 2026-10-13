@@ -1,0 +1,356 @@
+[
+  {
+    "name": "prismaticChemtrails",
+    "namespace": "user",
+    "func": "prismaticChemtrails",
+    "description": "Prismatic chemtrails: a filter-style effect that looks like viewing the scene through a prism at a sky full of dissolving chemtrail wisps. ELEMENTS: (1) Radial spectral dispersion — 16-20 sample taps displaced outward from frame center, each tap's displacement scales signed (t-0.5)*dispersion*centerDist, tap color weighted by a saturated cosine rainbow palette (red outermost, violet innermost), accumulated with center-weighted Gaussian-ish weights so the frame center stays sharp and dispersion blooms toward edges. (2) Anisotropic FBM wisps — 5-octave value-noise FBM with domain stretched vertically (uv.x*1.0, uv.y*6.0) to form horizontal trail streaks, pale steel-blue/white (0.85,0.88,0.92) base tint. Wisps undulate with a pendulum drift: noise domain offset by driftAmount*sin(time*TAU) horizontally plus a second parallax layer offset by driftAmount*cos(time*TAU) moving oppositely. A gentle timeCircle vec2(cos(time*TAU), sin(time*TAU))*0.3 added to the noise coordinates gives organic undulation. (3) Iridescent sheen — where wisp density and radial center-distance are both high, wisps are tinted by the spectral cosine palette shifted by hueOffset + 0.05*sin(time*TAU*2.0); dispersion amount is wisp-modulated via mixWisp. (4) Dispersion breathing — dispersion scales by 0.8+0.2*sin(time*TAU). ANIMATION: every animated value is a pure sinusoid of time*TAU with INTEGER cycle counts (1 or 2); noise domain moves only via sin/cos oscillation and timeCircle sampling, never raw time ramps. COLOR: bright airy pastel-to-vivid — pale blue-white base interrupted by saturated full-spectrum bands; smoothstep-weighted taps, no banding, no channel-only fringing.",
+    "tags": [
+      "custom",
+      "user"
+    ],
+    "globals": {
+      "dispersion": {
+        "type": "float",
+        "default": 0.5,
+        "uniform": "dispersion",
+        "min": 0,
+        "max": 1,
+        "ui": {
+          "label": "dispersion",
+          "control": "slider"
+        }
+      },
+      "driftAmount": {
+        "type": "float",
+        "default": 0.15,
+        "uniform": "driftAmount",
+        "min": 0,
+        "max": 0.5,
+        "ui": {
+          "label": "driftAmount",
+          "control": "slider"
+        }
+      },
+      "hueOffset": {
+        "type": "float",
+        "default": 0,
+        "uniform": "hueOffset",
+        "min": 0,
+        "max": 1,
+        "ui": {
+          "label": "hueOffset",
+          "control": "slider"
+        }
+      },
+      "mixWisp": {
+        "type": "float",
+        "default": 0.7,
+        "uniform": "mixWisp",
+        "min": 0,
+        "max": 1,
+        "ui": {
+          "label": "mixWisp",
+          "control": "slider"
+        }
+      },
+      "prismIntensity": {
+        "type": "float",
+        "default": 1,
+        "uniform": "prismIntensity",
+        "min": 0,
+        "max": 2,
+        "ui": {
+          "label": "prismIntensity",
+          "control": "slider"
+        }
+      },
+      "trailDensity": {
+        "type": "float",
+        "default": 3,
+        "uniform": "trailDensity",
+        "min": 0.5,
+        "max": 8,
+        "ui": {
+          "label": "trailDensity",
+          "control": "slider"
+        }
+      }
+    },
+    "passes": [
+      {
+        "name": "render",
+        "program": "prismaticChemtrails",
+        "inputs": {},
+        "outputs": {
+          "fragColor": "outputTex"
+        }
+      }
+    ],
+    "shaders": {
+      "prismaticChemtrails": {
+        "glsl": "#version 300 es\nprecision highp float;\n\nuniform float time;\nuniform vec2 resolution;\nuniform vec2 fullResolution;\n\nout vec4 fragColor;\n\n#define TAU 6.283185307179586\n#define PI 3.141592653589793\n\nuniform float dispersion;    // 0.0-1.0, radial spectral dispersion strength\nuniform float driftAmount;   // 0.0-0.5, wisp drift oscillation amplitude\nuniform float hueOffset;     // 0.0-1.0, iridescent sheen hue shift\nuniform float mixWisp;       // 0.0-1.0, wisp modulation of dispersion\nuniform float prismIntensity; // 0.0-2.0, prism effect strength\nuniform float trailDensity;  // 0.5-8.0, chemtrail wisp density\n\nfloat hash(vec2 p) {\n    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);\n}\n\nfloat valueNoise(vec2 p) {\n    vec2 i = floor(p);\n    vec2 f = fract(p);\n    vec2 u = f * f * (3.0 - 2.0 * f);\n    float a = hash(i);\n    float b = hash(i + vec2(1.0, 0.0));\n    float c = hash(i + vec2(0.0, 1.0));\n    float d = hash(i + vec2(1.0, 1.0));\n    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);\n}\n\nfloat fbm(vec2 p) {\n    float v = 0.0;\n    float amp = 0.5;\n    for (int i = 0; i < 5; i++) {\n        v += amp * valueNoise(p);\n        p = p * 2.02 + vec2(1.7, 9.2);\n        amp *= 0.5;\n    }\n    return v;\n}\n\n// Saturated rainbow palette: red at t=0, through spectrum to violet\nvec3 rainbowPalette(float t) {\n    vec3 c = 0.5 + 0.5 * cos(TAU * (t + vec3(0.0, 0.33, 0.67)));\n    // boost saturation\n    float g = dot(c, vec3(0.299, 0.587, 0.114));\n    return mix(vec3(g), c, 1.6);\n}\n\n// Pale steel-blue/white base tint for chemtrail wisps\nvec3 wispTint(float density) {\n    vec3 base = vec3(0.85, 0.88, 0.92);\n    return mix(vec3(1.0), base, clamp(density, 0.0, 1.0));\n}\n\nfloat gaussianWeight(float x, float sigma) {\n    return exp(-(x * x) / (2.0 * sigma * sigma));\n}\n\nvoid main() {\n    vec2 uv = gl_FragCoord.xy / resolution;\n    vec2 centered = uv - 0.5;\n    centered.x *= resolution.x / resolution.y;\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // LOOPING PRIMITIVES - ALL ANIMATION MUST USE THESE\n    // time goes 0→1, so t goes 0→TAU, completing exactly one cycle\n    // ═══════════════════════════════════════════════════════════════════════════\n    float t = time * TAU;           // Converts time 0→1 to radians 0→TAU\n    vec2 timeCircle = vec2(cos(t), sin(t));  // For noise sampling - traces a circle\n    float pulse = 0.5 + 0.5 * sin(t);        // 0→1→0 smooth oscillation\n    float wave = sin(t);                      // -1→1→-1 smooth oscillation\n\n// Radial prism bloom: sharp at the optical center, wider at the edges.\n    float aspect = resolution.x / resolution.y;\n    float centerDist = length(centered);\n    float edgeBloom = smoothstep(0.0, 0.85, centerDist);\n    vec2 radialDirection = centered / max(centerDist, 0.0001);\n    radialDirection.x /= aspect;\n\n    vec2 wispDomain = vec2(uv.x, uv.y * 6.0) * trailDensity;\n    vec2 driftA = vec2(driftAmount * sin(t), 0.0);\n    vec2 driftB = vec2(-driftAmount * cos(t), 0.0);\n    vec2 organicMotion = timeCircle * 0.3;\n\n    float localWispA = fbm(wispDomain + driftA + organicMotion);\n    float localWispB = fbm(wispDomain * 1.23 + driftB\n                         - organicMotion + vec2(8.1, 3.7));\n    float localDensity = smoothstep(\n        0.36, 0.69, localWispA * 0.65 + localWispB * 0.35\n    );\n\n    float breathing = 0.8 + 0.2 * sin(t);\n    float dispersionWidth = dispersion * breathing * 0.16;\n    dispersionWidth *= mix(1.0, 0.35 + 1.35 * localDensity, mixWisp);\n    dispersionWidth *= clamp(prismIntensity, 0.0, 2.0);\n\n    float sheenShift = hueOffset + 0.05 * sin(t * 2.0);\n    vec3 spectralSum = vec3(0.0);\n    vec3 spectralNormalization = vec3(0.0);\n    vec3 neutralSum = vec3(0.0);\n    float totalWeight = 0.0;\n\n    // Each tap views a complete airy sky with dissolving horizontal trails.\n    for (int tap = 0; tap < 18; ++tap) {\n        float tapPosition = float(tap) / 17.0;\n        float signedPosition = tapPosition - 0.5;\n        vec2 sampleUV = uv + radialDirection\n                     * signedPosition * dispersionWidth * centerDist;\n\n        vec3 sky = mix(\n            vec3(0.88, 0.94, 0.99),\n            vec3(0.34, 0.63, 0.87),\n            smoothstep(0.0, 1.0, sampleUV.y)\n        );\n\n        vec2 domain = vec2(sampleUV.x, sampleUV.y * 6.0)\n                    * trailDensity;\n        float noiseA = fbm(domain + driftA + organicMotion);\n        float noiseB = fbm(domain * 1.23 + driftB\n                        - organicMotion + vec2(8.1, 3.7));\n        float vapor = smoothstep(0.34, 0.73, 0.65 * noiseA + 0.35 * noiseB);\n\n        // Explicit narrow trail coverage, warped and eroded into soft wisps.\n        float trails = 0.0;\n        for (int trail = 0; trail < 6; ++trail) {\n            float id = float(trail);\n            float seed = hash(vec2(id + 1.0, 17.2));\n            float layerSign = (trail == 0 || trail == 2 || trail == 4)\n                            ? 1.0 : -1.0;\n            float pendulum = layerSign > 0.0\n                           ? driftAmount * sin(t)\n                           : -driftAmount * cos(t);\n            float trailX = sampleUV.x + pendulum;\n            float baseHeight = 0.13 + id * 0.145;\n            float bend = 0.013 * sin(trailX * 7.0 + seed * TAU);\n            bend += (noiseA - 0.5) * 0.075;\n            float distanceToTrail = abs(sampleUV.y - baseHeight - bend);\n            float width = (0.007 + 0.010 * seed)\n                        * (0.65 + 0.35 * vapor)\n                        * sqrt(max(trailDensity, 0.5) / 3.0);\n            float coverage = 1.0 - smoothstep(width, width * 3.6, distanceToTrail);\n            float segment = smoothstep(-0.15, 0.12, trailX + seed * 0.2)\n                          * (1.0 - smoothstep(0.78, 1.2, trailX - seed * 0.15));\n            float dissolution = smoothstep(0.28, 0.65,\n                mix(noiseA, noiseB, seed));\n            trails = max(trails, coverage * segment * dissolution);\n        }\n\n        float density = clamp(trails * 0.94 + vapor * 0.23, 0.0, 1.0);\n        vec3 paleWisp = wispTint(density);\n        vec3 sheen = clamp(rainbowPalette(\n            sampleUV.x * 0.55 + sampleUV.y * 0.22\n            + sheenShift + noiseB * 0.25\n        ), 0.0, 1.0);\n        sheen = mix(vec3(1.0), sheen, 0.65);\n        float sheenMask = smoothstep(0.25, 0.85, density) * edgeBloom;\n        sheenMask *= clamp(prismIntensity * 0.65, 0.0, 0.9);\n        vec3 cloudColor = mix(paleWisp, sheen, sheenMask);\n        vec3 sceneColor = mix(sky, cloudColor, density * 0.88);\n\n        // Positive saturated full-spectrum weights, red outward/violet inward.\n        vec3 spectrum = clamp(\n            rainbowPalette((1.0 - tapPosition) * 0.78), 0.0, 1.0\n        );\n        spectrum = mix(vec3(0.08), vec3(1.0), spectrum);\n        float weight = gaussianWeight(signedPosition, 0.27);\n        weight *= 1.0 - smoothstep(0.38, 0.62, abs(signedPosition));\n\n        spectralSum += sceneColor * spectrum * weight;\n        spectralNormalization += spectrum * weight;\n        neutralSum += sceneColor * weight;\n        totalWeight += weight;\n    }\n\n    vec3 dispersedColor = spectralSum / max(spectralNormalization, vec3(0.0001));\n    vec3 neutralColor = neutralSum / max(totalWeight, 0.0001);\n    float prismBlend = clamp(prismIntensity, 0.0, 1.0);\n    vec3 color = mix(neutralColor, dispersedColor, prismBlend);\n    color = max(color, vec3(0.0));\n\n//  Color Output \n    // Gentle center-weighted exposure so the frame core stays bright and airy\n    // while the prismatic bloom dissolves outward toward the frame edges.\n    float centerProtect = 1.0 - 0.18 * edgeBloom;\n    color *= centerProtect;\n\n    // Soft tonal shaping to keep pastels airy without clipping highlights.\n    color = color / (color + vec3(0.85)) * 1.65;\n    color = pow(clamp(color, 0.0, 1.0), vec3(0.92));\n\n    // Final pastel lift toward a bright sky-white base.\n    color = mix(color, mix(color, vec3(1.0), 0.12), smoothstep(0.4, 1.0, centerDist));\n\n    fragColor = vec4(color, 1.0);\n}"
+      }
+    },
+    "textures": {}
+  },
+  {
+    "name": "psychedelicplasmatunnel",
+    "namespace": "user",
+    "func": "psychedelicplasmatunnel",
+    "description": "A first-person infinite flight through a luminous psychedelic wormhole tunnel. Polar coordinates from aspect-corrected centered UVs: angle = atan(p.y, p.x), radius = length(p), depth = 0.3 / radius, with radius clamped to avoid center moire. Breathing flight motion: depth offset of speed * sin(time * TAU * 2.0). Whole tunnel barrel-rolls exactly 1 full integer turn per loop via rotation of centered coords by TAU * time. Vortex swirl: angle offset by swirl * depth, breathing as swirl * (0.8 + 0.2 * sin(time * TAU * 2.0)). Tunnel walls covered in flowing domain-warped FBM plasma in tunnel space (angle wrapped into 8 repeating slices plus depth term), animated via 4D noise on the timeCircle vec2(cos(time*TAU), sin(time*TAU)). Self-warp the FBM for organic liquid flow; per-octave rotate+scale domain to avoid artifacts. Depth fog exp(-depth * fog) recedes the far tunnel to black. Glow rings racing toward the viewer, brightness pulsing at 0.5 + 0.5*sin(time * TAU * 3.0). Color: IQ cosine palette, phase advancing exactly TAU * time per loop (one full seamless rainbow cycle) plus colorShift. Post-process in the same pass: gamma lift pow(color, 0.85), saturation boost via negative luma-mix, glow bloom approximation via exp/pow on bright filaments, subtle intensity pulse at 3 integer cycles. No hard edges, no tiling seams, no text. Production-quality rave music-visualizer wormhole VFX.",
+    "tags": [
+      "custom",
+      "user"
+    ],
+    "globals": {
+      "colorShift": {
+        "type": "float",
+        "default": 0,
+        "uniform": "colorShift",
+        "min": 0,
+        "max": 1,
+        "ui": {
+          "label": "colorShift",
+          "control": "slider"
+        }
+      },
+      "complexity": {
+        "type": "float",
+        "default": 5,
+        "uniform": "complexity",
+        "min": 1,
+        "max": 8,
+        "ui": {
+          "label": "complexity",
+          "control": "slider"
+        }
+      },
+      "intensity": {
+        "type": "float",
+        "default": 1,
+        "uniform": "intensity",
+        "min": 0,
+        "max": 2,
+        "ui": {
+          "label": "intensity",
+          "control": "slider"
+        }
+      },
+      "scale": {
+        "type": "float",
+        "default": 4,
+        "uniform": "scale",
+        "min": 0.5,
+        "max": 20,
+        "ui": {
+          "label": "scale",
+          "control": "slider"
+        }
+      },
+      "speed": {
+        "type": "float",
+        "default": 1,
+        "uniform": "speed",
+        "min": 0.1,
+        "max": 5,
+        "ui": {
+          "label": "speed",
+          "control": "slider"
+        }
+      },
+      "swirl": {
+        "type": "float",
+        "default": 1,
+        "uniform": "swirl",
+        "min": 0,
+        "max": 3,
+        "ui": {
+          "label": "swirl",
+          "control": "slider"
+        }
+      }
+    },
+    "passes": [
+      {
+        "name": "render",
+        "program": "psychedelicplasmatunnel",
+        "inputs": {},
+        "outputs": {
+          "fragColor": "outputTex"
+        }
+      }
+    ],
+    "shaders": {
+      "psychedelicplasmatunnel": {
+        "glsl": "#version 300 es\nprecision highp float;\n\nuniform float time;\nuniform vec2 resolution;\nuniform vec2 fullResolution;\n\nout vec4 fragColor;\n\n#define TAU 6.283185307179586\n#define PI 3.141592653589793\n\nuniform float colorShift;   // 0.0-1.0, palette phase offset (default 0)\nuniform float complexity;   // 1.0-8.0, FBM octaves (default 5)\nuniform float intensity;    // 0.0-2.0, overall brightness/glow (default 1)\nuniform float scale;        // 0.5-20.0, plasma pattern zoom (default 4)\nuniform float speed;        // 0.1-5.0, flight speed multiplier (default 1)\nuniform float swirl;        // 0.0-3.0, vortex twist amount (default 1)\n\n// ---------- Pure helper functions ----------\n\nfloat hash21(vec2 p) {\n    p = fract(p * vec2(123.34, 456.21));\n    p += dot(p, p + 45.32);\n    return fract(p.x * p.y);\n}\n\n// Smooth 2D value noise\nfloat noise(vec2 p) {\n    vec2 i = floor(p);\n    vec2 f = fract(p);\n    vec2 u = f * f * (3.0 - 2.0 * f);\n    float a = hash21(i);\n    float b = hash21(i + vec2(1.0, 0.0));\n    float c = hash21(i + vec2(0.0, 1.0));\n    float d = hash21(i + vec2(1.0, 1.0));\n    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);\n}\n\n// Rotate a 2D point\nvec2 rot(vec2 p, float a) {\n    float c = cos(a);\n    float s = sin(a);\n    return vec2(c * p.x - s * p.y, s * p.x + c * p.y);\n}\n\n// 4D-ish noise: 2D value noise extended with a vec2 time-circle offset (timeCircle noise)\n// Pure: caller supplies the animated offset.\nfloat noise4(vec2 p, vec2 tc) {\n    // blend two noise samples driven by the time-circle components\n    float n1 = noise(p + tc * 2.7 + 13.1);\n    float n2 = noise(p - tc * 1.9 + 7.7);\n    return mix(n1, n2, 0.5 + 0.5 * dot(normalize(tc + 1e-6), vec2(0.7071, 0.7071)) * 0.5);\n}\n\n// Per-octave rotated + scaled FBM (avoids axial alignment artifacts)\nfloat fbm(vec2 p, float octaves, vec2 tc) {\n    float v = 0.0;\n    float amp = 0.5;\n    mat2 m = mat2(0.8, 0.6, -0.6, 0.8); // rotation\n    for (int i = 0; i < 8; i++) {\n        if (float(i) >= octaves) break;\n        v += amp * noise4(p, tc);\n        p = m * p * 2.03 + vec2(1.7, 9.2);\n        amp *= 0.5;\n    }\n    return v;\n}\n\n// IQ cosine palette\nvec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {\n    return a + b * cos(TAU * (c * t + d));\n}\n\n// Wrap angle into n repeating slices, seamless (no hard seam)\nfloat sliceWrap(float angle, float n) {\n    return angle * n / TAU;\n}\n\nvoid main() {\n    vec2 uv = gl_FragCoord.xy / resolution;\n    vec2 centered = uv - 0.5;\n    centered.x *= resolution.x / resolution.y;\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // LOOPING PRIMITIVES - ALL ANIMATION MUST USE THESE\n    // time goes 0→1, so t goes 0→TAU, completing exactly one cycle\n    // ═══════════════════════════════════════════════════════════════════════════\n    float t = time * TAU;           // Converts time 0→1 to radians 0→TAU\n    vec2 timeCircle = vec2(cos(t), sin(t));  // For noise sampling - traces a circle\n    float pulse = 0.5 + 0.5 * sin(t);        // 0→1→0 smooth oscillation\n    float wave = sin(t);                      // -1→1→-1 smooth oscillation\n\n// Visible structures: perspective wormhole walls, flowing plasma,\n    // luminous racing rings, and a dark, fog-obscured vanishing point.\n    vec2 p = rot(centered, t);\n    float rawRadius = length(p);\n    float pixelRadius = 1.5 / max(resolution.y, 1.0);\n    float radius = sqrt(rawRadius * rawRadius + max(0.018, pixelRadius)\n                                               * max(0.018, pixelRadius));\n    float angle = atan(p.y, p.x);\n    float depth = 0.3 / radius;\n\n    // Breathing flight and depth-dependent vortex twist.\n    float flight = speed * sin(t * 2.0);\n    float tunnelDepth = depth + flight;\n    float twist = swirl * (0.8 + 0.2 * sin(t * 2.0));\n    float wallAngle = angle + twist * depth;\n\n    // Circular embedding makes all eight angular slices genuinely seamless.\n    float angularPhase = wallAngle * 8.0;\n    vec2 angularDomain = vec2(cos(angularPhase), sin(angularPhase));\n    float patternScale = max(scale, 0.5);\n    vec2 domain = angularDomain * (0.32 * patternScale)\n                + vec2(0.57, 0.83) * tunnelDepth * patternScale;\n\n    // Reduce unresolved detail near the vanishing point.\n    float footprint = max(length(fwidth(domain)), 0.0001);\n    float detail = clamp(complexity - max(0.0, log2(footprint * 2.0)),\n                         1.0, 8.0);\n\n    // Two-stage self-warping produces organic, liquid plasma on the walls.\n    vec2 warpA = vec2(\n        fbm(domain + vec2(4.7, 1.3), detail, timeCircle),\n        fbm(domain + vec2(-3.2, 8.1), detail, timeCircle)\n    );\n    vec2 warpedDomain = domain + 2.5 * (warpA - 0.5);\n    vec2 warpB = vec2(\n        fbm(warpedDomain + vec2(9.2, -2.8), detail, timeCircle),\n        fbm(warpedDomain + vec2(1.6, 6.4), detail, timeCircle)\n    );\n    float plasma = fbm(warpedDomain + 2.2 * (warpB - 0.5),\n                       detail, timeCircle);\n\n    // Smooth filament coverage, with derivative-aware edge widths.\n    float filamentDistance = abs(plasma - 0.49);\n    float filamentAA = max(fwidth(plasma), 0.002);\n    float filaments = 1.0 - smoothstep(0.012, 0.065 + filamentAA,\n                                      filamentDistance);\n    float liquidLight = smoothstep(0.22, 0.76, plasma);\n\n    // Perspective depth contours form luminous rings moving with the flight.\n    float ringPhase = tunnelDepth * TAU * 1.8\n                    + 0.38 * sin(angularPhase)\n                    + 0.55 * (plasma - 0.5);\n    float ringDistance = abs(sin(ringPhase));\n    float ringAA = max(fwidth(ringPhase), 0.001);\n    float ringVisibility = 1.0 - smoothstep(0.3, 1.8, ringAA);\n    float rings = (1.0 - smoothstep(0.025, 0.14 + ringAA,\n                                  ringDistance)) * ringVisibility;\n    float ringHalo = exp(-5.0 * ringDistance) * ringVisibility;\n    float ringPulse = 0.5 + 0.5 * sin(t * 3.0);\n\n    // IQ cosine palette: one exact rainbow phase revolution per loop.\n    float colorPhase = colorShift + plasma * 1.45\n                     + 0.075 * tunnelDepth\n                     + 0.12 * sin(angularPhase);\n    vec3 rainbow = 0.5 + 0.5 * cos(\n        vec3(t) + TAU * (vec3(colorPhase) + vec3(0.0, 0.33, 0.67))\n    );\n    vec3 plasmaColor = mix(vec3(0.08, 0.015, 0.15), rainbow,\n                           0.55 + 0.45 * liquidLight);\n    vec3 ringColor = mix(rainbow, vec3(0.75, 0.92, 1.0), 0.48);\n\n    float fog = 0.42;\n    float depthFog = exp(-depth * fog);\n    float coreMask = smoothstep(0.0, 0.035, rawRadius);\n    vec3 color = plasmaColor * (0.22 + 1.15 * liquidLight);\n    color += rainbow * filaments * 1.7;\n    color += ringColor * rings * (0.8 + 1.2 * ringPulse);\n\n    // Same-pass soft bloom around plasma filaments and ring contours.\n    float filamentBloom = exp(-18.0 * filamentDistance);\n    color += mix(rainbow, vec3(1.0), 0.22)\n           * (0.45 * filamentBloom + 0.35 * pow(filaments, 3.0));\n    color += ringColor * ringHalo * (0.18 + 0.32 * ringPulse);\n    color *= depthFog * coreMask;\n\n    // Gamma lift, saturation boost, and subtle three-cycle intensity pulse.\n    color = pow(max(color, vec3(0.0)), vec3(0.85));\n    float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));\n    color = max(mix(color, vec3(luma), -0.22), vec3(0.0));\n    color *= max(intensity, 0.0) * (0.94 + 0.06 * sin(t * 3.0));\n\nfragColor = vec4(color, 1.0);\n}"
+      }
+    },
+    "textures": {}
+  },
+  {
+    "name": "chromeicosahedroninterior",
+    "namespace": "user",
+    "func": "chromeicosahedroninterior",
+    "description": "A surreal view from inside a perfectly reflective chrome icosahedron. The camera slowly orbits inside the 20-faced polyhedron, watching multiple internal reflections create an infinite kaleidoscopic mirror effect. Chrome surfaces exhibit Fresnel-based reflectivity with bright glowing edges at grazing angles. A procedural environment creates surreal color bands visible in the reflections - cool metallics shifting through cyan, silver, and hints of gold. Edge glow pulses softly. Chromatic aberration adds prismatic rainbow fringing to reflections. The overall aesthetic is ethereal, metallic, and hypnotically geometric.",
+    "tags": [
+      "custom",
+      "user"
+    ],
+    "globals": {
+      "reflections": {
+        "type": "int",
+        "default": 5,
+        "uniform": "reflections",
+        "min": 2,
+        "max": 10,
+        "ui": {
+          "label": "reflections",
+          "control": "slider"
+        }
+      },
+      "glowIntensity": {
+        "type": "float",
+        "default": 1.2,
+        "uniform": "glowIntensity",
+        "min": 0,
+        "max": 3,
+        "ui": {
+          "label": "glowIntensity",
+          "control": "slider"
+        }
+      },
+      "chromeShift": {
+        "type": "float",
+        "default": 0.02,
+        "uniform": "chromeShift",
+        "min": 0,
+        "max": 0.1,
+        "ui": {
+          "label": "chromeShift",
+          "control": "slider"
+        }
+      },
+      "cameraOffset": {
+        "type": "float",
+        "default": 0.15,
+        "uniform": "cameraOffset",
+        "min": 0,
+        "max": 0.4,
+        "ui": {
+          "label": "cameraOffset",
+          "control": "slider"
+        }
+      }
+    },
+    "passes": [
+      {
+        "name": "render",
+        "program": "chromeicosahedroninterior",
+        "inputs": {},
+        "outputs": {
+          "fragColor": "outputTex"
+        }
+      }
+    ],
+    "shaders": {
+      "chromeicosahedroninterior": {
+        "glsl": "#version 300 es\nprecision highp float;\n\nuniform float time;\nuniform vec2 resolution;\n\nout vec4 fragColor;\n\n#define TAU 6.283185307179586\n#define PI 3.141592653589793\n\nuniform int reflections;      // 2-10, number of internal mirror bounces\nuniform float glowIntensity;  // 0.0-3.0, brightness of edge glow effect\nuniform float chromeShift;    // 0.0-0.1, chromatic aberration strength\nuniform float cameraOffset;   // 0.0-0.4, camera distance from center\n\n// Hash functions for procedural generation\nfloat hash(float p) {\n    return fract(sin(p * 127.1) * 43758.5453);\n}\n\nfloat hash(vec2 p) {\n    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);\n}\n\nvec3 hash3(vec2 p) {\n    vec3 q = vec3(dot(p, vec2(127.1, 311.7)),\n                  dot(p, vec2(269.5, 183.3)),\n                  dot(p, vec2(419.2, 371.9)));\n    return fract(sin(q) * 43758.5453);\n}\n\n// Value noise - pure math, noiseOffset enables animation when passed from main\nfloat noise(vec2 p) {\n    vec2 i = floor(p);\n    vec2 f = fract(p);\n    f = f * f * (3.0 - 2.0 * f);\n    \n    float a = hash(i);\n    float b = hash(i + vec2(1.0, 0.0));\n    float c = hash(i + vec2(0.0, 1.0));\n    float d = hash(i + vec2(1.0, 1.0));\n    \n    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\n// Golden ratio for icosahedron geometry\nconst float PHI = 1.618033988749895;\n\n// Icosahedron SDF - signed distance (negative inside)\nfloat sdIcosahedron(vec3 p, float r) {\n    vec3 n = normalize(vec3(PHI, 1.0, 0.0));\n    vec3 ap = abs(p);\n    float a = dot(ap, n);\n    float b = dot(ap, n.yzx);\n    float c = dot(ap, n.zxy);\n    return max(max(a, b), c) - r;\n}\n\n// Get icosahedron face normal at point\nvec3 icosahedronNormal(vec3 p) {\n    vec3 n = normalize(vec3(PHI, 1.0, 0.0));\n    vec3 ap = abs(p);\n    vec3 sp = sign(p + 1e-6);\n    \n    float a = dot(ap, n);\n    float b = dot(ap, n.yzx);\n    float c = dot(ap, n.zxy);\n    \n    if (a >= b && a >= c) return sp * n;\n    if (b >= a && b >= c) return sp.yzx * n.yzx;\n    return sp.zxy * n.zxy;\n}\n\n// Fresnel reflectance (Schlick approximation)\nfloat fresnel(vec3 viewDir, vec3 normal, float f0) {\n    float cosTheta = max(dot(-viewDir, normal), 0.0);\n    return f0 + (1.0 - f0) * pow(1.0 - cosTheta, 5.0);\n}\n\n// Chrome metallic palette - t is 0-1 position, NOT time\nvec3 chromePalette(float t) {\n    vec3 silver = vec3(0.9, 0.92, 0.95);\n    vec3 cyan = vec3(0.7, 0.9, 1.0);\n    vec3 gold = vec3(1.0, 0.95, 0.85);\n    vec3 blue = vec3(0.7, 0.75, 0.85);\n    \n    t = clamp(t, 0.0, 0.9999);\n    float segment = t * 4.0;\n    int idx = int(segment);\n    float blend = segment - float(idx);\n    \n    if (idx == 0) return mix(silver, cyan, blend);\n    if (idx == 1) return mix(cyan, blue, blend);\n    if (idx == 2) return mix(blue, gold, blend);\n    return mix(gold, silver, blend);\n}\n\n// Procedural environment for reflections\n// noiseOffset passed from main for animation\nvec3 proceduralEnvironment(vec3 dir, vec2 noiseOffset) {\n    float theta = atan(dir.z, dir.x);\n    float phi = asin(clamp(dir.y, -1.0, 1.0));\n    \n    float band = sin(theta * 3.0) * cos(phi * 2.0);\n    band += noise(vec2(theta, phi) * 5.0 + noiseOffset) * 0.3;\n    \n    float palettePos = band * 0.5 + 0.5;\n    vec3 col = chromePalette(palettePos);\n    col *= 0.8 + 0.2 * noise(dir.xz * 8.0 + noiseOffset);\n    \n    return col;\n}\n\n// Rotation helpers\nvec3 rotateY(vec3 p, float angle) {\n    float c = cos(angle);\n    float s = sin(angle);\n    return vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);\n}\n\nvec3 rotateX(vec3 p, float angle) {\n    float c = cos(angle);\n    float s = sin(angle);\n    return vec3(p.x, c * p.y - s * p.z, s * p.y + c * p.z);\n}\n\n// Edge glow at grazing angles\nfloat edgeGlow(vec3 viewDir, vec3 normal) {\n    float edge = 1.0 - abs(dot(viewDir, normal));\n    return pow(max(edge, 0.0), 3.0);\n}\n\n// Reflect ray inside icosahedron and accumulate color\nvec3 reflectRay(vec3 dir, vec3 normal) {\n    return reflect(dir, normal);\n}\n\nvoid main() {\n    vec2 uv = gl_FragCoord.xy / resolution;\n    vec2 centered = uv - 0.5;\n    centered.x *= resolution.x / resolution.y;\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // LOOPING PRIMITIVES - ALL ANIMATION MUST USE THESE\n    // time goes 0→1, so t goes 0→TAU, completing exactly one cycle\n    // ═══════════════════════════════════════════════════════════════════════════\n    float t = time * TAU;           // Converts time 0→1 to radians 0→TAU\n    vec2 timeCircle = vec2(cos(t), sin(t));  // For noise sampling - traces a circle\n    float pulse = 0.5 + 0.5 * sin(t);        // 0→1→0 smooth oscillation\n    float wave = sin(t);                      // -1→1→-1 smooth oscillation\n\n// ═══════════════════════════════════════════════════════════════════════════\n    // MAIN EFFECT LOGIC - Chrome Icosahedron Interior\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    float icoRadius = 1.0;\n    \n    // Camera orbiting inside the icosahedron - uses wave for smooth back-and-forth\n    vec3 camPos = vec3(\n        timeCircle.x * cameraOffset,\n        wave * cameraOffset * 0.3,\n        timeCircle.y * cameraOffset\n    );\n    \n    // Camera look direction with gentle oscillation\n    vec3 camTarget = vec3(wave * 0.1, sin(t * 2.0) * 0.05, 0.0);\n    vec3 camForward = normalize(camTarget - camPos);\n    vec3 camRight = normalize(cross(vec3(0.0, 1.0, 0.0), camForward));\n    vec3 camUp = cross(camForward, camRight);\n    \n    // Ray direction through pixel\n    vec3 rayDir = normalize(camForward + centered.x * camRight + centered.y * camUp);\n    \n    // Final accumulated color with chromatic aberration\n    vec3 finalColor = vec3(0.0);\n    \n    // Trace 3 rays for chromatic aberration (R, G, B channels)\n    for (int channel = 0; channel < 3; channel++) {\n        float aberrationOffset = (float(channel) - 1.0) * chromeShift;\n        vec3 traceDir = normalize(rayDir + camRight * aberrationOffset);\n        vec3 traceOrigin = camPos;\n        \n        vec3 channelColor = vec3(0.0);\n        float channelAtten = 1.0;\n        \n        // Reflection bounces inside icosahedron\n        for (int bounce = 0; bounce < 10; bounce++) {\n            if (bounce >= reflections) break;\n            \n            // Ray march to find icosahedron surface from inside\n            float marchDist = 0.0;\n            vec3 hitPos = traceOrigin;\n            \n            for (int step = 0; step < 48; step++) {\n                hitPos = traceOrigin + traceDir * marchDist;\n                float d = -sdIcosahedron(hitPos, icoRadius);\n                if (d < 0.001) break;\n                marchDist += max(d * 0.6, 0.002);\n                if (marchDist > 4.0) break;\n            }\n            \n            // Surface normal pointing inward\n            vec3 normal = -icosahedronNormal(hitPos);\n            \n            // Fresnel - chrome is highly reflective\n            float fresnelVal = fresnel(traceDir, normal, 0.85);\n            \n            // Edge glow - bright at grazing angles, pulsing\n            float glow = edgeGlow(traceDir, normal);\n            float pulsingGlow = glow * glowIntensity * (0.7 + 0.5 * pulse);\n            \n            // Sample procedural environment in reflection direction\n            vec3 reflectDir = reflect(traceDir, normal);\n            vec3 envColor = proceduralEnvironment(reflectDir, timeCircle * 0.5);\n            \n            // Accumulate environment color through attenuation\n            channelColor += channelAtten * envColor * (1.0 - fresnelVal) * 0.4;\n            \n            // Add edge glow with animated palette position\n            float palettePos = 0.5 + 0.3 * sin(t + float(bounce) * 0.8);\n            vec3 glowCol = chromePalette(palettePos);\n            channelColor += channelAtten * glowCol * pulsingGlow;\n            \n            // Attenuate for next bounce\n            channelAtten *= fresnelVal * 0.88;\n            \n            // Set up next bounce\n            traceDir = reflectDir;\n            traceOrigin = hitPos + traceDir * 0.01;\n        }\n        \n        // Final environment contribution after all bounces\n        vec3 finalEnv = proceduralEnvironment(traceDir, timeCircle * 0.5);\n        channelColor += channelAtten * finalEnv;\n        \n        // Assign to appropriate color channel\n        if (channel == 0) finalColor.r = channelColor.r;\n        else if (channel == 1) finalColor.g = channelColor.g;\n        else finalColor.b = channelColor.b;\n    }\n    \n    // Add central bright spot with animated intensity\n    float centerDist = length(centered);\n    float centerGlow = exp(-centerDist * 4.0) * 0.3 * (0.8 + 0.4 * pulse);\n    finalColor += chromePalette(pulse) * centerGlow;\n    \n    // Subtle vignette\n    float vignette = 1.0 - centerDist * 0.4;\n    finalColor *= vignette;\n    \n    // Filmic tone mapping\n    finalColor = finalColor / (1.0 + finalColor * 0.5);\n    \n    // Output color\n    vec3 color = pow(max(finalColor, vec3(0.0)), vec3(0.92));\n\nfragColor = vec4(color, 1.0);\n}"
+      }
+    },
+    "textures": {}
+  },
+  {
+    "name": "aerialsunsetflyover",
+    "namespace": "user",
+    "func": "aerialsunsetflyover",
+    "description": "First-person aerial view flying forward over a surreal alien landscape at ~40m altitude. The ground occupies ~65% of the frame, displaying sweeping bands of vibrant color — electric purples rolling into deep teals, volcanic oranges and lime greens — like psychedelic geological formations seen from above. Near terrain is crisp with visible FBM ridge detail and strong perspective convergence lines. By 150 virtual units distant, terrain colors wash toward warm cream-orange fog; by 300 units only silhouette shapes remain dissolved in haze. The horizon is completely washed out into a blindingly bright warm cream-orange atmospheric glow. Sky transitions from deep violet-indigo at the top through a magenta band narrowing into the horizon glow. A soft overexposed sun disc sits just above center-horizon, surrounded by a wide corona bloom and horizontal lens-streak artifacts. The camera breathes gently with a vertical Y-axis bob and lazy lateral banking. ALL animation uses sin(time*TAU) and cos(time*TAU) exclusively. Terrain forward motion is achieved by offsetting the FBM spatial coordinates using timeCircle = vec2(cos(time*TAU), sin(time*TAU)) scaled by speed — this traces a circle in the noise field giving seamless looping terrain scroll. Camera Y bob: sin(time*TAU)*2.5 (1 cycle). Banking: sin(time*TAU)*0.06 (1 cycle). Hue drift adds sin(time*TAU)*0.4 to cosine palette t-parameter. Sun Y oscillates with sin(time*TAU)*0.04. Lens flare pulse uses sin(time*TAU*2.0) (2 integer cycles). Post-processing: subtle chromatic aberration at screen edges, circular vignette, soft film grain from hash noise, sun corona/streak lens effects.",
+    "tags": [
+      "custom",
+      "user"
+    ],
+    "globals": {
+      "speed": {
+        "type": "float",
+        "default": 1.2,
+        "uniform": "speed",
+        "min": 0.1,
+        "max": 5,
+        "ui": {
+          "label": "speed",
+          "control": "slider"
+        }
+      },
+      "terrainScale": {
+        "type": "float",
+        "default": 2.5,
+        "uniform": "terrainScale",
+        "min": 0.5,
+        "max": 10,
+        "ui": {
+          "label": "terrainScale",
+          "control": "slider"
+        }
+      },
+      "colorSaturation": {
+        "type": "float",
+        "default": 1.3,
+        "uniform": "colorSaturation",
+        "min": 0,
+        "max": 2,
+        "ui": {
+          "label": "colorSaturation",
+          "control": "slider"
+        }
+      },
+      "horizonHaze": {
+        "type": "float",
+        "default": 1,
+        "uniform": "horizonHaze",
+        "min": 0,
+        "max": 3,
+        "ui": {
+          "label": "horizonHaze",
+          "control": "slider"
+        }
+      },
+      "lensIntensity": {
+        "type": "float",
+        "default": 1,
+        "uniform": "lensIntensity",
+        "min": 0,
+        "max": 2,
+        "ui": {
+          "label": "lensIntensity",
+          "control": "slider"
+        }
+      },
+      "complexity": {
+        "type": "float",
+        "default": 5,
+        "uniform": "complexity",
+        "min": 2,
+        "max": 7,
+        "ui": {
+          "label": "complexity",
+          "control": "slider"
+        }
+      }
+    },
+    "passes": [
+      {
+        "name": "render",
+        "program": "aerialsunsetflyover",
+        "inputs": {},
+        "outputs": {
+          "fragColor": "outputTex"
+        }
+      }
+    ],
+    "shaders": {
+      "aerialsunsetflyover": {
+        "glsl": "#version 300 es\nprecision highp float;\n\nuniform float time;\nuniform vec2 resolution;\nuniform vec2 fullResolution;\n\nout vec4 fragColor;\n\n#define TAU 6.283185307179586\n#define PI 3.141592653589793\n\nuniform float speed;          // 0.1-5.0, forward flight speed through terrain\nuniform float terrainScale;   // 0.5-10.0, scale of terrain features\nuniform float colorSaturation;// 0.0-2.0, vibrancy of terrain color bands\nuniform float horizonHaze;    // 0.0-3.0, atmospheric fog density at horizon\nuniform float lensIntensity;  // 0.0-2.0, strength of sun corona and lens flare\nuniform float complexity;     // 2.0-7.0, FBM octave count for terrain detail\n\nfloat hash11(float p) {\n    p = fract(p * 0.1031);\n    p *= p + 33.33;\n    p *= p + p;\n    return fract(p);\n}\n\nfloat hash21(vec2 p) {\n    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));\n    p3 += dot(p3, p3.yzx + 33.33);\n    return fract((p3.x + p3.y) * p3.z);\n}\n\nvec2 hash22(vec2 p) {\n    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));\n    p3 += dot(p3, p3.yzx + 33.33);\n    return fract((p3.xx + p3.yz) * p3.zy);\n}\n\nfloat valueNoise(vec2 p) {\n    vec2 i = floor(p);\n    vec2 f = fract(p);\n    vec2 u = f * f * (3.0 - 2.0 * f);\n    float a = hash21(i + vec2(0.0, 0.0));\n    float b = hash21(i + vec2(1.0, 0.0));\n    float c = hash21(i + vec2(0.0, 1.0));\n    float d = hash21(i + vec2(1.0, 1.0));\n    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);\n}\n\nfloat gradNoise(vec2 p) {\n    vec2 i = floor(p);\n    vec2 f = fract(p);\n    vec2 u = f * f * (3.0 - 2.0 * f);\n    vec2 ga = hash22(i + vec2(0.0, 0.0)) * 2.0 - 1.0;\n    vec2 gb = hash22(i + vec2(1.0, 0.0)) * 2.0 - 1.0;\n    vec2 gc = hash22(i + vec2(0.0, 1.0)) * 2.0 - 1.0;\n    vec2 gd = hash22(i + vec2(1.0, 1.0)) * 2.0 - 1.0;\n    float va = dot(ga, f - vec2(0.0, 0.0));\n    float vb = dot(gb, f - vec2(1.0, 0.0));\n    float vc = dot(gc, f - vec2(0.0, 1.0));\n    float vd = dot(gd, f - vec2(1.0, 1.0));\n    return 0.5 + 0.5 * mix(mix(va, vb, u.x), mix(vc, vd, u.x), u.y);\n}\n\n// FBM terrain with ridge detail\nfloat fbmTerrain(vec2 p, float octaves) {\n    float val = 0.0;\n    float amp = 0.5;\n    float freq = 1.0;\n    float total = 0.0;\n    int iOctaves = int(clamp(octaves, 2.0, 7.0));\n    for (int i = 0; i < 7; i++) {\n        if (i >= iOctaves) break;\n        float n = gradNoise(p * freq);\n        // Ridge: invert abs\n        float ridge = 1.0 - abs(n * 2.0 - 1.0);\n        ridge = ridge * ridge;\n        val += ridge * amp;\n        total += amp;\n        freq *= 2.1;\n        amp *= 0.48;\n    }\n    return val / total;\n}\n\n// Standard FBM for smooth features\nfloat fbmSmooth(vec2 p, float octaves) {\n    float val = 0.0;\n    float amp = 0.5;\n    float freq = 1.0;\n    float total = 0.0;\n    int iOctaves = int(clamp(octaves, 2.0, 7.0));\n    for (int i = 0; i < 7; i++) {\n        if (i >= iOctaves) break;\n        val += gradNoise(p * freq) * amp;\n        total += amp;\n        freq *= 2.0;\n        amp *= 0.5;\n    }\n    return val / total;\n}\n\n// Cosine color palette (Inigo Quilez style)\n// a, b, c, d are palette coefficients; t is 0-1 gradient position\nvec3 cosPalette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {\n    return a + b * cos(TAU * (c * t + d));\n}\n\n// Terrain color palette: electric purples, teals, volcanic oranges, lime greens\nvec3 terrainPalette(float t, float saturation) {\n    vec3 a = vec3(0.5, 0.5, 0.5);\n    vec3 b = vec3(0.5, 0.5, 0.5);\n    vec3 c = vec3(1.0, 0.8, 0.6);\n    vec3 d = vec3(0.0, 0.15, 0.4);\n    vec3 col = cosPalette(t, a, b, c, d);\n    // Boost saturation\n    float lum = dot(col, vec3(0.299, 0.587, 0.114));\n    return mix(vec3(lum), col, saturation);\n}\n\n// Sky gradient: deep violet-indigo top -> magenta band -> warm cream-orange horizon\nvec3 skyColor(float horizonT) {\n    // horizonT = 0 at top, 1 at horizon\n    vec3 topColor    = vec3(0.08, 0.04, 0.22);   // deep violet-indigo\n    vec3 midColor    = vec3(0.55, 0.10, 0.42);   // magenta band\n    vec3 horizonColor = vec3(1.0, 0.85, 0.55);  // warm cream-orange\n    vec3 col;\n    if (horizonT < 0.6) {\n        col = mix(topColor, midColor, horizonT / 0.6);\n    } else {\n        col = mix(midColor, horizonColor, (horizonT - 0.6) / 0.4);\n    }\n    return col;\n}\n\n// Atmospheric fog blend: terrain color washes to warm cream-orange with distance\nvec3 fogColor(float dist, float hazeDensity) {\n    float fogFar  = 300.0;\n    float fogNear = 80.0;\n    float fogT = clamp((dist - fogNear) / (fogFar - fogNear), 0.0, 1.0);\n    fogT = pow(fogT, 0.7) * hazeDensity;\n    fogT = clamp(fogT, 0.0, 1.0);\n    vec3 haze = vec3(1.0, 0.88, 0.62);\n    return haze;\n    // caller mixes using fogT\n}\n\nfloat fogFactor(float dist, float hazeDensity) {\n    float fogFar  = 300.0;\n    float fogNear = 80.0;\n    float fogT = clamp((dist - fogNear) / (fogFar - fogNear), 0.0, 1.0);\n    fogT = pow(fogT, 0.7);\n    return clamp(fogT * hazeDensity, 0.0, 1.0);\n}\n\n// Soft sun disc + corona\nvec3 sunEffect(vec2 uv, vec2 sunPos, float intensity) {\n    float d = length(uv - sunPos);\n    float disc = smoothstep(0.04, 0.01, d);\n    float corona = exp(-d * 8.0) * 0.6;\n    float glow   = exp(-d * 2.5) * 0.4;\n    vec3 sunCol  = vec3(1.0, 0.95, 0.75);\n    vec3 coronaCol = vec3(1.0, 0.75, 0.35);\n    return (disc * sunCol + corona * coronaCol + glow * vec3(1.0, 0.70, 0.30)) * intensity;\n}\n\n// Horizontal lens streak\nvec3 lensStreak(vec2 uv, vec2 sunPos, float pulse, float intensity) {\n    float dy = abs(uv.y - sunPos.y);\n    float streak = exp(-dy * dy * 180.0) * 0.35 * (0.6 + 0.4 * pulse);\n    float xFade = 1.0 - smoothstep(0.3, 0.8, abs(uv.x - sunPos.x));\n    return vec3(1.0, 0.75, 0.3) * streak * xFade * intensity;\n}\n\n// Film grain\nfloat filmGrain(vec2 uv, float seed) {\n    return hash21(uv * 1000.0 + seed) * 2.0 - 1.0;\n}\n\n// Chromatic aberration offset (returns offset amount based on screen edge distance)\nfloat chromaticStrength(vec2 uv) {\n    vec2 centered = uv * 2.0 - 1.0;\n    float r2 = dot(centered, centered);\n    return r2 * r2 * 0.008;\n}\n\n// Vignette\nfloat vignette(vec2 uv) {\n    vec2 c = uv * 2.0 - 1.0;\n    float v = 1.0 - dot(c, c) * 0.35;\n    return clamp(v, 0.0, 1.0);\n}\n\nvoid main() {\n    vec2 uv = gl_FragCoord.xy / resolution;\n    vec2 centered = uv - 0.5;\n    centered.x *= resolution.x / resolution.y;\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // LOOPING PRIMITIVES - ALL ANIMATION MUST USE THESE\n    // time goes 0→1, so t goes 0→TAU, completing exactly one cycle\n    // ═══════════════════════════════════════════════════════════════════════════\n    float t = time * TAU;           // Converts time 0→1 to radians 0→TAU\n    vec2 timeCircle = vec2(cos(t), sin(t));  // For noise sampling - traces a circle\n    float pulse = 0.5 + 0.5 * sin(t);        // 0→1→0 smooth oscillation\n    float wave = sin(t);                      // -1→1→-1 smooth oscillation\n\n// ═══════════════════════════════════════════════════════════════════════════\n    // CAMERA SETUP\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    // Camera position: flying at ~40m altitude with Y-bob\n    float camY = 40.0 + wave * 2.5;\n    \n    // Lazy lateral banking (roll angle)\n    float bankAngle = wave * 0.06;\n    float cosBank = cos(bankAngle);\n    float sinBank = sin(bankAngle);\n    \n    // Ray direction from camera through screen pixel\n    // centered.x is already aspect-corrected\n    vec2 screenPos = centered; // aspect-corrected centered UV\n    \n    // Apply bank rotation to screen space\n    vec2 bankedPos;\n    bankedPos.x = screenPos.x * cosBank - screenPos.y * sinBank;\n    bankedPos.y = screenPos.x * sinBank + screenPos.y * cosBank;\n    \n    // FOV ~70 degrees\n    float fov = 1.3;\n    vec3 rayDir = normalize(vec3(bankedPos.x * fov, bankedPos.y * fov, 1.0));\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // TERRAIN RAYMARCHING\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    // Terrain motion: offset XZ using timeCircle for seamless looping\n    // timeCircle traces a circle, giving forward+slight-lateral motion\n    vec2 terrainOffset = timeCircle * speed * 25.0;\n    \n    // Sky vs terrain determination\n    // Ground plane intersection: ray from camY downward\n    // If rayDir.y >= 0, we're looking at sky\n    \n    bool hitTerrain = false;\n    float hitDist = 0.0;\n    float hitHeight = 0.0;\n    vec2 hitXZ = vec2(0.0);\n    \n    if (rayDir.y < -0.01) {\n        // March along the ray to find where it hits terrain\n        // Terrain height is fbmTerrain mapped to ~0-20 units\n        float tStep = 0.0;\n        float stepSize = 1.0;\n        \n        for (int i = 0; i < 80; i++) {\n            vec3 pos = vec3(0.0, camY, 0.0) + rayDir * tStep;\n            \n            // World XZ position\n            vec2 xz = vec2(pos.x, pos.z);\n            \n            // Terrain height at this XZ\n            vec2 noiseCoord = (xz + terrainOffset) * (terrainScale * 0.08);\n            float terrH = fbmTerrain(noiseCoord, complexity) * 18.0;\n            \n            float gap = pos.y - terrH;\n            \n            if (gap < 0.3) {\n                hitTerrain = true;\n                hitDist = tStep;\n                hitHeight = terrH;\n                hitXZ = xz;\n                break;\n            }\n            \n            // Adaptive step: step by gap / 2, min 0.5, max 8\n            stepSize = clamp(gap * 0.5, 0.5, 8.0);\n            tStep += stepSize;\n            \n            if (tStep > 600.0) break;\n        }\n    }\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // TERRAIN COLOR\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    vec3 terrainCol = vec3(0.0);\n    \n    if (hitTerrain) {\n        // Sample terrain noise at hit point for color variation\n        vec2 colorCoord = (hitXZ + terrainOffset) * (terrainScale * 0.08);\n        \n        // Multiple noise layers for color bands\n        float bandNoise1 = fbmSmooth(colorCoord * 0.7, 4.0);\n        float bandNoise2 = fbmSmooth(colorCoord * 1.4 + vec2(3.7, 1.9), 3.0);\n        float ridgeVal   = fbmTerrain(colorCoord, complexity);\n        \n        // Combine for color palette position\n        // Hue drift: add sin(t)*0.4 to palette t-parameter\n        float hueDrift = wave * 0.4;\n        float palT = bandNoise1 * 0.5 + bandNoise2 * 0.3 + ridgeVal * 0.2 + hueDrift;\n        palT = fract(palT); // wrap palette\n        \n        terrainCol = terrainPalette(palT, colorSaturation);\n        \n        // Ridgeline brightening\n        terrainCol += vec3(0.15, 0.12, 0.08) * ridgeVal * ridgeVal;\n        \n        // Distance fog\n        float fog = fogFactor(hitDist, horizonHaze);\n        vec3 haze = vec3(1.0, 0.88, 0.62);\n        terrainCol = mix(terrainCol, haze, fog);\n        \n        // Perspective depth darkening for near terrain\n        float nearDark = 1.0 - smoothstep(0.0, 30.0, hitDist) * 0.0;\n        terrainCol *= nearDark;\n    }\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // SKY\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    // Horizon position on screen (accounting for bank)\n    // In ray space: horizon is where rayDir.y == 0\n    // Screen Y at horizon: bankedPos.y = 0 → screenPos.y = 0 when no bank\n    \n    // Compute sky gradient based on ray direction elevation\n    float rayElev = rayDir.y; // -1 to +1, 0 = horizon\n    \n    // Map ray elevation to sky gradient: 0 at horizon, 1 at top\n    float skyT = clamp(rayElev * 2.5 + 0.0, 0.0, 1.0);\n    // horizonT = 1 - skyT (1 at horizon, 0 at top)\n    float horizonT = 1.0 - skyT;\n    \n    vec3 skyCol = skyColor(horizonT);\n    \n    // Extra horizon glow brightening\n    float horizonGlow = exp(-abs(rayElev) * 6.0) * horizonHaze * 0.5;\n    skyCol += vec3(1.0, 0.85, 0.55) * horizonGlow;\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // SUN DISC + CORONA + LENS FLARE\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    // Sun position: just above center-horizon in screen space\n    // Sun Y oscillates with sin(t)*0.04\n    vec2 sunUV = vec2(0.0, 0.03 + wave * 0.04);\n    // Convert sunUV to our centered (aspect-corrected) space\n    // sunUV is in normalized centered space\n    vec2 sunCentered = sunUV * vec2(resolution.x / resolution.y, 1.0);\n    \n    // Distance from ray to sun direction (use bankedPos)\n    // For sun we use the screen bankedPos directly\n    vec2 sunScreenPos = sunUV; // in non-aspect-corrected centered space\n    \n    // Lens pulse: sin(t*2.0) for 2 cycles\n    float lensPulse = 0.5 + 0.5 * sin(t * 2.0);\n    \n    // Sun effect in centered (aspect-corrected) screen space\n    vec2 centeredRaw = uv - 0.5; // not aspect-corrected for sun\n    vec3 sunContrib = sunEffect(centeredRaw, sunScreenPos, lensIntensity * 1.4);\n    \n    // Lens streak\n    vec3 streakContrib = lensStreak(centeredRaw, sunScreenPos, lensPulse, lensIntensity * 1.2);\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // COMPOSE SCENE\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    vec3 finalColor;\n    \n    if (hitTerrain) {\n        finalColor = terrainCol;\n    } else {\n        finalColor = skyCol;\n        // Add sun and lens effects to sky\n        finalColor += sunContrib;\n        finalColor += streakContrib;\n    }\n    \n    // ═══════════════════════════════════════════════════════════════════════════\n    // POST-PROCESSING\n    // ═══════════════════════════════════════════════════════════════════════════\n    \n    // Chromatic aberration at screen edges\n    float chromaStr = chromaticStrength(uv);\n    vec2 chromaOffset = (uv - 0.5) * chromaStr;\n    \n    // Sample color channels with slight offset\n    // Red channel shifted outward, blue shifted inward\n    vec2 uvR = uv + chromaOffset * 2.0;\n    vec2 uvB = uv - chromaOffset * 2.0;\n    \n    // Recompute simple chroma for edge pixels using sky/terrain blend\n    // For efficiency, modulate R and B channels of finalColor\n    // by estimated shift (approximation)\n    float chromaEdge = chromaStr * 8.0;\n    finalColor.r = mix(finalColor.r, finalColor.r * 1.08, chromaEdge);\n    finalColor.b = mix(finalColor.b, finalColor.b * 0.92, chromaEdge);\n    \n    // Vignette\n    float vig = vignette(uv);\n    finalColor *= vig;\n    \n    // Film grain\n    float grain = filmGrain(uv, pulse);\n    finalColor += grain * 0.025;\n    \n    // Soft tone mapping / exposure\n    finalColor = finalColor / (finalColor + 0.8) * 1.5;\n    finalColor = clamp(finalColor, 0.0, 1.0);\n    \n    // Slight gamma correction\n    finalColor = pow(finalColor, vec3(0.9));\n\nfragColor = vec4(finalColor, 1.0);\n}"
+      }
+    },
+    "textures": {}
+  }
+]
