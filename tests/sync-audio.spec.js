@@ -365,3 +365,106 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
 test('native receiver accepts mixer bytes rendered on WebGPU', async ({ page }) => {
     await nativeReceiverAcceptance(page, true)
 })
+
+for (const backend of ['webgl2', 'webgpu']) {
+    test(`native H.264 receiver decodes ${backend} pixels at every output resolution`, async ({ page }) => {
+        test.skip(process.platform !== 'darwin', 'Native H.264 decoding requires VideoToolbox')
+        test.slow()
+        await page.goto('/sync-audio-test-empty.html')
+        const results = await page.evaluate(async ({ endpoint, backend }) => {
+            const { SyncBridgeClient } = await import('/js/sync/bundle.js')
+            const { SyncH264CanvasSender } = await import('/js/syncH264CanvasSender.js')
+            const client = new SyncBridgeClient({ endpoint, token: 'audio-test-token',
+                permissions: { query: async () => ({ state: 'granted' }) } })
+            let device
+            if (backend === 'webgpu') {
+                const adapter = await navigator.gpu.requestAdapter()
+                if (!adapter) throw new Error('WebGPU adapter is required for native H.264 acceptance')
+                device = await adapter.requestDevice()
+            }
+            const results = []
+            try {
+                await client.connect()
+                for (const [width, height] of [[640, 360], [1280, 720], [1920, 1080], [2560, 1440]]) {
+                    const canvas = document.createElement('canvas')
+                    canvas.width = width
+                    canvas.height = height
+                    const context = canvas.getContext(backend)
+                    if (!context) throw new Error(`${backend} canvas is unavailable`)
+                    if (device) context.configure({ device, format: navigator.gpu.getPreferredCanvasFormat(),
+                        alphaMode: 'opaque' })
+                    const draw = async value => {
+                        if (device) {
+                            const commands = device.createCommandEncoder()
+                            const pass = commands.beginRenderPass({ colorAttachments: [{
+                                view: context.getCurrentTexture().createView(),
+                                clearValue: { r: value, g: value, b: value, a: 1 },
+                                loadOp: 'clear', storeOp: 'store'
+                            }] })
+                            pass.end()
+                            device.queue.submit([commands.finish()])
+                            await device.queue.onSubmittedWorkDone()
+                        } else {
+                            context.clearColor(value, value, value, 1)
+                            context.clear(context.COLOR_BUFFER_BIT)
+                            context.finish()
+                        }
+                    }
+                    await draw(0)
+                    const sender = await SyncH264CanvasSender.create({ client, name: `AVC ${backend}`,
+                        canvas, descriptor: { width, height, fps: 60 } })
+                    try {
+                        for (const value of [0, 255]) {
+                            await draw(value / 255)
+                            const bytes = width * height * 4
+                            const end = bytes > 1048576 ? 65536 : bytes
+                            const expectedChecksums = []
+                            // AVC can quantize the first white macroblock to 254.
+                            // Accept that measured one-code-value difference only;
+                            // in the fixture's hashed region, other bytes stay exact.
+                            for (const nearBlock of value === 255 ? [false, true] : [false]) {
+                                let checksum = 0x811c9dc5
+                                for (let i = 0; i < end; i++) {
+                                    const pixel = Math.floor(i / 4)
+                                    const rgb = nearBlock && pixel % width < 16 && Math.floor(pixel / width) < 16
+                                        ? 254 : value
+                                    checksum = Math.imul(checksum ^ (i % 4 === 3 ? 255 : rgb), 0x01000193) >>> 0
+                                }
+                                expectedChecksums.push(checksum)
+                            }
+                            const minimumAccepted = sender.stats.accepted + 1
+                            if (!sender.submit(null, performance.now())) throw new Error('H.264 frame was not submitted')
+                            const deadline = performance.now() + 10000
+                            let stats
+                            do {
+                                stats = await client._scheduleControl(client._controlSession, () => client._exchange(
+                                    { type: 'getStats', senderId: sender._transport.id }, message => message,
+                                    client._controlSession))
+                                if (Number(stats.accepted) >= minimumAccepted && expectedChecksums.includes(Number(stats.checksum))) break
+                                await new Promise(resolve => setTimeout(resolve, 25))
+                            } while (performance.now() < deadline)
+                            results.push({ backend, width, height, value, expectedChecksums, stats })
+                            if (!expectedChecksums.includes(Number(stats.checksum)) || Number(stats.accepted) < minimumAccepted) {
+                                throw new Error('Native decoded pixels differ: ' + JSON.stringify(results.at(-1)))
+                            }
+                        }
+                    } finally {
+                        sender.close()
+                        await sender.closed
+                        if (device) context.unconfigure()
+                        else context.getExtension('WEBGL_lose_context')?.loseContext()
+                    }
+                }
+            } finally {
+                client.close()
+                device?.destroy()
+            }
+            return results
+        }, { endpoint, backend })
+        expect(results).toHaveLength(8)
+        for (const { stats } of results) {
+            expect(Number(stats.rejected)).toBe(0)
+            expect(Number(stats.failed)).toBe(0)
+        }
+    })
+}

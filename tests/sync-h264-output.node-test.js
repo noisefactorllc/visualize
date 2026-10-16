@@ -73,6 +73,35 @@ test('selects compressed output only for capable macOS companions', { timeout: 5
     assert.equal(supportsH264CanvasOutput({ version: '0.2.84', capabilities: { providers: [] } }), false)
 })
 
+for (const [width, height, codec] of [
+    [640, 360, 'avc1.640029'],
+    [1280, 720, 'avc1.640029'],
+    [1920, 1080, 'avc1.64002a'],
+    [2560, 1440, 'avc1.640033']
+]) {
+    test(`selects an AVC level that permits ${width}x${height} at 60 fps and 50 Mbps`, {
+        timeout: 5000
+    }, async () => {
+        installEncoder()
+        globalThis.VideoEncoder.isConfigSupported = async config => {
+            assert.equal(config.codec, codec)
+            assert.equal(config.width, width)
+            assert.equal(config.height, height)
+            assert.equal(config.framerate, 60)
+            assert.equal(config.bitrate, 50_000_000)
+            return { supported: true }
+        }
+        const transport = transportFixture()
+        const sender = await SyncH264CanvasSender.create({
+            client: { createH264StreamSender: async () => transport },
+            name: 'Resolution', canvas: { width, height },
+            descriptor: { width, height, fps: 60 }, clock: performance
+        })
+        sender.close()
+        await sender.closed
+    })
+}
+
 test('spaces catch-up writes so the receiver does not see a frame burst', {
     timeout: 5000
 }, async () => {

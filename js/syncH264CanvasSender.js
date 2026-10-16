@@ -9,6 +9,13 @@ export const MAX_PENDING_FRAMES = 12
 const ENCODE_BACKLOG_DEFER_FRAMES = 3
 export const WARN_THROTTLE_MS = 1000
 const ENCODE_TIMEOUT_MS = 2000
+// High profile levels that permit the fixed 50 Mbps output bitrate.
+const AVC_LEVELS = [
+    { suffix: '29', maxFrameMacroblocks: 8192, maxMacroblocksPerSecond: 245760 },
+    { suffix: '2a', maxFrameMacroblocks: 8704, maxMacroblocksPerSecond: 522240 },
+    { suffix: '32', maxFrameMacroblocks: 22080, maxMacroblocksPerSecond: 589824 },
+    { suffix: '33', maxFrameMacroblocks: 36864, maxMacroblocksPerSecond: 983040 }
+]
 
 function outputError(code, message, cause) {
     const error = new Error(message, cause === undefined ? undefined : { cause })
@@ -42,8 +49,14 @@ export class SyncH264CanvasSender {
         if (typeof client?.createH264StreamSender !== 'function') {
             throw outputError('SYNC_CAPABILITY', 'Sync SDK does not support H.264 output')
         }
+        const macroblocks = Math.ceil(descriptor.width / 16) * Math.ceil(descriptor.height / 16)
+        const level = AVC_LEVELS.find(candidate => macroblocks <= candidate.maxFrameMacroblocks &&
+            macroblocks * descriptor.fps <= candidate.maxMacroblocksPerSecond)
+        if (!level) {
+            throw outputError('SYNC_CAPABILITY', 'Hardware H.264 output is unavailable at this resolution')
+        }
         const config = {
-            codec: 'avc1.640028',
+            codec: `avc1.6400${level.suffix}`,
             width: descriptor.width,
             height: descriptor.height,
             bitrate: 50_000_000,
