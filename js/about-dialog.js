@@ -15,8 +15,8 @@ const about = new AboutDialog({
     ecosystem: `Visualize is a free tool by <a href="https://noisefactor.io/" target="_blank" rel="noopener">Noise Factor</a>, powered by the <a href="https://noisemaker.app/" target="_blank" rel="noopener">Noisemaker</a> open source engine.`,
 })
 
-// deployment-meta.json is written by the CI deploy pipeline (see
-// scaffold static-site-release). It never exists in local dev, and
+// deployment-meta.json is written by the CI deploy pipeline (the
+// static-site release). It never exists in local dev, and
 // the browser logs a 404 to the console that fails the smoke spec's
 // strict error check. Skip the fetch outright on local hosts.
 const isLocalDev = typeof window !== 'undefined' && (

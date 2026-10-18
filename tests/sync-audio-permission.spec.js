@@ -24,7 +24,7 @@ test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
 // it deterministically.
 //
 // Sandboxed runners may forbid listening on ephemeral loopback ports
-// (listen EPERM). There the helper falls back to the broker's permitted
+// (listen EPERM). There the helper falls back to the sandbox's permitted
 // loopback range and picks a port verified closed by a refused connection —
 // the same "closed port" contract, without binding it.
 async function closedLoopbackPort() {

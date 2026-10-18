@@ -8,7 +8,7 @@ const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 const defaultDaemon = path.resolve(import.meta.dirname, '../../sync/build/sync_audio_test_server')
 const daemonPath = process.env.SYNC_AUDIO_TEST_SERVER || defaultDaemon
 // The engine AudioState module comes from the shared noisemaker checkout;
-// restricted sandboxes (the supervisor's macOS gate) may forbid reading it,
+// restricted sandboxes (such as an automated macOS gate) may forbid reading it,
 // so fall back to the sandbox-local snapshot carried next to the run.
 const audioStateCandidates = [
     path.resolve(import.meta.dirname, '../../noisemaker/shaders/src/runtime/external-input.js'),

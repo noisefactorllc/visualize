@@ -110,8 +110,8 @@ const defaultRoot = defaultBrowsersRoot();
 const envRoot = process.env.PLAYWRIGHT_BROWSERS_PATH;
 const browsersRoot = envRoot || defaultRoot;
 // A colocated, git-ignored browser cache inside the checkout is the only
-// writable, persistent location some sandboxed runners (supervisor test gates,
-// broker jobs) can see: their HOME is redirected to a per-run empty directory
+// writable, persistent location some sandboxed runners (automated test gates,
+// remote GPU host jobs) can see: their HOME is redirected to a per-run empty directory
 // (so the platform default cache is invisible), their shared browser root is
 // mounted read-only, and node-based downloads are denied while curl works.
 // Seeding it with the required build lets those runners execute the suite.
