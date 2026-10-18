@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test'
 
 const port = Number(process.env.PW_PORT || 3070)
 const host = process.env.PW_PORT ? '127.0.0.1' : 'localhost'
-// Sandboxed runners (supervisor test gates, the macOS host broker) route all
+// Sandboxed runners (automated review test gates, the macOS GPU host) route all
 // egress through an HTTP proxy and deny direct sockets: Chromium on macOS
 // ignores proxy environment variables, so it must be told the proxy
 // explicitly, or every CDN fetch (fonts, shaders, handfish, engine) fails

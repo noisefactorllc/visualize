@@ -135,7 +135,7 @@ function findWorkingLaunch() {
   return null;
 }
 
-// Restricted runners (supervisor test gates, the macOS host broker) permit
+// Restricted runners (automated review test gates, the macOS GPU host) permit
 // only an explicit fixed range of loopback ports and reject every other bind
 // (listen EPERM), so the web server cannot assume the default 3070. Probe in
 // candidate order — configured port, default 3070, permitted fixed range —
