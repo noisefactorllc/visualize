@@ -27,7 +27,6 @@ async function boot(browser) {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.state,
         null, { timeout: 30_000 * SCALE })
     return { context, page }

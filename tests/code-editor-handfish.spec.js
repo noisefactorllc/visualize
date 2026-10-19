@@ -7,7 +7,6 @@ installHandfishLocal(test)
 
 test('deck editors use Handfish public editor APIs directly', async ({ page }) => {
     await page.goto('/')
-    await page.click('#boot-start')
 
     await page.waitForFunction(() =>
         ['A', 'B'].every((deckId) => {
@@ -67,7 +66,6 @@ test('deck editors use Handfish public editor APIs directly', async ({ page }) =
 
 test('focused deck editor uses the active theme focus ring', async ({ page }) => {
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', null, { timeout: 30_000 * SCALE })
     await page.click('.deck-edit-toggle[data-deck="A"]')
     const editor = page.locator('.deck[data-deck="A"] code-editor')

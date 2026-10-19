@@ -163,7 +163,6 @@ test.describe('user effects', () => {
         page.on('pageerror', (err) => pageErrors.push(err.message))
 
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
 
         // Open settings, import the fixture.
@@ -193,7 +192,6 @@ test.describe('user effects', () => {
         page.on('pageerror', (err) => pageErrors.push(err.message))
 
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
@@ -211,7 +209,6 @@ test.describe('user effects', () => {
 
     test('delete user effect → row removed, library updates', async ({ page }) => {
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
@@ -241,7 +238,6 @@ test.describe('user effects', () => {
         // itself — test.slow() scales the overall timeout, not fixed waits.
         test.slow()
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
@@ -250,7 +246,6 @@ test.describe('user effects', () => {
 
         // Reload — boot hydration should re-register the effect.
         await page.reload()
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
@@ -312,7 +307,6 @@ test.describe('user effects', () => {
     test('quota exceeded error displays actionable guidance in status message', async ({ page }) => {
         test.slow()
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
@@ -337,7 +331,6 @@ test.describe('user effects', () => {
     test('quota recovery clears thumbnail cache and succeeds', async ({ page }) => {
         test.slow()
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 
@@ -379,7 +372,6 @@ test.describe('user effects', () => {
     test('oversized zip package rejected with size limit error', async ({ page }) => {
         test.slow()
         await page.goto('/')
-        await page.click('#boot-start')
         await page.waitForFunction(() => document.getElementById('deck-a-name')?.textContent !== '—', { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
 

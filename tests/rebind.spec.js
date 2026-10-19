@@ -26,7 +26,6 @@ async function bootAndLoad(browser, programTitle) {
     await routeHandfishLocal(page)
     await routeLegacyPrograms(page)
     await page.goto('/')
-    await page.click('#boot-start')
     // Boot loads random programs into BOTH decks late in startup
     // (app.js loadProgram A/B), well AFTER window.__visualize exists. If we
     // load our target program as soon as decks.A exists, boot's own load

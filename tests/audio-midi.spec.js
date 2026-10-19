@@ -68,7 +68,6 @@ async function bootWithFakeMidi(browser) {
     const page = await context.newPage()
     await routeHandfishLocal(page)
     await page.goto('/')
-    await page.click('#boot-start')
     // Audio/MIDI is wired up before the initial library random-load
     // kicks off, so we only need __visualize exposed — we don't have
     // to wait for the (slower, CDN-bound) shader compile path.
@@ -338,7 +337,6 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
 
     // Reload page and confirm sensitivity restores to both audio analyzer and slider UI
     await page.reload()
-    await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.audio && !!window.__visualize?.midi,
         null, { timeout: 30_000 * SCALE })

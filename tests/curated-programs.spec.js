@@ -7,7 +7,6 @@ const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 async function boot(page) {
     page.on('console', message => { if (message.text().startsWith('[curated-check]')) console.log(message.text()) })
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() => window.__visualize?.decks?.A?.isRunning && window.__visualize?.decks?.B?.isRunning && document.getElementById('deck-a-name').textContent !== '—' && document.getElementById('deck-b-name').textContent !== '—')
     await expect(page.locator('.lib-section[data-category="curated"] .program-card')).toHaveCount(157)
 }

@@ -121,7 +121,6 @@ test('browser: MIDI learn drawer highlights CC conflict and resolves via channel
 
     const page = await context.newPage()
     await page.goto('/')
-    await page.click('#boot-start')
 
     // Wait for boot to finish initializing
     await page.waitForFunction(() => !!window.__visualize?.midi)
@@ -178,7 +177,6 @@ test('browser: edit panel resyncs min/max after a crossed-bounds edit and invert
 
     const page = await context.newPage()
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.midi)
     await page.click('#settings-toggle')
 

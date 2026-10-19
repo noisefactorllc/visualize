@@ -7,7 +7,7 @@ import { routeLegacyPrograms } from './legacyPrograms.js'
  * deck programs, the crossfader position, per-deck speeds and every main
  * FX back to boot defaults (random pair, xfade 0, FX off) with no
  * warning. The app now persists a snapshot of the live set continuously
- * and re-applies it when START SET boots after a reload.
+ * and re-applies it when the app boots after a reload.
  *
  * Drives the real UI paths: a library card's deck-A load button, the
  * crossfader input, an FX toggle — then reloads and asserts the same
@@ -37,7 +37,6 @@ test('the live set is restored after a reload', async ({ page }) => {
 
     await routeLegacyPrograms(page)
     await page.goto('/')
-    await page.click('#boot-start')
 
     // Wait until both decks have a program loaded
     await page.waitForFunction(() => {
@@ -82,11 +81,9 @@ test('the live set is restored after a reload', async ({ page }) => {
     // ── Reload ───────────────────────────────────────────────────────────
     await page.reload()
 
-    // The boot card knows a set is waiting before any click happens.
-    await expect(page.locator('.boot-default .boot-hint')).toContainText('restore your last set', { timeout: 10_000 * SCALE })
-
-    // START SET re-applies the saved set instead of a random pair.
-    await page.click('#boot-start')
+    // No boot card on a desktop screen: boot re-applies the saved set
+    // instead of a random pair without any click.
+    await expect(page.locator('#boot-overlay')).toBeHidden()
 
     // Deck A compiles its restored program and shows its saved title.
     await expect(page.locator('#deck-a-name')).toHaveText(PROGRAM_TITLE, { timeout: 30_000 * SCALE })

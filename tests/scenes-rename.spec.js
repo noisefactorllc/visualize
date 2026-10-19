@@ -21,7 +21,6 @@ async function boot(browser) {
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.scenes, null, { timeout: 30_000 * SCALE })
     return { context, page }
@@ -172,7 +171,6 @@ test('scenes drawer inline rename validates against empty/duplicate names and pe
 
     // 7. Verify Persistence Across Page Reload
     await page.reload()
-    await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.scenes, null, { timeout: 30_000 * SCALE })
     await page.click('#scenes-open')
 

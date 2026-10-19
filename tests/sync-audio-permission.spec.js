@@ -92,7 +92,6 @@ test('Sync loopback permission denial surfaces an error and the grant path recov
         window.__syncEndpoint = endpoint
         window.__syncPermissionState = 'denied'
     }, `http://127.0.0.1:${port}`)
-    await page.click('#boot-start')
     await page.waitForFunction(() => window.__visualize?.audio, null, { timeout: 45_000 * SCALE })
 
     await page.click('#settings-toggle')

@@ -15,7 +15,6 @@ const RENDERER_STORAGE_KEY = 'visualize.renderer.v1'
 installHandfishLocal(test)
 
 async function bootApp(page) {
-    await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.decks?.A && !!window.__visualize?.decks?.B,
         null, { timeout: 30_000 * SCALE })

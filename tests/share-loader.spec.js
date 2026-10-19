@@ -211,9 +211,21 @@ test('share-loader: failed fetch surfaces the error inline', async ({ page }) =>
     await expect(page.locator('#boot-share-b')).toBeDisabled()
 })
 
-test('no ?code= keeps the original single start button', async ({ page }) => {
+test('no ?code= on a desktop screen boots straight into the app', async ({ page }) => {
     await page.goto('/')
+    await expect(page.locator('#boot-overlay')).toBeHidden()
+    // The ready toast follows the boot gesture, so boot got past it unclicked.
+    await expect(page.locator('#toast')).toContainText('ready', { timeout: 30_000 * SCALE })
+})
+
+test('no ?code= on a small screen shows the warning and the start button', async ({ page }) => {
+    await page.setViewportSize({ width: 480, height: 800 })
+    await page.goto('/')
+    await expect(page.locator('#boot-overlay')).toBeVisible()
+    await expect(page.locator('.boot-small-screen-warning')).toBeVisible()
     await expect(page.locator('#boot-default')).toBeVisible()
     await expect(page.locator('#boot-share')).toBeHidden()
-    await expect(page.locator('#boot-start')).toBeVisible()
+    await page.click('#boot-start')
+    await expect(page.locator('#boot-overlay')).toBeHidden()
+    await expect(page.locator('#toast')).toContainText('ready', { timeout: 30_000 * SCALE })
 })

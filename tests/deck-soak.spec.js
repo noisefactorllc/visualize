@@ -19,7 +19,6 @@ test('deck load/reloadDsl soak serializes cleanly on a live deck', async ({ page
     page.on('pageerror', err => pageErrors.push(String(err)))
     await routeHandfishLocal(page)
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.decks?.A?.currentDsl, null, { timeout: 60_000 * SCALE })
 

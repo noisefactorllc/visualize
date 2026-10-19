@@ -648,7 +648,9 @@
 
         <div class="toast" id="toast" aria-live="polite"></div>
 
-        <div class="boot-overlay" id="boot-overlay">
+        <!-- Starts hidden: the inline boot script below reveals it only for
+             a shared program (?code=) or a small screen. -->
+        <div class="boot-overlay hidden" id="boot-overlay">
             <div class="boot-card">
                 <div class="boot-brand">
                     <svg class="boot-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" fill="currentColor" aria-hidden="true"><g transform="translate(0,600) scale(0.1,-0.1)"><path d="M1020 4339 l0 -272 212 -326 c256 -396 714 -1101 1098 -1696 l285 -440 380 -2 380 -3 211 328 c189 292 851 1313 1055 1627 43 66 101 156 129 200 28 44 85 132 126 195 l74 115 0 273 0 272 -238 0 -239 0 -313 -497 c-904 -1435 -1183 -1874 -1187 -1870 -2 3 -339 535 -747 1183 l-744 1179 -241 3 -241 2 0 -271z"/><path d="M1710 4472 l0 -138 361 -524 c390 -567 381 -553 703 -1023 179 -260 221 -316 232 -305 7 7 297 427 646 933 l633 920 2 138 3 137 -239 0 -239 0 -29 -39 c-15 -22 -199 -299 -407 -616 l-379 -576 -270 408 c-148 224 -330 501 -405 615 l-137 208 -237 0 -238 0 0 -138z"/></g></svg>
@@ -658,10 +660,10 @@
                 <p class="boot-small-screen-warning">
                     This is a desk tool. The interface is built for a laptop or desktop screen — you'll have a much better time at 1280px or wider.
                 </p>
-                <!-- Default boot UI: single "start set" button. When ?code= is
-                     present in the URL, the inline script below hides this
-                     block and reveals .boot-share so the user picks which
-                     deck the shared program lands on. -->
+                <!-- Small-screen boot UI: single "start set" button under the
+                     warning. When ?code= is present in the URL, the inline
+                     script below hides this block and reveals .boot-share so
+                     the user picks which deck the shared program lands on. -->
                 <div class="boot-default" id="boot-default">
                     <button id="boot-start" class="boot-button">start set</button>
                     <p class="boot-hint">press start, then enable audio input from the settings panel</p>
@@ -723,8 +725,10 @@
          round-trip finishes; without this inline shim the first click
          is dropped.
 
-         Two boot paths share one __visualizeBootGesture promise:
-           - Default: gesture resolves with `null`.
+         Three boot paths share one __visualizeBootGesture promise:
+           - Default: no boot card; gesture resolves with `null` at once.
+           - Small:   the boot card shows the small-screen warning, and
+                      START SET resolves the gesture with `null`.
            - Share:   gesture resolves with `{ deckId: 'A'|'B' }` so
                       app.js knows which deck to drop the shared
                       program into. The composition itself is fetched
@@ -742,6 +746,16 @@
             var overlay = document.getElementById('boot-overlay')
             var bootDefault = document.getElementById('boot-default')
             var bootShare = document.getElementById('boot-share')
+
+            // The boot card shows only when it has a job: picking a deck
+            // for a shared program, or warning a small screen. Keep this
+            // query in step with .boot-small-screen-warning in css/app.css.
+            var smallScreen = window.matchMedia('(max-width: 600px)').matches
+            if (!code && !smallScreen) {
+                resolve(null)
+                return
+            }
+            overlay.classList.remove('hidden')
 
             document.getElementById('boot-start').addEventListener('click', function () {
                 overlay.classList.add('hidden')

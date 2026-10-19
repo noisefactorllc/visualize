@@ -104,7 +104,6 @@ async function setup(page, fullApp = false) {
         navigator.mediaDevices.getUserMedia = async () => { throw new Error('Sync must not fall back to the microphone') }
     })
     if (fullApp) {
-        await page.click('#boot-start')
         await page.waitForFunction(() => window.__visualize?.audio)
         return
     }

@@ -26,7 +26,6 @@ test('global font: Atkinson Hyperlegible wins across themes, zero-CLS chain', as
     const page = await context.newPage()
     await routeHandfishLocal(page)
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize, null, { timeout: 30_000 * SCALE })
 
     // 1. Default chain is Atkinson → Atkinson Blank.

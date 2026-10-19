@@ -21,7 +21,6 @@ test('library renders sectioned + ordered', async ({ page }) => {
     page.on('pageerror', (err) => pageErrors.push(err.message))
 
     await page.goto('/')
-    await page.click('#boot-start')
 
     // Wait for curated categories to appear (loaded from programs.json).
     await page.waitForSelector('.lib-section[data-category="curated"]', { timeout: 30_000 * SCALE })

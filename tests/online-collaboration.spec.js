@@ -57,7 +57,6 @@ async function newOnlinePage(context, server, path = '/', { online = true } = {}
         if (msg.type() === 'error') console.log('[browser error]', msg.text())
     })
     await page.goto(online ? withOnlineFeature(path) : path)
-    await page.click('#boot-start')
     if (online) {
         await page.waitForFunction(() =>
             !!window.__visualize?.online?.ready,

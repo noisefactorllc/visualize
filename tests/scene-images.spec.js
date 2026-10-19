@@ -117,7 +117,6 @@ async function preparePage(page) {
 }
 
 async function start(page) {
-    await page.click('#boot-start')
     await page.waitForFunction(() => !!window.__visualize?.scenes && !!window.__visualize?.decks?.A?.currentDsl,
         null, { timeout: 45_000 * SCALE })
 }

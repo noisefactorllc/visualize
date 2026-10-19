@@ -28,7 +28,6 @@ async function boot(browser) {
     })
     await routeLegacyPrograms(page)
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 * SCALE })
     return { context, page }
@@ -351,7 +350,6 @@ test('mixer enum control: shows the active choice + persists/restores it across 
         // Reload → boot-restore must rebuild the panel showing the restored
         // choice (exercises persistence + the name→value display mapping).
         await page.reload()
-        await page.click('#boot-start')
         await page.waitForFunction(() => !!window.__visualize?.takeSnapshot, null, { timeout: 30_000 * SCALE })
         await page.waitForFunction((q) => {
             const el = document.querySelector(q)

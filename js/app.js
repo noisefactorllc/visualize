@@ -248,13 +248,15 @@ async function prepareShareDialog() {
 }
 
 async function boot() {
-    // Boot overlay stays up while everything below initializes and starts
-    // rendering — the user sees the app's first two decks playing
-    // (blurred + dimmed by the overlay's backdrop-filter) before they
-    // click START SET. The click handler is wired by an inline script in
-    // index.html that runs before any module imports; we await its
-    // promise at the very end of boot() so a fast click doesn't race the
-    // deferred module graph.
+    // When the boot overlay shows (a shared program or a small screen), it
+    // stays up while everything below initializes and starts rendering —
+    // the user sees the app's first two decks playing (blurred + dimmed by
+    // the overlay's backdrop-filter) before they click a boot button. The
+    // click handler is wired by an inline script in index.html that runs
+    // before any module imports; we await its promise at the very end of
+    // boot() so a fast click doesn't race the deferred module graph.
+    // Otherwise that promise has already resolved and boot runs straight
+    // through.
 
     // If the URL carries ?code=, prepareShareDialog races the sharing
     // API fetch in parallel with deck init and populates the boot
@@ -265,8 +267,8 @@ async function boot() {
 
     // The working set is the last live state this browser saw (deck DSLs,
     // crossfader, FX, BPM, …). Read it once: it decides both the boot
-    // hint and whether START SET restores that set instead of pre-filling
-    // two random programs.
+    // hint (shown on small screens) and whether boot restores that set
+    // instead of pre-filling two random programs.
     const bootWorkingSet = loadWorkingSet()
     if (bootWorkingSet) {
         const hint = document.querySelector('.boot-default .boot-hint')
@@ -2710,9 +2712,10 @@ async function boot() {
         window.__visualize.online = disabledOnlineCollaboration()
     }
 
-    // App is now fully running behind the boot overlay (decks rendering,
-    // compositor compositing). Wait for the user to click START SET (or,
-    // on the share-loader path, A Deck / B Deck).
+    // App is now fully running (decks rendering, compositor compositing).
+    // When the boot overlay shows, wait for the user to click START SET
+    // (or, on the share-loader path, A Deck / B Deck); otherwise the
+    // gesture has already resolved.
     const gesture = await window.__visualizeBootGesture
 
     // Share-loader path: gesture payload tells us which deck the user

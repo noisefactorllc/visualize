@@ -169,7 +169,6 @@ test('Noisedeck Sync target sends real SDK-framed mixer pixels and disposes on p
 
     await page.goto('/')
     await expect(page.locator('#sync-output-open')).toHaveCount(1)
-    await page.click('#boot-start')
     await page.waitForFunction(() => window.__visualize?.mixer?.ready === true, null, {
         timeout: 45_000 * SCALE
     })

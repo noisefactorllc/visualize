@@ -8,7 +8,6 @@ const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 test('two Sync camera decks upload owned pixels and stopping A leaves B live', async ({ page }) => {
     test.setTimeout(45_000 * SCALE)
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() => window.__visualize?.mixer?.ready)
     await page.evaluate(async () => {
         const { DeckMedia } = await import('/js/deckMedia.js')

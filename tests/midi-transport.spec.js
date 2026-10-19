@@ -50,7 +50,6 @@ async function bootWithFakeMidi(browser) {
     const page = await context.newPage()
     await routeHandfishLocal(page)
     await page.goto('/')
-    await page.click('#boot-start')
     await page.waitForFunction(() =>
         !!window.__visualize?.midi && !!window.__visualize?.scheduler,
         null, { timeout: 30_000 * SCALE })
@@ -65,7 +64,6 @@ test('MIDI clock-follow setting survives reload and is reflected in the drawer',
         await page.click('#midi-clock-enable')
         await expect(page.locator('#midi-clock-enable')).toHaveAttribute('checked', '')
         await page.reload()
-        await page.click('#boot-start')
         await page.waitForFunction(() => !!window.__visualize?.midi, null, { timeout: 30_000 * SCALE })
         await page.click('#settings-toggle')
         await expect(page.locator('#midi-clock-enable')).toHaveAttribute('checked', '')

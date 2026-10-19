@@ -40,7 +40,6 @@ test('end-to-end smoke', async ({ page }) => {
     page.on('pageerror', (err) => pageErrors.push(err.message))
 
     await page.goto('/')
-    await page.click('#boot-start')
 
     // Wait until both decks have a program loaded
     await page.waitForFunction(() => {
