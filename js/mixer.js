@@ -95,7 +95,11 @@ export class MixerRenderer {
      * the engine silently falls back to WebGL2 when WebGPU is unavailable;
      * read `activeBackend` for the truth.
      */
-    get preferWebGPU() { return this.renderer?.backend === 'wgsl' }
+    get preferWebGPU() {
+        // preferredBackend is the engine's name for the request; older
+        // engines report it as backend.
+        return (this.renderer?.preferredBackend ?? this.renderer?.backend) === 'wgsl'
+    }
 
     /**
      * The backend the live pipeline actually built (same honest signal as

@@ -151,7 +151,7 @@ test('the mixer output renderer honors the persisted renderer preference', async
     const mixerBackend = await page.evaluate(() => ({
         requested: window.__visualize.mixer.preferWebGPU,
         // Same normalization the decks expose for the requested flag.
-        requestedViaRenderer: window.__visualize.mixer.renderer.backend === 'wgsl',
+        requestedViaRenderer: (window.__visualize.mixer.renderer.preferredBackend ?? window.__visualize.mixer.renderer.backend) === 'wgsl',
     }))
     expect(mixerBackend).toEqual({ requested: true, requestedViaRenderer: true })
 

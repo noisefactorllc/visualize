@@ -172,7 +172,9 @@ export class Deck {
      * read `activeBackend`.
      */
     get backend() {
-        const b = this._renderer.backend
+        // preferredBackend is the engine's name for the request; older
+        // engines report it as backend.
+        const b = this._renderer.preferredBackend ?? this._renderer.backend
         return b === 'wgsl' ? 'webgpu' : (b || 'webgl2')
     }
 
