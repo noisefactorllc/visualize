@@ -82,10 +82,11 @@ const POPUP_HTML = `<!DOCTYPE html>
 </html>`
 
 export class OutputWindow {
-    constructor(sourceCanvas) {
+    constructor(sourceCanvas, { onWarning } = {}) {
         this.sourceCanvas = sourceCanvas
         this._win = null
         this._rafId = null
+        this._onWarning = onWarning || (() => {})
     }
 
     get isOpen() {
@@ -99,7 +100,7 @@ export class OutputWindow {
         }
         const w = window.open('', 'visualize-output', 'width=1280,height=720,popup=yes')
         if (!w) {
-            alert('Output window blocked. Allow pop-ups for this site to use the secondary output.')
+            this._onWarning('Output window blocked. Allow pop-ups for this site to use the secondary output.')
             return
         }
         w.document.open()

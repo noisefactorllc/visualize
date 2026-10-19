@@ -668,7 +668,9 @@ async function boot() {
     }
 
     // Output window
-    const outputWin = new OutputWindow($('main-canvas'))
+    const outputWin = new OutputWindow($('main-canvas'), {
+        onWarning: (msg) => toast(msg, 6000)
+    })
 
     // ── Wire UI ───────────────────────────────────────────────────────────
 
