@@ -215,9 +215,28 @@ test.describe('user effects', () => {
         await importFixture(page, makeFixture('disposable'))
         await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toBeVisible({ timeout: REGISTER_TIMEOUT })
 
-        // Accept the confirm() prompt automatically.
-        page.once('dialog', d => d.accept())
+        // Delete asks in the app's confirm dialog, never a browser dialog.
+        const browserDialogs = []
+        page.on('dialog', d => { browserDialogs.push(d.message()); d.dismiss() })
         await page.click('.user-effect-row[data-id="user/disposable"] .user-effect-delete')
+        await expect(page.locator('#confirm-dialog')).toBeVisible()
+        await expect(page.locator('#confirm-dialog-message')).toContainText('user/disposable')
+
+        // Cancel keeps the effect.
+        await page.click('#confirm-dialog-cancel')
+        await expect(page.locator('#confirm-dialog')).toBeHidden()
+        await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toBeVisible()
+        // Escape closes only the dialog: the settings drawer stays open.
+        await page.click('.user-effect-row[data-id="user/disposable"] .user-effect-delete')
+        await expect(page.locator('#confirm-dialog')).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.locator('#confirm-dialog')).toBeHidden()
+        await expect(page.locator('#settings-drawer')).toHaveAttribute('aria-hidden', 'false')
+        await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toBeVisible()
+
+        await page.click('.user-effect-row[data-id="user/disposable"] .user-effect-delete')
+        await page.click('#confirm-dialog-confirm')
+        expect(browserDialogs).toEqual([])
 
         await expect(page.locator('.user-effect-row[data-id="user/disposable"]')).toHaveCount(0, { timeout: 10_000 * SCALE })
 

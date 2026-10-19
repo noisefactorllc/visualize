@@ -181,3 +181,48 @@ test('scenes drawer inline rename validates against empty/duplicate names and pe
 
     await context.close()
 })
+
+test('deleting a scene asks in the app confirm dialog, never a browser dialog', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
+        const browserDialogs = []
+        page.on('dialog', d => { browserDialogs.push(d.message()); d.dismiss() })
+        await page.click('#scenes-open')
+        await page.evaluate(() => {
+            window.__visualize.scenes._scenes = []
+            window.__visualize.scenes._emit()
+        })
+        await page.fill('#scene-name-input', 'Scene Gone')
+        await page.click('#scene-save')
+        const rows = page.locator('#scenes-list .scene-row')
+        await expect(rows).toHaveCount(1)
+
+        await rows.first().locator('.sr-delete').click()
+        await expect(page.locator('#confirm-dialog')).toBeVisible()
+        await expect(page.locator('#confirm-dialog-message')).toHaveText('Delete scene "Scene Gone"?')
+        // Cancel holds the focus, and keys typed in the dialog never reach
+        // the app's shortcuts (2 toggles the invert FX).
+        await expect(page.locator('#confirm-dialog-cancel')).toBeFocused()
+        await page.keyboard.press('2')
+        await expect(page.locator('#main-canvas')).not.toHaveClass(/invert/)
+
+        // Escape closes only the dialog: the scene and the drawer stay.
+        await page.keyboard.press('Escape')
+        await expect(page.locator('#confirm-dialog')).toBeHidden()
+        await expect(page.locator('#scenes-drawer')).toHaveAttribute('aria-hidden', 'false')
+        await expect(rows).toHaveCount(1)
+
+        await rows.first().locator('.sr-delete').click()
+        await page.click('#confirm-dialog-cancel')
+        await expect(rows).toHaveCount(1)
+
+        await rows.first().locator('.sr-delete').click()
+        await page.click('#confirm-dialog-confirm')
+        await expect(page.locator('#confirm-dialog')).toBeHidden()
+        await expect(rows).toHaveCount(0)
+        expect(await page.evaluate(() => window.__visualize.scenes.scenes.length)).toBe(0)
+        expect(browserDialogs).toEqual([])
+    } finally {
+        await context.close()
+    }
+})

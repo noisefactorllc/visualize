@@ -1059,6 +1059,20 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     text-transform: uppercase;
 }
 
+/* ─────────────── Confirm dialog (handfish .hf-dialog) ─────────────── */
+.confirm-dialog {
+    width: min(420px, calc(100vw - 32px));
+}
+
+.confirm-dialog .hf-dialog-body {
+    min-width: 0;
+}
+
+.confirm-dialog .hf-dialog-body p {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
 /* ─────────────── Noisedeck Sync target ─────────────── */
 .sync-output-dialog {
     position: fixed;

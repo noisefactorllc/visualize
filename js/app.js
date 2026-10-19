@@ -29,6 +29,7 @@ import { Library } from './library.js'
 import { AutoMix, clampBarsPerScene } from './automix.js'
 import { Recorder, formatRecTime } from './recorder.js'
 import { OutputWindow } from './output.js'
+import { confirmAction } from './confirm-dialog.js'
 import {
     initializeSyncOutputController,
     createSyncOutputConnectionProvider
@@ -2231,10 +2232,10 @@ async function boot() {
                 del.className = 'sr-delete'
                 del.textContent = '✕'
                 setTooltip(del, 'delete')
-                del.addEventListener('click', (e) => {
+                del.addEventListener('click', async (e) => {
                     e.stopPropagation()
                     if (editingSceneName === s.name) editingSceneName = null
-                    if (confirm(`Delete scene "${s.name}"?`)) {
+                    if (await confirmAction({ title: 'Delete scene', message: `Delete scene "${s.name}"?` })) {
                         scenes.delete(s.name)
                     }
                 })
@@ -2900,7 +2901,10 @@ function setupUserEffectsPanel(userEffects, renderer) {
             del.setAttribute('aria-label', `Delete custom effect ${eff.id}`)
             setTooltip(del, `Delete ${eff.id}`)
             del.addEventListener('click', async () => {
-                if (!confirm(`Delete ${eff.id}? Programs that reference it will fail to compile until reinstall.`)) return
+                if (!await confirmAction({
+                    title: 'Delete custom effect',
+                    message: `Delete ${eff.id}? Programs that reference it will fail to compile until reinstall.`
+                })) return
                 try {
                     await userEffects.deleteEffect(eff.id)
                     setStatus(`deleted ${eff.id} — reload to fully purge from this session`, 'ok')

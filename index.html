@@ -718,6 +718,20 @@
         </div>
     </dialog>
 
+    <!-- Confirmation for destructive actions (js/confirm-dialog.js), on
+         handfish's .hf-dialog styles. The form's method="dialog" closes it
+         with the clicked button's value as returnValue. -->
+    <dialog id="confirm-dialog" class="hf-dialog confirm-dialog" aria-labelledby="confirm-dialog-title" aria-describedby="confirm-dialog-message">
+        <h2 class="hf-dialog-title" id="confirm-dialog-title"></h2>
+        <div class="hf-dialog-body">
+            <p id="confirm-dialog-message"></p>
+        </div>
+        <form method="dialog" class="hf-dialog-actions">
+            <button type="submit" value="cancel" id="confirm-dialog-cancel" class="ghost-button" autofocus>cancel</button>
+            <button type="submit" value="confirm" id="confirm-dialog-confirm" class="ghost-button">delete</button>
+        </form>
+    </dialog>
+
     <!-- Wire boot clicks synchronously so a fast click (test rig, eager
          user) doesn't race the deferred module graph. The shader bundle
          uses a top-level `await import()` from the shaders CDN, so
