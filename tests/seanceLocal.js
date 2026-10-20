@@ -5,9 +5,16 @@
 // The app imports the browser SDK from the production rolling-major URL. These
 // tests route that URL to the sibling Seance checkout and inject a tiny in-test
 // Seance server so no live service or local daemon is required.
-import { createHash } from 'crypto'
-import { existsSync, readFileSync } from 'fs'
-import { resolve } from 'path'
+//
+// startSeanceServer() instead runs a real Seance server from a local checkout,
+// and SeanceAgentClient joins its sessions from Node the way a software agent
+// does, for the agent relay spec (agent-seance.spec.js).
+import { spawn } from 'child_process'
+import { createHash, randomBytes, randomUUID } from 'crypto'
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'fs'
+import { createServer } from 'net'
+import { tmpdir } from 'os'
+import { join, resolve, sep } from 'path'
 
 const SDK_CDN_PREFIX = 'https://seance.noisefactor.io/sdk/0/'
 const SEANCE_URL = 'https://seance.noisefactor.io'
@@ -333,5 +340,235 @@ export class FakeSeanceServer {
 
     _nextSeq() {
         return this._seq++
+    }
+}
+
+// --------------------------------------------------------------------------
+// A real local Seance server, and an agent that joins its sessions.
+// SEANCE_ROOT is a Seance checkout (default ../seance), SEANCE_PYTHON the
+// Python that runs it, and SEANCE_DIST_DIR the browser SDK bundle that the
+// app's SDK URL is answered with.
+// --------------------------------------------------------------------------
+
+const seanceRoot = resolve(process.env.SEANCE_ROOT || '../seance')
+const seanceDist = resolve(process.env.SEANCE_DIST_DIR || join(seanceRoot, 'dist'))
+const seancePython = process.env.SEANCE_PYTHON || join(seanceRoot, '.venv/bin/python')
+
+function bindPort(port) {
+    return new Promise(done => {
+        const listener = createServer()
+        listener.once('error', () => done(null))
+        listener.listen(port, '127.0.0.1', () => {
+            const bound = listener.address().port
+            listener.close(() => done(bound))
+        })
+    })
+}
+
+// Any free loopback port; on runners that allow only a fixed port range
+// (PW_TEST_LOOPBACK_PORTS, see scripts/test.cjs), a free one from that range
+// other than the web server's.
+async function freePort() {
+    const any = await bindPort(0)
+    if (any) return any
+    const range = String(process.env.PW_TEST_LOOPBACK_PORTS || '43117-43126').split(',').flatMap(part => {
+        const [low, high = low] = part.trim().split('-').map(Number)
+        return Array.from({ length: Math.max(0, high - low + 1) }, (_, i) => low + i)
+    })
+    for (const port of range) {
+        if (port !== Number(process.env.PW_PORT) && await bindPort(port)) return port
+    }
+    throw new Error('No free loopback port for the Seance server')
+}
+
+/** Start a Seance server that accepts pages and agents from `origins`. */
+export async function startSeanceServer({ origins }) {
+    if (!existsSync(join(seanceDist, 'index.js')) || !existsSync(seancePython)) {
+        throw new Error('Set SEANCE_ROOT, SEANCE_DIST_DIR and SEANCE_PYTHON to a local Seance build for this integration test.')
+    }
+    const port = await freePort()
+    const directory = mkdtempSync(join(tmpdir(), 'visualize-seance-'))
+    const proc = spawn(seancePython, [join(seanceRoot, 'bin/app.py')], {
+        cwd: seanceRoot,
+        env: {
+            ...process.env,
+            PYTHONPATH: [seanceRoot, process.env.PYTHONPATH].filter(Boolean).join(':'),
+            SEANCE_BIND: `127.0.0.1:${port}`,
+            SEANCE_SECRET: randomBytes(32).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
+            SEANCE_DB: join(directory, 'seance.db'),
+            SEANCE_ALLOWED_ORIGINS: origins.join(','),
+            SEANCE_TRUSTED_PROXIES: '',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    let logs = ''
+    proc.stdout.on('data', data => { logs += data })
+    proc.stderr.on('data', data => { logs += data })
+    const url = `http://127.0.0.1:${port}`
+    const stop = async () => {
+        if (proc.exitCode === null) {
+            proc.kill('SIGTERM')
+            await new Promise(done => {
+                const timer = setTimeout(() => { proc.kill('SIGKILL'); done() }, 1500)
+                proc.once('exit', () => { clearTimeout(timer); done() })
+            })
+        }
+        rmSync(directory, { recursive: true, force: true })
+    }
+    try {
+        const deadline = Date.now() + 15000
+        while (Date.now() < deadline) {
+            if (proc.exitCode !== null) throw new Error(`Seance startup failed: ${logs}`)
+            try {
+                if ((await fetch(`${url}/up`, { signal: AbortSignal.timeout(1000) })).ok) return { url, stop }
+            } catch { /* the server is still starting */ }
+            await new Promise(done => setTimeout(done, 100))
+        }
+        throw new Error(`Seance startup timed out: ${logs}`)
+    } catch (error) {
+        await stop()
+        throw error
+    }
+}
+
+/** Point the page's online collaboration at a local Seance server. */
+export async function routeSeanceServer(page, url) {
+    await page.addInitScript(seanceUrl => { window.__VISUALIZE_SEANCE_CONFIG__ = { seanceUrl } }, url)
+    await page.route(`${SDK_CDN_PREFIX}**`, route => {
+        const relative = new URL(route.request().url()).pathname.slice('/sdk/0/'.length)
+        const file = resolve(seanceDist, relative)
+        if (!file.startsWith(`${seanceDist}${sep}`) || !existsSync(file)) return route.fulfill({ status: 404 })
+        return route.fulfill({ path: file, contentType: 'text/javascript', headers: { 'Access-Control-Allow-Origin': '*' } })
+    })
+}
+
+const RELAY = 'nf-agent/1'
+
+/**
+ * Joins a Seance session from Node as a software agent does, sends agent
+ * relay requests to the app tab, and moves images as bytes through the
+ * session's image endpoints. Like the shared agent tool, it trusts relay
+ * frames only from the session owner, by the user id the server stamps on
+ * each frame; `ignored` collects relay frames from anyone else. `events`
+ * collects announce and bye frames; `docs` follows the session documents.
+ */
+export class SeanceAgentClient {
+    constructor(server, origin) {
+        this.server = server
+        this.origin = origin
+        this.events = []
+        this.ignored = []
+        this.owner = null
+        this.docs = new Map()
+        this._pending = new Map()
+        this._partial = new Map()
+        this._lastSend = 0
+        this._token = null
+    }
+
+    async join(code) {
+        const probe = await fetch(`${this.server}/v1/sessions/${encodeURIComponent(code)}`, { headers: { Origin: this.origin } })
+        if (!probe.ok) throw new Error(`The session probe answered ${probe.status}`)
+        this.sessionId = (await probe.json()).id
+        const url = `${this.server.replace(/^http/, 'ws')}/v1/sessions/${encodeURIComponent(this.sessionId)}/ws`
+        this.ws = new WebSocket(url, { headers: { Origin: this.origin } })
+        await new Promise((done, fail) => {
+            this.ws.addEventListener('open', () => {
+                this.ws.send(JSON.stringify({ type: 'hello', protocol: 1, dialects: ['noisemaker-dsl'] }))
+            })
+            this.ws.addEventListener('message', event => {
+                const frame = JSON.parse(String(event.data))
+                if (frame.type === 'session-snapshot') done()
+                this._handle(frame)
+            })
+            this.ws.addEventListener('close', event => fail(new Error(`The session closed the agent socket (${event.code})`)))
+        })
+    }
+
+    _handle(frame) {
+        if (frame.type === 'welcome') {
+            if (frame.anon_token) this._token = frame.anon_token
+            this.owner = frame.owner?.user_id || null
+        }
+        if (frame.type === 'owner-changed') this.owner = frame.user_id || null
+        if (frame.type === 'session-snapshot' || frame.type === 'doc-snapshot') {
+            for (const doc of frame.docs || []) this.docs.set(doc.id, { text: doc.text, rev: doc.rev })
+        }
+        if (frame.type === 'doc-edit') {
+            const doc = this.docs.get(frame.docId)
+            const { start, end, text } = frame.edit || {}
+            if (!doc || frame.rev !== doc.rev + 1) {
+                // A missed edit: ask for a fresh snapshot.
+                this.ws.send(JSON.stringify({ type: 'session-state' }))
+                return
+            }
+            this.docs.set(frame.docId, { text: doc.text.slice(0, start) + text + doc.text.slice(end), rev: frame.rev })
+        }
+        if (frame.type !== 'clicked-button' || frame.relay !== RELAY) return
+        if (frame.kind === 'request') return
+        if (!this.owner || frame.user_id !== this.owner) {
+            this.ignored.push(frame)
+            return
+        }
+        const body = this._assemble(frame)
+        if (body === undefined) return
+        if (frame.kind === 'response') this._pending.get(frame.id)?.({ from: frame.from, app: frame.app, envelope: body })
+        else this.events.push({ kind: frame.kind, from: frame.from, app: frame.app, body })
+    }
+
+    // A body too large for one frame arrives as JSON text slices.
+    _assemble(frame) {
+        if (frame.body !== undefined) return frame.body
+        const key = `${frame.kind}:${frame.id}:${frame.from}`
+        const entry = this._partial.get(key) || { slices: new Array(frame.parts), count: 0 }
+        if (entry.slices[frame.part] === undefined) entry.count += 1
+        entry.slices[frame.part] = frame.chunk
+        this._partial.set(key, entry)
+        if (entry.count < frame.parts) return undefined
+        this._partial.delete(key)
+        return JSON.parse(entry.slices.join(''))
+    }
+
+    /** Send one relay request and resolve with the first response. */
+    async request(command, args = {}, { to = '*', timeoutMs = 60000 } = {}) {
+        // The control lane refills five frames a second.
+        const wait = this._lastSend + 250 - Date.now()
+        if (wait > 0) await new Promise(done => setTimeout(done, wait))
+        this._lastSend = Date.now()
+        const id = randomUUID()
+        return new Promise((done, fail) => {
+            const timer = setTimeout(() => {
+                this._pending.delete(id)
+                fail(new Error(`No response to ${command} within ${timeoutMs} ms`))
+            }, timeoutMs)
+            this._pending.set(id, reply => {
+                clearTimeout(timer)
+                this._pending.delete(id)
+                done(reply)
+            })
+            this.ws.send(JSON.stringify({ type: 'clicked-button', relay: RELAY, kind: 'request', id, to, body: { command, args } }))
+        })
+    }
+
+    _headers(extra = {}) {
+        return { Origin: this.origin, ...(this._token ? { 'X-Seance-Anon': this._token } : {}), ...extra }
+    }
+
+    async uploadImage(bytes, mimeType) {
+        const response = await fetch(`${this.server}/v1/sessions/${encodeURIComponent(this.sessionId)}/images`, {
+            method: 'POST', headers: this._headers({ 'Content-Type': mimeType }), body: bytes,
+        })
+        if (!response.ok) throw new Error(`The image upload answered ${response.status}`)
+        return response.json()
+    }
+
+    async downloadImage(id) {
+        const response = await fetch(`${this.server}/v1/sessions/${encodeURIComponent(this.sessionId)}/images/${id}`, { headers: this._headers() })
+        if (!response.ok) throw new Error(`The image download answered ${response.status}`)
+        return { bytes: Buffer.from(await response.arrayBuffer()), mimeType: (response.headers.get('content-type') || '').split(';')[0] }
+    }
+
+    close() {
+        try { this.ws?.close() } catch { /* already closed */ }
     }
 }

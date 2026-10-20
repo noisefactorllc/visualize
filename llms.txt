@@ -1,0 +1,373 @@
+# Visualize -- Agent API
+
+> Visualize is a browser-based, audio-reactive VJ mixer built on the
+> Noisemaker engine. It runs two decks, A and B. Each deck runs a Noisemaker
+> DSL program. A crossfader and a mixer effect blend the decks into the
+> output. The Visualize agent API lets a software agent read, check and run
+> deck programs, use the library, crossfader, mixer, effects, automation,
+> tempo and scenes, and look at the output. This file is the contract for
+> software agents that control Visualize.
+
+The full contract adds a reference for every command and its arguments:
+https://visualize.noisedeck.app/llms-full.txt
+
+The DSL itself (syntax, effects, parameters, surfaces) is specified by the
+Noisemaker contract: https://noisemaker.app/llms-full.txt
+
+## Connect
+
+Visualize runs in the person's browser. Use the first route that you can use.
+
+### 1. Through the person's online session (agents with a shell)
+
+This route controls the Visualize tab that the person already has open, with
+their audio, decks and output. It needs a shell with Node.js 22.4 or later.
+
+1. Ask the person to open https://visualize.noisedeck.app/, click
+   **connect agent...** beside the Seance button in the top bar, then
+   **Go Online**, then **Copy Prompt**, and paste the prompt to you. The prompt
+   names this contract and the session link. (Without that button: the Seance
+   button, whose tooltip is "Collaborate online", then **Take Online**, then
+   send you the session code that the dialog shows after "Online", or the
+   session URL that **Copy URL** copies.)
+2. Get the agent tool and join the session:
+
+```sh
+curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs
+node seance-agent.mjs join <code-or-url>
+node seance-agent.mjs commands
+```
+
+`join` prints the session. Its name is the app name, `visualize`. `commands`
+lists every Visualize command with its arguments. Commands marked
+`[not available remotely]` fail with `REMOTE_UNAVAILABLE` through a session
+(see "How it works" below).
+
+3. Run commands. Commands that act on one deck take `{"deck":"B"}`; deck A
+   is the default.
+
+```sh
+node seance-agent.mjs call getState
+node seance-agent.mjs call setCrossfader '{"position":0.5}'
+node seance-agent.mjs program                       # deck A program text
+node seance-agent.mjs program --doc deck:B          # deck B program text
+node seance-agent.mjs validate program.dsl          # check a program file
+node seance-agent.mjs set program.dsl               # run it on deck A
+node seance-agent.mjs set --args '{"deck":"B"}' program.dsl
+node seance-agent.mjs look                          # image of the output
+node seance-agent.mjs look --args '{"source":"B"}'  # image of deck B
+node seance-agent.mjs wait --doc deck:B --since <rev>
+node seance-agent.mjs image-put photo.png           # prints image:<sha256>
+node seance-agent.mjs leave
+```
+
+`look` saves the image as a file and prints its path. Images travel as
+bytes; the tool never prints image data. `program --json` adds the document
+revision for `wait --since`. `set` and `validate` read `-` as standard input.
+Output is JSON except the program text. A result drops the state snapshot
+unless you add `--state`.
+
+The session has two documents: `deck:A` (the default) and `deck:B`. A
+program that a deck runs is in its document, so people in the session see
+your changes. `wait` returns when a person changes a program.
+
+To move a program and its images between apps, join both sessions and use
+`transfer`. Name the deck with `--from-args` or `--to-args`:
+
+```sh
+node seance-agent.mjs transfer noisedeck visualize --to-args '{"deck":"B"}'
+node seance-agent.mjs transfer visualize noisedeck --from-args '{"deck":"A"}'
+```
+
+The tool exits with 0 when the command succeeded, 1 when Visualize answered
+with `ok: false` (read `result.envelope.error.code`), and 2 when the tool
+itself could not run the command (read `error.code`; the codes are listed
+below). `node seance-agent.mjs help` lists every option.
+
+How it works, so you can explain it to the person:
+
+- The tool joins the session as an anonymous participant, which the person
+  sees join. It runs commands in the tab that took the set online, through
+  the session, with the same checks as the person's own controls. No other
+  tab answers, even one that becomes the session's owner after the person's
+  tab leaves. After a reload, the person's tab answers again.
+- Everyone in the session receives every answer, and anyone who can edit the
+  session can send commands to that tab. So what this browser stores for the
+  person is not reachable through a session: `listScenes`, `scene`,
+  `listUserEffects` and `setAutoVjPool` answer `REMOTE_UNAVAILABLE`; the
+  library's `user` section and `user` effects are left out of `searchLibrary`,
+  `searchEffects` and `getEffectDefinition`; and a program that names the
+  `user` namespace fails with a `USER_EFFECT` diagnostic.
+- What Visualize keeps out of the session stays out: `getProgram` returns the
+  text that the session holds for a deck, not an unpublished draft; while a
+  deck shows live camera or video input, `getThumbnail` of that deck or of the
+  output answers `REMOTE_UNAVAILABLE`; and `setProgram` accepts only images
+  that the session already holds.
+- Commands that act on the person's browser rather than on the performance
+  answer `REMOTE_UNAVAILABLE`: `setAudioInput`, `setMidiInput`, `setAudio`
+  (input sensitivity), `setRenderer` and `record`. `commands` marks every
+  command that a session cannot run. The live decks, the crossfader and mixer,
+  the effects, automation and tempo, and the built-in and curated library stay
+  reachable. Suggest that the person goes offline when you are done (the
+  Seance button, then **Go Offline**).
+- Images cross a session only as bytes. A request or an answer that would carry
+  an image as base64 text fails with `IMAGE_AS_TEXT`, and a request that names
+  media by an outside link, which would make the person's browser fetch it,
+  fails with `OUTSIDE_LINK`.
+- `look` asks the person's tab for an image of the output or a deck. The tab
+  adds the image to the session as its own bytes, and the tool saves it as a
+  file.
+- A session holds at most 32 images, and the person's own images need room
+  too. The tab takes at most 16 images in ten minutes; past that, `look`
+  answers `IMAGE_LIMIT` with `details.retryAfter` in seconds. Look when the
+  output has changed, not in a loop.
+
+Agent tool errors (exit code 2, `error.code`):
+
+- `NO_SESSION`: no session is joined, or more than one and none was named.
+- `UNKNOWN_SESSION`, `SESSION_LOCKED`, `REFUSED`: the session code is wrong or
+  expired, the session is locked, or the session refused the join.
+- `NO_APP_TAB`: the tab that took the session online did not answer. Ask the
+  person to keep it open, or to go online again and send the new code.
+- `TIMEOUT`: the tab did not answer in time. Check `status`, then try again.
+- `READONLY`: the session lets this agent only read.
+- `SESSION_CLOSED`, `SESSION_REFUSED`: the connection closed, or the session
+  server refused a request (the message says why).
+- `IMAGE_FAILED`, `NO_DOCUMENT`, `USAGE`, `INVALID_JSON`: an image transfer
+  failed, a document is missing, or the command line was wrong.
+
+### 2. WebMCP (browser tools)
+
+Open https://visualize.noisedeck.app/ and discover the page tools named
+`visualize_getState`, `visualize_setProgram`, and so on. Each tool has the
+argument schema in the reference below and returns the envelope as text.
+`visualize_getThumbnail` also returns an image content block, without
+duplicating its bytes in text. If your harness serializes the whole tool
+result, parse it, display the image through your image tool, and print only
+the text block. Do not print image bytes.
+
+### 3. Page JavaScript
+
+Call `window.VisualizeAgent` directly. Wait until the object and the method
+exist. Every command waits for startup; awaiting `window.VisualizeAgent.ready`
+also works. Return the fields you need, not the whole API object.
+
+```js
+const env = await window.VisualizeAgent.getProgram({ deck: 'B' })
+return env.result.dsl
+```
+
+All routes run the same commands, one at a time, with the same validation.
+Only the browser routes run the commands that a session cannot run. WebMCP
+availability depends on the browser; if discovery returns no tools, use page
+JavaScript. Do not try to bypass a browser tool's read-only JavaScript policy.
+A tool that only fetches HTML cannot run Visualize: it needs a browser with
+WebGL2. In a small window or with a shared program link, Visualize first
+shows a start card. Commands wait until the person (or you) clicks
+`start set`, or a deck button on a shared link.
+
+---
+
+## Two decks and the output
+
+- Deck A and deck B each run one program. `getProgram`, `setProgram`,
+  `loadProgram`, `randomize`, `setDeck` and `rebind` take `deck`.
+- The crossfader `position` runs from 0 (deck A) to 1 (deck B). The live deck
+  is A below 0.5 and B from 0.5. The mixer effect (`getMixer`, `setMixer`)
+  blends the decks; the crossfader drives its `driver` parameter.
+- Output effects (`setFx`) act on the mixed output. `getThumbnail` returns the
+  output by default, or one deck with `source`.
+- Auto-VJ (`setAutoVj`) loads library programs into the deck that is not live
+  and fades to them. Auto-Mix (`setAutoMix`) moves the crossfader from one
+  source. Only one of them runs at a time. Both change the decks or the
+  crossfader without commands from you; read `state` to follow them.
+- The tempo (`setTempo`) sets the deck loop length: one loop is `divider` bars.
+- A scene (`scene`, `listScenes`) stores both decks and the whole mixer state
+  in this browser. Scene commands run only in the browser, not through a
+  session.
+
+## Write a program
+
+1. Find effects with `searchEffects`. Read their parameters with
+   `getEffectDefinition`. Library programs (`searchLibrary`,
+   `getLibraryProgram`) are working examples.
+2. Write the program. Copy each parameter name from `getEffectDefinition`. Do
+   not guess names. `choices` lists accepted values. For a `member` parameter,
+   insert its value as a DSL member expression, such as `palette.hypercolor`,
+   without quotes.
+3. Check it with `validateProgram`. Fix every diagnostic with severity `error`.
+4. Run it on a deck with `setProgram`. Look at the result with `getThumbnail`.
+
+```js
+const A = window.VisualizeAgent
+const dsl = [
+    'search synth, filter',
+    'let bass = audio(band: 0, min: 0.5, max: 3)',
+    'noise(ridges: true, speed: bass).write(o0)',
+    'render(o0)',
+].join('\n')
+const check = await A.validateProgram({ dsl })
+if (!check.result.valid) return check.result.diagnostics
+const run = await A.setProgram({ dsl, deck: 'B' })
+await A.setCrossfader({ position: 1 })
+return { ok: run.ok, error: run.error }
+```
+
+DSL rules that agents most often get wrong:
+
+- The first line `search ns1, ns2` sets the namespaces that effect names
+  resolve in, in order. The same function name can mean different effects in
+  different namespaces, with different parameters.
+- Every chain ends with `.write(oN)`. The program ends with `render(oN)`.
+  Read another surface with `read(oN)`, for example `tex: read(o0)`.
+- Older examples use retired parameter names such as `mixAmt`. Those fail with
+  `S001 Unknown argument`. `getEffectDefinition` gives the current names.
+
+What is special about programs in Visualize:
+
+- Audio: `let bass = audio(band: 0, min: 0.5, max: 3)` declares a binding;
+  use its name as a parameter value. Bands are 0 (low), 1 (mid) and 2 (high).
+  The parameter is `min` at silence and `max` at full level. Bindings move
+  only while audio input is on (`state.audio.enabled`); the person turns it on.
+  `setAudio` sets the input sensitivity. `rebind` rewrites random parameters into
+  new `audio()` or `midi()` bindings.
+- Oscillators: `let swing = osc(type: oscKind.sine, min: 0.2, max: 2)` moves a
+  parameter in time with the deck loop, so it follows the tempo.
+- Curated programs: library programs in the `curated` section run effects from
+  the `curated` namespace (`searchEffects({ namespace: 'curated' })`).
+  `getProgram` and `getLibraryProgram` return them with `search curated`. Keep
+  that line when you change one.
+- User effects: custom effects installed in this browser are in the `user`
+  namespace. In the browser, `listUserEffects` lists them and `searchEffects`
+  includes them. A session cannot read or run them.
+- Images: a deck shows an image with `media(url: "image:<sha256>")`, where the
+  id is the SHA-256 of the image bytes. Through a session, add the file with
+  `image-put` and use the reference it prints; `transfer` copies images for
+  you. The image must be in a deck or in the online session (in the browser,
+  also in this browser's scene images); otherwise `setProgram` fails with
+  `NOT_FOUND_IMAGE`. Any
+  other `url` value (a web link or inline image data) is refused with a
+  `MEDIA_URL` diagnostic.
+
+---
+
+## Keep results small
+
+Your tool sends each result back to you. A large result uses a large part of
+your context.
+
+- Return only the fields that you need from each script.
+- Every envelope includes `state`. Remove it when you do not need it.
+- `searchLibrary` and `searchEffects` take `limit`. Library program text comes
+  only from `getLibraryProgram`, one program at a time.
+- Page JavaScript `getThumbnail` returns base64 image data. Keep
+  `maxDimension` small. WebMCP and the Seance route carry the image
+  separately and omit its bytes from text.
+
+---
+
+## The envelope
+
+Every command response, success or failure, has this shape:
+
+```js
+// success
+{ ok: true, command: "setProgram", apiVersion: "1.0", result: { /* command-specific */ }, state: { /* snapshot */ } }
+
+// failure
+{
+    ok: false,
+    command: "setProgram",
+    apiVersion: "1.0",
+    error: { code: "INVALID_PROGRAM", message: "...", details: { diagnostics: [ /* ... */ ] } },
+    state: { /* snapshot */ }
+}
+```
+
+A success can add `warnings: [ "..." ]`, for example a scene recall that could
+not restore everything. Commands run one at a time, in the order you call
+them. You can omit the argument object: `getState()` is the same as
+`getState({})`. Every command rejects an argument that it does not declare, so
+a command with no arguments accepts only `{}`.
+
+---
+
+## State snapshot
+
+```
+state: {
+    schemaVersion,
+    decks: {
+        A: { title, chars, running, speed, density: { mode, value }, bandpass, oscillators },
+        B: { ... }                       // running: the program text is the program that runs
+    },
+    crossfader: { position, curve, fadeSeconds, live },  // live: "A" or "B"
+    mixer:      { effect },              // null until the mixer has started
+    fx:         { strobe, invert, bw, zoom, freeze },
+    autoVj:     { enabled, bars },
+    autoMix:    { enabled, source },     // source such as "osc:sine", "audio:low", "midi:1"
+    tempo:      { bpm, divider, followMidiClock },
+    audio:      { enabled, sensitivity },
+    midi:       { enabled, inputs },
+    output:     { width, height, backend },  // backend: "webgl2" or "webgpu"
+    recording,
+    online                               // "offline", "connecting", "online" or "readonly"
+}
+```
+
+---
+
+## Diagnostics
+
+`validateProgram` and a failed `setProgram` return compiler diagnostics:
+
+```js
+{ code: "S001", severity: "error", message: "Unknown argument 'madeUp' for noise()", location?: { line, column } }
+```
+
+A syntax error has code `SYNTAX`. A `media()` image that is not named
+`image:<sha256>` has code `MEDIA_URL`. Through a session, a program that names
+the `user` namespace has code `USER_EFFECT`. Diagnostics with severity
+`warning` do not stop a program.
+
+---
+
+## Error codes
+
+| Code | When |
+|---|---|
+| `INVALID_ARGS_TYPE` | wrong argument type |
+| `INVALID_ARGS_REQUIRED` | missing required argument |
+| `INVALID_ARGS_RANGE` | number or string length out of range |
+| `INVALID_ARGS_ENUM` | value not in the allowed list |
+| `INVALID_ARGS_UNKNOWN` | an argument, or a mixer parameter, that the command does not declare |
+| `INVALID_PROGRAM` | the program does not compile. `details.diagnostics` lists the errors. Nothing changed |
+| `COMPILE_FAILED` | the renderer rejected a program that passed the compiler. The deck runs its previous program |
+| `NOT_FOUND_EFFECT` | unknown effect id, or a `user` effect asked for through a session |
+| `EFFECT_LOAD_FAILED` | an effect could not load from the shader CDN |
+| `NOT_FOUND_PROGRAM` | no library program has that title (through a session, the `user` section is left out), or the Auto-VJ pool is empty |
+| `NOT_FOUND_IMAGE` | a program names an `image:<sha256>` that is not in the deck, the browser or the session |
+| `NOT_FOUND_SCENE` | no scene has that name |
+| `NOT_FOUND_COMMAND` | unknown command |
+| `CONFLICT_SUPERSEDED` | a newer program load on the same deck, from the person or Auto-VJ, replaced yours |
+| `CONFLICT_MIXER_UNAVAILABLE` | the mixer did not start; the decks crossfade without a mixer effect |
+| `CONFLICT_SCENES_FULL` | the scene list is full. Delete or rename a scene first |
+| `CONFLICT_SCENE_EXISTS` | another scene already has the new name |
+| `CONFLICT_STORAGE_FULL` | browser storage is full or unavailable; the scene was not saved |
+| `REMOTE_UNAVAILABLE` | the command runs only in the person's browser, or would reveal live camera or video input |
+| `IMAGE_UPLOAD_FAILED` | an image result could not be added to the session |
+| `OUTSIDE_LINK` | a session request names media by an outside link. Add the image with `image-put` and use `image:<sha256>` |
+| `IMAGE_AS_TEXT` | a session request or answer would carry an image as base64 text. Add the image with `image-put` and use `image:<sha256>` |
+| `IMAGE_LIMIT` | the tab already added 16 images to the session in ten minutes. `details.retryAfter` gives the seconds to wait |
+| `INTERNAL_ERROR` | unexpected failure |
+
+---
+
+## Pointers
+
+- Full command reference: https://visualize.noisedeck.app/llms-full.txt
+- DSL and effect contract: https://noisemaker.app/llms-full.txt
+- Agent tool for online sessions: https://noisedeck.app/agent/seance-agent.mjs
+- Source of truth in the page: `/js/agent/index.js` (registration),
+  `/js/agent/commands.js` (handlers), `/js/agent/schemas.js` (argument
+  schemas), `/js/agent/descriptions.js` (command descriptions)

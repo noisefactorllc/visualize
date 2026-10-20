@@ -1,0 +1,757 @@
+# Visualize -- Agent API
+
+> Visualize is a browser-based, audio-reactive VJ mixer built on the
+> Noisemaker engine. It runs two decks, A and B. Each deck runs a Noisemaker
+> DSL program. A crossfader and a mixer effect blend the decks into the
+> output. The Visualize agent API lets a software agent read, check and run
+> deck programs, use the library, crossfader, mixer, effects, automation,
+> tempo and scenes, and look at the output. This file is the contract for
+> software agents that control Visualize.
+
+The full contract adds a reference for every command and its arguments:
+https://visualize.noisedeck.app/llms-full.txt
+
+The DSL itself (syntax, effects, parameters, surfaces) is specified by the
+Noisemaker contract: https://noisemaker.app/llms-full.txt
+
+## Connect
+
+Visualize runs in the person's browser. Use the first route that you can use.
+
+### 1. Through the person's online session (agents with a shell)
+
+This route controls the Visualize tab that the person already has open, with
+their audio, decks and output. It needs a shell with Node.js 22.4 or later.
+
+1. Ask the person to open https://visualize.noisedeck.app/, click
+   **connect agent...** beside the Seance button in the top bar, then
+   **Go Online**, then **Copy Prompt**, and paste the prompt to you. The prompt
+   names this contract and the session link. (Without that button: the Seance
+   button, whose tooltip is "Collaborate online", then **Take Online**, then
+   send you the session code that the dialog shows after "Online", or the
+   session URL that **Copy URL** copies.)
+2. Get the agent tool and join the session:
+
+```sh
+curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs
+node seance-agent.mjs join <code-or-url>
+node seance-agent.mjs commands
+```
+
+`join` prints the session. Its name is the app name, `visualize`. `commands`
+lists every Visualize command with its arguments. Commands marked
+`[not available remotely]` fail with `REMOTE_UNAVAILABLE` through a session
+(see "How it works" below).
+
+3. Run commands. Commands that act on one deck take `{"deck":"B"}`; deck A
+   is the default.
+
+```sh
+node seance-agent.mjs call getState
+node seance-agent.mjs call setCrossfader '{"position":0.5}'
+node seance-agent.mjs program                       # deck A program text
+node seance-agent.mjs program --doc deck:B          # deck B program text
+node seance-agent.mjs validate program.dsl          # check a program file
+node seance-agent.mjs set program.dsl               # run it on deck A
+node seance-agent.mjs set --args '{"deck":"B"}' program.dsl
+node seance-agent.mjs look                          # image of the output
+node seance-agent.mjs look --args '{"source":"B"}'  # image of deck B
+node seance-agent.mjs wait --doc deck:B --since <rev>
+node seance-agent.mjs image-put photo.png           # prints image:<sha256>
+node seance-agent.mjs leave
+```
+
+`look` saves the image as a file and prints its path. Images travel as
+bytes; the tool never prints image data. `program --json` adds the document
+revision for `wait --since`. `set` and `validate` read `-` as standard input.
+Output is JSON except the program text. A result drops the state snapshot
+unless you add `--state`.
+
+The session has two documents: `deck:A` (the default) and `deck:B`. A
+program that a deck runs is in its document, so people in the session see
+your changes. `wait` returns when a person changes a program.
+
+To move a program and its images between apps, join both sessions and use
+`transfer`. Name the deck with `--from-args` or `--to-args`:
+
+```sh
+node seance-agent.mjs transfer noisedeck visualize --to-args '{"deck":"B"}'
+node seance-agent.mjs transfer visualize noisedeck --from-args '{"deck":"A"}'
+```
+
+The tool exits with 0 when the command succeeded, 1 when Visualize answered
+with `ok: false` (read `result.envelope.error.code`), and 2 when the tool
+itself could not run the command (read `error.code`; the codes are listed
+below). `node seance-agent.mjs help` lists every option.
+
+How it works, so you can explain it to the person:
+
+- The tool joins the session as an anonymous participant, which the person
+  sees join. It runs commands in the tab that took the set online, through
+  the session, with the same checks as the person's own controls. No other
+  tab answers, even one that becomes the session's owner after the person's
+  tab leaves. After a reload, the person's tab answers again.
+- Everyone in the session receives every answer, and anyone who can edit the
+  session can send commands to that tab. So what this browser stores for the
+  person is not reachable through a session: `listScenes`, `scene`,
+  `listUserEffects` and `setAutoVjPool` answer `REMOTE_UNAVAILABLE`; the
+  library's `user` section and `user` effects are left out of `searchLibrary`,
+  `searchEffects` and `getEffectDefinition`; and a program that names the
+  `user` namespace fails with a `USER_EFFECT` diagnostic.
+- What Visualize keeps out of the session stays out: `getProgram` returns the
+  text that the session holds for a deck, not an unpublished draft; while a
+  deck shows live camera or video input, `getThumbnail` of that deck or of the
+  output answers `REMOTE_UNAVAILABLE`; and `setProgram` accepts only images
+  that the session already holds.
+- Commands that act on the person's browser rather than on the performance
+  answer `REMOTE_UNAVAILABLE`: `setAudioInput`, `setMidiInput`, `setAudio`
+  (input sensitivity), `setRenderer` and `record`. `commands` marks every
+  command that a session cannot run. The live decks, the crossfader and mixer,
+  the effects, automation and tempo, and the built-in and curated library stay
+  reachable. Suggest that the person goes offline when you are done (the
+  Seance button, then **Go Offline**).
+- Images cross a session only as bytes. A request or an answer that would carry
+  an image as base64 text fails with `IMAGE_AS_TEXT`, and a request that names
+  media by an outside link, which would make the person's browser fetch it,
+  fails with `OUTSIDE_LINK`.
+- `look` asks the person's tab for an image of the output or a deck. The tab
+  adds the image to the session as its own bytes, and the tool saves it as a
+  file.
+- A session holds at most 32 images, and the person's own images need room
+  too. The tab takes at most 16 images in ten minutes; past that, `look`
+  answers `IMAGE_LIMIT` with `details.retryAfter` in seconds. Look when the
+  output has changed, not in a loop.
+
+Agent tool errors (exit code 2, `error.code`):
+
+- `NO_SESSION`: no session is joined, or more than one and none was named.
+- `UNKNOWN_SESSION`, `SESSION_LOCKED`, `REFUSED`: the session code is wrong or
+  expired, the session is locked, or the session refused the join.
+- `NO_APP_TAB`: the tab that took the session online did not answer. Ask the
+  person to keep it open, or to go online again and send the new code.
+- `TIMEOUT`: the tab did not answer in time. Check `status`, then try again.
+- `READONLY`: the session lets this agent only read.
+- `SESSION_CLOSED`, `SESSION_REFUSED`: the connection closed, or the session
+  server refused a request (the message says why).
+- `IMAGE_FAILED`, `NO_DOCUMENT`, `USAGE`, `INVALID_JSON`: an image transfer
+  failed, a document is missing, or the command line was wrong.
+
+### 2. WebMCP (browser tools)
+
+Open https://visualize.noisedeck.app/ and discover the page tools named
+`visualize_getState`, `visualize_setProgram`, and so on. Each tool has the
+argument schema in the reference below and returns the envelope as text.
+`visualize_getThumbnail` also returns an image content block, without
+duplicating its bytes in text. If your harness serializes the whole tool
+result, parse it, display the image through your image tool, and print only
+the text block. Do not print image bytes.
+
+### 3. Page JavaScript
+
+Call `window.VisualizeAgent` directly. Wait until the object and the method
+exist. Every command waits for startup; awaiting `window.VisualizeAgent.ready`
+also works. Return the fields you need, not the whole API object.
+
+```js
+const env = await window.VisualizeAgent.getProgram({ deck: 'B' })
+return env.result.dsl
+```
+
+All routes run the same commands, one at a time, with the same validation.
+Only the browser routes run the commands that a session cannot run. WebMCP
+availability depends on the browser; if discovery returns no tools, use page
+JavaScript. Do not try to bypass a browser tool's read-only JavaScript policy.
+A tool that only fetches HTML cannot run Visualize: it needs a browser with
+WebGL2. In a small window or with a shared program link, Visualize first
+shows a start card. Commands wait until the person (or you) clicks
+`start set`, or a deck button on a shared link.
+
+---
+
+## Two decks and the output
+
+- Deck A and deck B each run one program. `getProgram`, `setProgram`,
+  `loadProgram`, `randomize`, `setDeck` and `rebind` take `deck`.
+- The crossfader `position` runs from 0 (deck A) to 1 (deck B). The live deck
+  is A below 0.5 and B from 0.5. The mixer effect (`getMixer`, `setMixer`)
+  blends the decks; the crossfader drives its `driver` parameter.
+- Output effects (`setFx`) act on the mixed output. `getThumbnail` returns the
+  output by default, or one deck with `source`.
+- Auto-VJ (`setAutoVj`) loads library programs into the deck that is not live
+  and fades to them. Auto-Mix (`setAutoMix`) moves the crossfader from one
+  source. Only one of them runs at a time. Both change the decks or the
+  crossfader without commands from you; read `state` to follow them.
+- The tempo (`setTempo`) sets the deck loop length: one loop is `divider` bars.
+- A scene (`scene`, `listScenes`) stores both decks and the whole mixer state
+  in this browser. Scene commands run only in the browser, not through a
+  session.
+
+## Write a program
+
+1. Find effects with `searchEffects`. Read their parameters with
+   `getEffectDefinition`. Library programs (`searchLibrary`,
+   `getLibraryProgram`) are working examples.
+2. Write the program. Copy each parameter name from `getEffectDefinition`. Do
+   not guess names. `choices` lists accepted values. For a `member` parameter,
+   insert its value as a DSL member expression, such as `palette.hypercolor`,
+   without quotes.
+3. Check it with `validateProgram`. Fix every diagnostic with severity `error`.
+4. Run it on a deck with `setProgram`. Look at the result with `getThumbnail`.
+
+```js
+const A = window.VisualizeAgent
+const dsl = [
+    'search synth, filter',
+    'let bass = audio(band: 0, min: 0.5, max: 3)',
+    'noise(ridges: true, speed: bass).write(o0)',
+    'render(o0)',
+].join('\n')
+const check = await A.validateProgram({ dsl })
+if (!check.result.valid) return check.result.diagnostics
+const run = await A.setProgram({ dsl, deck: 'B' })
+await A.setCrossfader({ position: 1 })
+return { ok: run.ok, error: run.error }
+```
+
+DSL rules that agents most often get wrong:
+
+- The first line `search ns1, ns2` sets the namespaces that effect names
+  resolve in, in order. The same function name can mean different effects in
+  different namespaces, with different parameters.
+- Every chain ends with `.write(oN)`. The program ends with `render(oN)`.
+  Read another surface with `read(oN)`, for example `tex: read(o0)`.
+- Older examples use retired parameter names such as `mixAmt`. Those fail with
+  `S001 Unknown argument`. `getEffectDefinition` gives the current names.
+
+What is special about programs in Visualize:
+
+- Audio: `let bass = audio(band: 0, min: 0.5, max: 3)` declares a binding;
+  use its name as a parameter value. Bands are 0 (low), 1 (mid) and 2 (high).
+  The parameter is `min` at silence and `max` at full level. Bindings move
+  only while audio input is on (`state.audio.enabled`); the person turns it on.
+  `setAudio` sets the input sensitivity. `rebind` rewrites random parameters into
+  new `audio()` or `midi()` bindings.
+- Oscillators: `let swing = osc(type: oscKind.sine, min: 0.2, max: 2)` moves a
+  parameter in time with the deck loop, so it follows the tempo.
+- Curated programs: library programs in the `curated` section run effects from
+  the `curated` namespace (`searchEffects({ namespace: 'curated' })`).
+  `getProgram` and `getLibraryProgram` return them with `search curated`. Keep
+  that line when you change one.
+- User effects: custom effects installed in this browser are in the `user`
+  namespace. In the browser, `listUserEffects` lists them and `searchEffects`
+  includes them. A session cannot read or run them.
+- Images: a deck shows an image with `media(url: "image:<sha256>")`, where the
+  id is the SHA-256 of the image bytes. Through a session, add the file with
+  `image-put` and use the reference it prints; `transfer` copies images for
+  you. The image must be in a deck or in the online session (in the browser,
+  also in this browser's scene images); otherwise `setProgram` fails with
+  `NOT_FOUND_IMAGE`. Any
+  other `url` value (a web link or inline image data) is refused with a
+  `MEDIA_URL` diagnostic.
+
+---
+
+## Keep results small
+
+Your tool sends each result back to you. A large result uses a large part of
+your context.
+
+- Return only the fields that you need from each script.
+- Every envelope includes `state`. Remove it when you do not need it.
+- `searchLibrary` and `searchEffects` take `limit`. Library program text comes
+  only from `getLibraryProgram`, one program at a time.
+- Page JavaScript `getThumbnail` returns base64 image data. Keep
+  `maxDimension` small. WebMCP and the Seance route carry the image
+  separately and omit its bytes from text.
+
+---
+
+## The envelope
+
+Every command response, success or failure, has this shape:
+
+```js
+// success
+{ ok: true, command: "setProgram", apiVersion: "1.0", result: { /* command-specific */ }, state: { /* snapshot */ } }
+
+// failure
+{
+    ok: false,
+    command: "setProgram",
+    apiVersion: "1.0",
+    error: { code: "INVALID_PROGRAM", message: "...", details: { diagnostics: [ /* ... */ ] } },
+    state: { /* snapshot */ }
+}
+```
+
+A success can add `warnings: [ "..." ]`, for example a scene recall that could
+not restore everything. Commands run one at a time, in the order you call
+them. You can omit the argument object: `getState()` is the same as
+`getState({})`. Every command rejects an argument that it does not declare, so
+a command with no arguments accepts only `{}`.
+
+---
+
+## State snapshot
+
+```
+state: {
+    schemaVersion,
+    decks: {
+        A: { title, chars, running, speed, density: { mode, value }, bandpass, oscillators },
+        B: { ... }                       // running: the program text is the program that runs
+    },
+    crossfader: { position, curve, fadeSeconds, live },  // live: "A" or "B"
+    mixer:      { effect },              // null until the mixer has started
+    fx:         { strobe, invert, bw, zoom, freeze },
+    autoVj:     { enabled, bars },
+    autoMix:    { enabled, source },     // source such as "osc:sine", "audio:low", "midi:1"
+    tempo:      { bpm, divider, followMidiClock },
+    audio:      { enabled, sensitivity },
+    midi:       { enabled, inputs },
+    output:     { width, height, backend },  // backend: "webgl2" or "webgpu"
+    recording,
+    online                               // "offline", "connecting", "online" or "readonly"
+}
+```
+
+---
+
+## Diagnostics
+
+`validateProgram` and a failed `setProgram` return compiler diagnostics:
+
+```js
+{ code: "S001", severity: "error", message: "Unknown argument 'madeUp' for noise()", location?: { line, column } }
+```
+
+A syntax error has code `SYNTAX`. A `media()` image that is not named
+`image:<sha256>` has code `MEDIA_URL`. Through a session, a program that names
+the `user` namespace has code `USER_EFFECT`. Diagnostics with severity
+`warning` do not stop a program.
+
+---
+
+## Error codes
+
+| Code | When |
+|---|---|
+| `INVALID_ARGS_TYPE` | wrong argument type |
+| `INVALID_ARGS_REQUIRED` | missing required argument |
+| `INVALID_ARGS_RANGE` | number or string length out of range |
+| `INVALID_ARGS_ENUM` | value not in the allowed list |
+| `INVALID_ARGS_UNKNOWN` | an argument, or a mixer parameter, that the command does not declare |
+| `INVALID_PROGRAM` | the program does not compile. `details.diagnostics` lists the errors. Nothing changed |
+| `COMPILE_FAILED` | the renderer rejected a program that passed the compiler. The deck runs its previous program |
+| `NOT_FOUND_EFFECT` | unknown effect id, or a `user` effect asked for through a session |
+| `EFFECT_LOAD_FAILED` | an effect could not load from the shader CDN |
+| `NOT_FOUND_PROGRAM` | no library program has that title (through a session, the `user` section is left out), or the Auto-VJ pool is empty |
+| `NOT_FOUND_IMAGE` | a program names an `image:<sha256>` that is not in the deck, the browser or the session |
+| `NOT_FOUND_SCENE` | no scene has that name |
+| `NOT_FOUND_COMMAND` | unknown command |
+| `CONFLICT_SUPERSEDED` | a newer program load on the same deck, from the person or Auto-VJ, replaced yours |
+| `CONFLICT_MIXER_UNAVAILABLE` | the mixer did not start; the decks crossfade without a mixer effect |
+| `CONFLICT_SCENES_FULL` | the scene list is full. Delete or rename a scene first |
+| `CONFLICT_SCENE_EXISTS` | another scene already has the new name |
+| `CONFLICT_STORAGE_FULL` | browser storage is full or unavailable; the scene was not saved |
+| `REMOTE_UNAVAILABLE` | the command runs only in the person's browser, or would reveal live camera or video input |
+| `IMAGE_UPLOAD_FAILED` | an image result could not be added to the session |
+| `OUTSIDE_LINK` | a session request names media by an outside link. Add the image with `image-put` and use `image:<sha256>` |
+| `IMAGE_AS_TEXT` | a session request or answer would carry an image as base64 text. Add the image with `image-put` and use `image:<sha256>` |
+| `IMAGE_LIMIT` | the tab already added 16 images to the session in ten minutes. `details.retryAfter` gives the seconds to wait |
+| `INTERNAL_ERROR` | unexpected failure |
+
+---
+
+## Pointers
+
+- Full command reference: https://visualize.noisedeck.app/llms-full.txt
+- DSL and effect contract: https://noisemaker.app/llms-full.txt
+- Agent tool for online sessions: https://noisedeck.app/agent/seance-agent.mjs
+- Source of truth in the page: `/js/agent/index.js` (registration),
+  `/js/agent/commands.js` (handlers), `/js/agent/schemas.js` (argument
+  schemas), `/js/agent/descriptions.js` (command descriptions)
+
+---
+
+## Command reference
+
+Visualize has 31 commands. Call a command as `await window.VisualizeAgent.<name>(args)`,
+as the WebMCP tool `visualize_<name>`, or through a Seance session with `seance-agent.mjs call <name>`.
+Every command rejects an argument that it does not declare, with `INVALID_ARGS_UNKNOWN`.
+
+### Read state
+
+#### `getState`
+
+Returns the state snapshot. Every envelope already includes it in `state`.
+
+Returns: the snapshot.
+
+Arguments: none.
+
+#### `getProgram`
+
+Returns the program text of deck `deck`, as its editor shows it, and whether it is the program that runs. Through a session it returns the text that the session holds for the deck: a change shows once the tab has published it, and a draft that stays out of the session does not show. A curated library program reads in the `curated` namespace. An image the program shows is named `image:<sha256>`.
+
+Returns: `{ dsl, running }`.
+
+Arguments:
+
+- `deck`: string, one of `A`, `B`, default `A`
+
+### Programs
+
+#### `validateProgram`
+
+Compiles `dsl` without applying it. Both decks compile a program the same way. Through a session, a program that names the `user` namespace gets a `USER_EFFECT` error diagnostic.
+
+Returns: `{ valid, diagnostics }`.
+
+Arguments:
+
+- `dsl` (required): string, at least 1 character
+
+#### `setProgram`
+
+Compiles `dsl` and runs it on deck `deck`, like a program typed into that deck's editor. A program that does not compile changes nothing and fails with INVALID_PROGRAM. Each `image:<sha256>` the program names must be in the online session, or, in the browser, in a deck or this browser's scene images. While Visualize is online, the program goes to the session document `deck:A` or `deck:B`.
+
+Returns: `{ applied: true, diagnostics }` (warnings only).
+
+Arguments:
+
+- `dsl` (required): string, at least 1 character
+- `deck`: string, one of `A`, `B`, default `A`
+
+### Effects
+
+#### `searchEffects`
+
+Lists effects whose id, description or tags contain `query`. `namespace` keeps one namespace. The list includes the `curated` effects that library programs use and, in the browser only, the `user` effects installed in this browser.
+
+Returns: `{ total, effects: [{ effectId, namespace, name, description, tags }] }`.
+
+Arguments:
+
+- `query`: string
+- `namespace`: string
+- `limit`: integer, from 1 to 500, default `50`
+
+#### `getEffectDefinition`
+
+Returns the DSL function name and the parameters of one effect. A session cannot read `user` effects.
+
+Returns: `{ effectId, func, namespace, description, params: [{ name, type, default, min?, max?, enum?, choices?, label? }] }`.
+
+Arguments:
+
+- `effectId` (required): string, at least 1 character
+
+### Library
+
+#### `searchLibrary`
+
+Lists library programs whose title, tagline, tags or author contain `query`. `category` keeps one library section: `user`, `curated`, `abstract`, `attractor`, `geometric`, `life`, `particles`, `built-in`, `noiseblaster` or `util`. The `user` section, made from the user effects installed in this browser, is listed only in the browser.
+
+Returns: `{ total, programs: [{ title, tagline, category, tags, autoVj }] }`, where `autoVj` tells whether Auto-VJ and `randomize` can pick the program. Through a session `autoVj` is left out.
+
+Arguments:
+
+- `query`: string
+- `category`: string
+- `limit`: integer, from 1 to 500, default `50`
+
+#### `getLibraryProgram`
+
+Returns one library program with its DSL text, as a deck editor shows it after the program loads.
+
+Returns: `{ title, tagline, category, tags, autoVj, dsl }`.
+
+Arguments:
+
+- `title` (required): string, at least 1 character
+
+#### `loadProgram`
+
+Loads the library program titled `title` into deck `deck`, like the A or B button on its card.
+
+Returns: `{ deck, title }`.
+
+Arguments:
+
+- `title` (required): string, at least 1 character
+- `deck`: string, one of `A`, `B`, default `A`
+
+#### `randomize`
+
+Loads a random program from the Auto-VJ pool into deck `deck`, or into both decks, like the shuffle buttons. A deck gets a different program from the one it runs.
+
+Returns: `{ programs }`, the loaded titles by deck, such as `{ A: "..." }`.
+
+Arguments:
+
+- `deck`: string, one of `A`, `B`, `both`, default `A`
+
+#### `setAutoVjPool`
+
+Includes or excludes one library program from the Auto-VJ pool, like the switch on its card. Utility programs are never in the pool.
+
+Returns: `{ title, included }`.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `title` (required): string, at least 1 character
+- `included` (required): boolean
+
+### Decks
+
+#### `setDeck`
+
+Changes the controls of deck `deck`. Give only the fields you change. `speed` multiplies the playback speed. `density` is the render resolution of the deck in percent of the output; `auto` renders particle and simulation programs at 50% and other programs at 100%. `bandpass` and `oscillators` shape the next `rebind`: with `bandpass`, an EQ rebind uses only the audio bands that the program is tagged with; `oscillators` is how many of the rebound parameters get an `osc()` instead of `audio()` or `midi()`.
+
+Returns: `{ deck, speed, density: { mode, value }, bandpass, oscillators }`.
+
+Arguments:
+
+- `deck`: string, one of `A`, `B`, default `A`
+- `speed`: number, from 0.1 to 4
+- `density`: string, one of `auto`, `100`, `75`, `50`, `25`
+- `bandpass`: boolean
+- `oscillators`: integer, from 0 to 4
+
+#### `rebind`
+
+Reshuffles the audio (`eq`) or MIDI (`midi`) bindings of deck `deck`, like its rebind buttons. Two to four numeric parameters of the program get new `audio()` or `midi()` automations. The program text changes; `getProgram` returns it.
+
+Returns: `{ deck, kind, applied }`, where `applied` is false when the program has no parameter to rebind.
+
+Arguments:
+
+- `deck`: string, one of `A`, `B`, default `A`
+- `kind` (required): string, one of `eq`, `midi`
+
+### Crossfader and mixer
+
+#### `setCrossfader`
+
+Moves the crossfader and sets its curve and fade time. Give only the fields you change. `position` 0 shows deck A and 1 shows deck B. Moving it stops a running fade and holds Auto-VJ back for a moment, like the slider. `fadeSeconds` is the duration of `autoFade` and of Auto-VJ transitions.
+
+Returns: `{ position, curve, fadeSeconds, live }`.
+
+Arguments:
+
+- `position`: number, from 0 to 1
+- `curve`: string, one of `linear`, `dipped`, `sharp`, `cut`
+- `fadeSeconds`: number, from 0.1 to 16
+
+#### `crossfade`
+
+`cutA` and `cutB` jump the crossfader to one deck. `autoFade` fades to the deck that is not live over the fade time. The command returns when the fade starts.
+
+Returns: `{ action, target, seconds }`.
+
+Arguments:
+
+- `action` (required): string, one of `cutA`, `cutB`, `autoFade`
+
+#### `getMixer`
+
+Returns the mixer effect that blends deck A with deck B, the effects you can choose, and the parameters of the current effect. The crossfader drives the parameter named by `driver`; the others are in `params`.
+
+Returns: `{ effect, driver, effects: [{ effect, label, driver }], params: [{ name, type, value, default, min?, max?, choices? }] }`.
+
+Arguments: none.
+
+#### `setMixer`
+
+Selects the mixer effect and sets its parameters, like the mixer picker and the controls under the output. A new `effect` starts from its defaults. `params` maps parameter names from `getMixer` to values: a number in range, or a choice name. An unknown name or a bad value fails the command and changes nothing.
+
+Returns: the same result as `getMixer`.
+
+Arguments:
+
+- `effect`: string, one of `mixer/blendMode`, `mixer/applyMode`, `mixer/centerMask`, `mixer/split`, `mixer/patternMix`, `mixer/shapeMask`
+- `params`: object
+
+### Output effects
+
+#### `setFx`
+
+Turns output effects on or off, like the FX buttons. Give only the effects you change. `strobe` flashes white on every beat and can trigger photosensitive epilepsy. `invert`, `bw` (black and white) and `zoom` are display effects on the output canvas. `freeze` holds the current output frame. `flash: true` fires one white flash.
+
+Returns: `{ strobe, invert, bw, zoom, freeze }`.
+
+Arguments:
+
+- `strobe`: boolean
+- `invert`: boolean
+- `bw`: boolean
+- `zoom`: boolean
+- `freeze`: boolean
+- `flash`: boolean
+
+### Automation
+
+#### `setAutoVj`
+
+Turns Auto-VJ on or off and sets its cycle length in bars: 1, 2, 4, 8, 16 or 32. Every cycle, Auto-VJ loads a random pool program into the deck that is not live and fades to it. Turning Auto-VJ on turns Auto-Mix off. The cycle length is also the period of an Auto-Mix oscillator.
+
+Returns: `{ enabled, bars }`.
+
+Arguments:
+
+- `enabled`: boolean
+- `bars`: integer, from 1 to 32
+
+#### `setAutoMix`
+
+Turns Auto-Mix on or off and sets its source. Auto-Mix moves the crossfader from one source: an oscillator with one period per cycle, an audio band level, or the last control change on a MIDI channel. Turning Auto-Mix on turns Auto-VJ off.
+
+Returns: `{ enabled, source }`.
+
+Arguments:
+
+- `enabled`: boolean
+- `source`: string, one of `osc:sine`, `osc:tri`, `osc:saw`, `osc:sawInv`, `osc:square`, `audio:sub`, `audio:low`, `audio:mid`, `audio:high`, `midi:1`, `midi:2`, `midi:3`, `midi:4`, `midi:5`, `midi:6`, `midi:7`, `midi:8`, `midi:9`, `midi:10`, `midi:11`, `midi:12`, `midi:13`, `midi:14`, `midi:15`, `midi:16`
+
+### Tempo, audio and output
+
+#### `setTempo`
+
+Sets the tempo, like the tempo bar. Give only the fields you change. `bpm` is beats per minute. `divider` is the number of bars in one deck loop: 1, 2, 4, 8, 16 or 32. `tap: true` taps the tempo once; taps less than two seconds apart set the BPM from their spacing. `resetPhase: true` starts the bar now. With `followMidiClock`, an incoming MIDI clock sets the BPM.
+
+Returns: `{ bpm, divider, followMidiClock }`.
+
+Arguments:
+
+- `bpm`: number, from 40 to 300
+- `divider`: integer, from 1 to 32
+- `tap`: boolean
+- `resetPhase`: boolean
+- `followMidiClock`: boolean
+
+#### `setAudio`
+
+Sets the audio sensitivity, the gain applied to the person's audio input before its levels drive `audio()` bindings and Auto-Mix. The browser stores it.
+
+Returns: `{ enabled, sensitivity }`.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `sensitivity`: number, from 0.5 to 4
+
+#### `setOutput`
+
+Sets the output resolution of both decks, the mixer and the output canvas.
+
+Returns: `{ width, height, backend }`.
+
+Arguments:
+
+- `resolution`: string, one of `640x360`, `1280x720`, `1920x1080`, `2560x1440`
+
+#### `setRenderer`
+
+Stores whether this browser prefers WebGPU to WebGL2. It takes effect when the page reloads.
+
+Returns: `{ preferWebGPU, backend }`, where `backend` is the renderer that runs now.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `preferWebGPU` (required): boolean
+
+### Scenes
+
+#### `listScenes`
+
+Lists the saved scenes in slot order. Shift with the slot number recalls slots 1 to 9.
+
+Returns: `{ total, max, scenes: [{ slot, name, bpm, fx, decks: { A, B } }] }`, with the program titles of the decks and the names of the active effects.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments: none.
+
+#### `scene`
+
+`save` stores the state of both decks, the crossfader, tempo, effects, mixer and automation as scene `name`, and replaces a scene with that name. `recall` restores scene `name`. `rename` gives scene `name` the name `newName`. `delete` removes scene `name` without a confirmation. Scenes are stored in this browser.
+
+Returns: `{ action, name }`, plus `newName` for `rename`. A recall that could not restore everything lists the problems in `warnings`.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `action` (required): string, one of `save`, `recall`, `rename`, `delete`
+- `name` (required): string, at least 1 character
+- `newName`: string, at least 1 character
+
+### User effects
+
+#### `listUserEffects`
+
+Lists the custom effects installed in this browser. Programs call them in the `user` namespace.
+
+Returns: `{ total, effects: [{ effectId, name, installedAt }] }`.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments: none.
+
+### Images
+
+#### `getThumbnail`
+
+Returns an image of the output canvas, or with `source` of one deck canvas. The output image shows the mix, strobe and flash. It does not show `invert`, `bw` and `zoom`, which are display effects on the canvas element. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`; while a deck shows live camera or video input, a session cannot take an image of that deck or of the output (`REMOTE_UNAVAILABLE`).
+
+Returns: `{ bytes, mimeType, width, height, source }`, with `bytes` in base64. Through a session: `{ image: { id, mimeType, bytes }, mimeType, width, height, source }`, where `image.bytes` is the byte count.
+
+Arguments:
+
+- `maxDimension`: integer, from 16 to 1024, default `256`
+- `format`: string, one of `png`, `jpg`, default `jpg`
+- `source`: string, one of `output`, `A`, `B`, default `output`
+
+### Inputs and recording
+
+#### `setAudioInput`
+
+Turns audio input on with the default device, or off, like the audio button in the status bar. Turning it on asks the person for microphone permission.
+
+Returns: `{ enabled }`, false when the person refused permission.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `enabled` (required): boolean
+
+#### `setMidiInput`
+
+Turns MIDI input on or off, like the MIDI button in the status bar. Turning it on asks the person for MIDI permission.
+
+Returns: `{ enabled, inputs }`.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `enabled` (required): boolean
+
+#### `record`
+
+Starts or stops recording the output, like the record button. Stopping saves the recording as a browser download.
+
+Returns: `{ recording }`.
+
+Browser only: through a Seance session it fails with `REMOTE_UNAVAILABLE`.
+
+Arguments:
+
+- `recording` (required): boolean

@@ -42,7 +42,7 @@ import * as rebind from './rebind.js'
 import { AutoXfade } from './autoxfade.js'
 import { DeckMedia } from './deckMedia.js'
 import { mountThemePicker } from './handfish-theme.js'
-import { aboutDialog } from './about-dialog.js'
+import { APP_VERSION, aboutDialog } from './about-dialog.js'
 import { setupTooltips, setTooltip, migrateBelow } from './tooltips.js'
 import { calculateCrossfadeNudge, CrossfadeNudgeTracker, parseCrossfadeCurve } from './crossfader.js'
 import { PORTABLE_IMAGES_URL, clearCodeFromUrl, fileInlineImages, loadSharedImages } from './sharingLoader.js'
@@ -54,11 +54,15 @@ import {
     unlockFullscreenEscape
 } from './drawerEscape.js'
 import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
+import { bootstrapAgent, createSeanceAgentRelay, markAgentReady } from './agent/index.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer, the Seance logo graphic (for the go-online
 // toolbar button), and the <seance-dialog> element (declared in index.html;
 // registers automatically once this module evaluates).
 import { SEANCE_LOGO_SVG, dslTokenizer } from 'handfish'
+// A namespace import: an older handfish without the connect-agent dialog
+// still loads the app, and the "connect agent..." button stays hidden.
+import * as handfish from 'handfish'
 
 const ONLINE_COLLABORATION_FEATURE = 'onlineCollaboration'
 const $ = (id) => document.getElementById(id)
@@ -151,6 +155,8 @@ function setOnlineCollaborationUiVisible(visible) {
         if (!button.innerHTML) button.innerHTML = SEANCE_LOGO_SVG
         button.hidden = !visible
     }
+    const agentButton = $('connect-agent-btn')
+    if (agentButton) agentButton.hidden = !visible || !customElements.get('agent-connect-dialog')
     if (visible && !document.querySelector('link[rel="preconnect"][href="https://seance.noisefactor.io"]')) {
         const link = document.createElement('link')
         link.rel = 'preconnect'
@@ -396,8 +402,9 @@ async function boot() {
     // Bring the mixer online in the background — manifest fetch +
     // shader compile takes a beat, and we don't want to block the
     // boot path on it. Once it's up, swap the compositor onto the
-    // mixer's output canvas.
-    mixer.init()
+    // mixer's output canvas. The agent API waits on this before it reads or
+    // changes the mixer.
+    const mixerStartup = mixer.init()
         .then(() => {
             // Restore last-picked mixer (and overrides) from localStorage
             let stored = null
@@ -692,29 +699,27 @@ async function boot() {
         updateLiveIndicator()
         autoMix.noteUserOverride()
     })
-    $('cut-a').addEventListener('click', () => {
+    // Jump the crossfader to a position, like the cut buttons and a
+    // MIDI-mapped crossfader: a running fade stops and Auto-VJ backs off.
+    function moveCrossfader(v01) {
         cancelXfadeAnimation()
         xfadeNudgeTracker.reset()
-        state.crossfade = 0
-        compositor.setCrossfade(0)
-        xfaderEl.value = '0'
+        state.crossfade = v01
+        compositor.setCrossfade(v01)
+        xfaderEl.value = String(v01)
         updateLiveIndicator()
         autoMix.noteUserOverride()
-    })
-    $('cut-b').addEventListener('click', () => {
-        cancelXfadeAnimation()
-        xfadeNudgeTracker.reset()
-        state.crossfade = 1
-        compositor.setCrossfade(1)
-        xfaderEl.value = '1'
-        updateLiveIndicator()
-        autoMix.noteUserOverride()
-    })
-    $('auto-fade').addEventListener('click', () => {
+    }
+    $('cut-a').addEventListener('click', () => moveCrossfader(0))
+    $('cut-b').addEventListener('click', () => moveCrossfader(1))
+    // Fade to the deck that is not live over the fade time.
+    function autoFade() {
         xfadeNudgeTracker.reset()
         const target = state.crossfade < 0.5 ? 1 : 0
         animateXfade(target, state.fadeDurSec)
-    })
+        return { target, seconds: state.fadeDurSec }
+    }
+    $('auto-fade').addEventListener('click', () => autoFade())
 
     function animateXfade(target, durSec = state.fadeDurSec) {
         cancelXfadeAnimation()
@@ -758,6 +763,13 @@ async function boot() {
     }
     bindSpeed('A', 'speed-a', 'speed-a-val')
     bindSpeed('B', 'speed-b', 'speed-b-val')
+
+    // Set a deck's speed and its slider, like a MIDI-mapped speed control.
+    function setDeckSpeed(deckId, speed) {
+        state.decks[deckId].setSpeed(speed)
+        $(`speed-${deckId.toLowerCase()}`).value = String(speed)
+        $(`speed-${deckId.toLowerCase()}-val`).textContent = `${speed.toFixed(1)}×`
+    }
 
     // Random load per deck
     document.querySelectorAll('.deck-load-random').forEach(btn => {
@@ -879,6 +891,7 @@ async function boot() {
         refreshDeckMediaUi(deckId)
     }
 
+    // Resolves to the deck's load result: { success, error?, superseded? }.
     async function loadProgram(deckId, program) {
         if (!program) return
         const deck = state.decks[deckId]
@@ -899,10 +912,10 @@ async function boot() {
         updateDensityButton(deckId)
 
         const res = await deck.load(program.dsl, program.title)
-        if (res.superseded) return
+        if (res.superseded) return res
         if (!res.success) {
             toast(`${deckId}: ${res.error.slice(0, 60)}`)
-            return
+            return res
         }
         setCollaborativeDeckText(deckId, program.dsl, { syncOpen: false })
         clearDeckEditorError(deckId)
@@ -923,6 +936,7 @@ async function boot() {
         // Toggle the per-deck media picker row (Camera Input / Media
         // Input show their picker here; other programs hide it).
         refreshDeckMediaUi(deckId)
+        return res
     }
 
     function updateDensityButton(deckId) {
@@ -940,29 +954,33 @@ async function boot() {
         }
     }
 
+    // Apply a deck's pixel density ({ mode, value }), like its density button.
+    function setDeckDensity(deckId, next) {
+        state.deckDensity[deckId] = next
+
+        // For auto mode, re-classify against the currently
+        // loaded DSL; for manual, just apply the chosen value.
+        // Use the rebind's pristine original DSL so a
+        // mid-roll re-classify doesn't get fooled by the
+        // override map (the effect set is the same either way).
+        if (next.mode === 'auto') {
+            const dsl = state.decks[deckId].rebind.originalDsl
+                || state.decks[deckId]._currentDsl
+            const heavy = dsl && isHeavyDsl(dsl, state.decks[deckId].inner.manifest)
+            next.value = heavy ? 0.5 : 1.0
+        }
+        state.decks[deckId].setPixelDensity(next.value)
+        updateDensityButton(deckId)
+        toast(`Deck ${deckId} pixel density: ${next.mode === 'auto' ? 'auto ' : ''}${Math.round(next.value * 100)}%`, 1400)
+    }
+
     function wireDensityButtons() {
         for (const deckId of ['A', 'B']) {
             const btn = $(`deck-${deckId.toLowerCase()}-density`)
             if (!btn) continue
             btn.addEventListener('click', () => {
                 const cur = state.deckDensity[deckId]
-                const next = nextDensity(cur.mode, cur.value)
-                state.deckDensity[deckId] = next
-
-                // For auto mode, re-classify against the currently
-                // loaded DSL; for manual, just apply the chosen value.
-                // Use the rebind's pristine original DSL so a
-                // mid-roll re-classify doesn't get fooled by the
-                // override map (the effect set is the same either way).
-                if (next.mode === 'auto') {
-                    const dsl = state.decks[deckId].rebind.originalDsl
-                        || state.decks[deckId]._currentDsl
-                    const heavy = dsl && isHeavyDsl(dsl, state.decks[deckId].inner.manifest)
-                    next.value = heavy ? 0.5 : 1.0
-                }
-                state.decks[deckId].setPixelDensity(next.value)
-                updateDensityButton(deckId)
-                toast(`Deck ${deckId} pixel density: ${next.mode === 'auto' ? 'auto ' : ''}${Math.round(next.value * 100)}%`, 1400)
+                setDeckDensity(deckId, nextDensity(cur.mode, cur.value))
             })
             updateDensityButton(deckId)
         }
@@ -1045,6 +1063,41 @@ async function boot() {
             : `Rebind uses ${n} oscillator${n === 1 ? '' : 's'} (click to cycle 0–4)`)
     }
 
+    // Reshuffle a deck's audio ('eq') or MIDI ('midi') bindings, like its
+    // rebind buttons. Resolves true when the deck runs the rebound program.
+    async function rebindDeck(deckId, kind) {
+        const btn = document.querySelector(`.deck-rebind-${kind}[data-deck="${deckId}"]`)
+        const ok = kind === 'eq'
+            ? await rebind.rebindEq(state.decks[deckId], programForDeck(deckId))
+            : await rebind.rebindMidi(state.decks[deckId])
+        if (ok) {
+            flashRebindBtn(btn)
+            if (kind === 'eq') audio.refreshDeckStates()
+            resetCollaborativeDeckText(deckId, { syncOpen: false })
+            clearDeckEditorError(deckId)
+            publishDeckDsl(deckId, `rebind:${kind}`)
+            syncDeckEditor(deckId)
+        } else {
+            toast(`${deckId}: no rebindable params`)
+        }
+        return ok
+    }
+
+    // Set a deck's rebind options, like its bandpass and oscillator-count
+    // buttons. Fields left undefined keep their value.
+    function setRebindOptions(deckId, { bandpass, oscillatorCount }) {
+        const r = state.decks[deckId].rebind
+        if (bandpass !== undefined) {
+            r.bandpass = bandpass
+            updateBandpassBtn(deckId)
+        }
+        if (oscillatorCount !== undefined) {
+            r.oscillatorCount = oscillatorCount
+            updateOscCountBtn(deckId)
+        }
+        persistRebindUiState()
+    }
+
     function wireRebindButtons() {
         const persisted = loadRebindUiState()
         for (const deckId of ['A', 'B']) {
@@ -1054,41 +1107,14 @@ async function boot() {
             const midiBtn = document.querySelector(`.deck-rebind-midi[data-deck="${deckId}"]`)
             const bpBtn = document.querySelector(`.deck-bandpass[data-deck="${deckId}"]`)
             const oscBtn = document.querySelector(`.deck-osc-count[data-deck="${deckId}"]`)
-            if (eqBtn) eqBtn.addEventListener('click', async () => {
-                const ok = await rebind.rebindEq(state.decks[deckId], programForDeck(deckId))
-                if (ok) {
-                    flashRebindBtn(eqBtn)
-                    audio.refreshDeckStates()
-                    resetCollaborativeDeckText(deckId, { syncOpen: false })
-                    clearDeckEditorError(deckId)
-                    publishDeckDsl(deckId, 'rebind:eq')
-                    syncDeckEditor(deckId)
-                } else {
-                    toast(`${deckId}: no rebindable params`)
-                }
-            })
-            if (midiBtn) midiBtn.addEventListener('click', async () => {
-                const ok = await rebind.rebindMidi(state.decks[deckId])
-                if (ok) {
-                    flashRebindBtn(midiBtn)
-                    resetCollaborativeDeckText(deckId, { syncOpen: false })
-                    clearDeckEditorError(deckId)
-                    publishDeckDsl(deckId, 'rebind:midi')
-                    syncDeckEditor(deckId)
-                } else {
-                    toast(`${deckId}: no rebindable params`)
-                }
-            })
+            if (eqBtn) eqBtn.addEventListener('click', () => rebindDeck(deckId, 'eq'))
+            if (midiBtn) midiBtn.addEventListener('click', () => rebindDeck(deckId, 'midi'))
             if (bpBtn) bpBtn.addEventListener('click', () => {
-                state.decks[deckId].rebind.bandpass = !state.decks[deckId].rebind.bandpass
-                updateBandpassBtn(deckId)
-                persistRebindUiState()
+                setRebindOptions(deckId, { bandpass: !state.decks[deckId].rebind.bandpass })
             })
             if (oscBtn) oscBtn.addEventListener('click', () => {
                 const r = state.decks[deckId].rebind
-                r.oscillatorCount = ((r.oscillatorCount || 0) + 1) % 5
-                updateOscCountBtn(deckId)
-                persistRebindUiState()
+                setRebindOptions(deckId, { oscillatorCount: ((r.oscillatorCount || 0) + 1) % 5 })
             })
             updateBandpassBtn(deckId)
             updateOscCountBtn(deckId)
@@ -1278,11 +1304,23 @@ async function boot() {
         sel.setOptions(MIXERS.map(m => ({ value: m.id, text: m.label })))
         sel.setAttribute('value', mixer.currentMixer.id)
 
-        sel.addEventListener('change', async () => {
-            await mixer.setMixerEffect(sel.value)
-            mixerControlsPanel?.show(mixer.currentMixer.id)
-            persistMixer()
-        })
+        sel.addEventListener('change', () => selectMixerEffect(sel.value))
+    }
+
+    // Switch to a mixer effect at its defaults, like the mixer picker.
+    async function selectMixerEffect(id) {
+        await mixer.setMixerEffect(id)
+        mixerControlsPanel?.show(mixer.currentMixer.id)
+        const sel = $('mixer-effect')
+        if (sel && sel.value !== mixer.currentMixer.id) sel.value = mixer.currentMixer.id
+        persistMixer()
+    }
+
+    // Set one parameter of the current mixer effect, like its control.
+    function setMixerParam(name, value) {
+        mixer.setOverride(name, value)
+        mixerControlsPanel?.show(mixer.currentMixer.id)
+        persistMixerDebounced()
     }
 
     let mixerControlsPanel = null
@@ -1478,15 +1516,17 @@ async function boot() {
     }
 
     // Auto-VJ toggle (with mutual exclusion against Auto-Mix below)
-    $('automix-toggle').addEventListener('click', () => {
-        const on = autoMix.toggle()
+    function setAutoVj(on) {
+        if (autoMix.enabled === on) return
+        autoMix.setEnabled(on)
         $('automix-toggle').dataset.state = on ? 'on' : 'off'
         if (on && autoXfade.enabled) {
             autoXfade.setEnabled(false)
             updateAutoXfadeToggleUi()
             persistAutoXfade()
         }
-    })
+    }
+    $('automix-toggle').addEventListener('click', () => setAutoVj(!autoMix.enabled))
 
     // ── Auto-Mix UI wiring ───────────────────────────────────────────
     const autoXfadeToggleEl = $('automixer-toggle')
@@ -1506,32 +1546,35 @@ async function boot() {
     syncAutoXfadeSourceUi()
     updateAutoXfadeToggleUi()
 
-    autoXfadeToggleEl.addEventListener('click', () => {
-        autoXfade.setEnabled(!autoXfade.enabled)
+    function setAutoXfadeEnabled(on) {
+        autoXfade.setEnabled(on)
         updateAutoXfadeToggleUi()
         // The onEnableChange wiring above already disables autoMix when
         // autoXfade goes on; mirror its pill state here.
         $('automix-toggle').dataset.state = autoMix.enabled ? 'on' : 'off'
         persistAutoXfade()
-    })
+    }
+    autoXfadeToggleEl.addEventListener('click', () => setAutoXfadeEnabled(!autoXfade.enabled))
 
-    autoXfadeSourceEl.addEventListener('change', () => {
-        const v = autoXfadeSourceEl.value
+    // `v` is a source control value: 'osc:0', 'audio:low', 'midi:0'.
+    function setAutoXfadeSource(v) {
         const [kind, rest] = v.split(':')
         if (kind === 'osc') autoXfade.setSource({ kind: 'osc', oscType: parseInt(rest, 10) })
         else if (kind === 'audio') autoXfade.setSource({ kind: 'audio', band: rest })
         else if (kind === 'midi') autoXfade.setSource({ kind: 'midi', channel: parseInt(rest, 10) })
         persistAutoXfade()
-    })
+    }
+    autoXfadeSourceEl.addEventListener('change', () => setAutoXfadeSource(autoXfadeSourceEl.value))
     $('automix-bars').addEventListener('change', (e) => {
         autoMix.setBarsPerScene(clampBarsPerScene(e.target.value))
     })
-    $('automix-curve').addEventListener('change', (e) => {
-        state.curve = parseCrossfadeCurve(e.target.value)
+    function setCrossfadeCurve(value) {
+        state.curve = parseCrossfadeCurve(value)
         autoMix.setCurve(state.curve)
         compositor.setCurve(state.curve)
         persistCurve()
-    })
+    }
+    $('automix-curve').addEventListener('change', (e) => setCrossfadeCurve(e.target.value))
 
     // Crossfade curve persistence — the VJ's preferred curve feel
     // (linear / dipped / sharp / cut) survives a page reload so a gig
@@ -1588,6 +1631,10 @@ async function boot() {
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
     $('about-btn').addEventListener('click', () => aboutDialog.show())
     $('go-online-btn').addEventListener('click', () => $('seance-dialog')?.show())
+    $('connect-agent-btn').addEventListener('click', () => {
+        online?.syncStatusUi?.()
+        $('agent-connect-dialog')?.show?.()
+    })
     document.addEventListener('fullscreenchange', () => {
         const inFullscreen = !!document.fullscreenElement
         document.getElementById('app').classList.toggle('fullscreen-main', inFullscreen)
@@ -1791,25 +1838,30 @@ async function boot() {
     // Quick-toggle audio/MIDI from the topbar pills. Audio enable falls
     // back to the OS default mic — once permission is granted, the device
     // dropdown in settings repopulates with labelled devices so users can
-    // pick a specific input.
-    $('audio-status').addEventListener('click', async () => {
-        if (audio.enabled) {
-            await audio.disable()
-        } else {
+    // pick a specific input. setAudioInput resolves to whether audio input
+    // is on.
+    async function setAudioInput(on) {
+        if (!on) {
+            if (audio.enabled) await audio.disable()
+        } else if (!audio.enabled) {
             const ok = await audio.enable('')
             if (!ok) toast('audio: enable failed (check mic permission)')
             else await refreshAudioDevices()
         }
-    })
+        return audio.enabled
+    }
+    $('audio-status').addEventListener('click', () => setAudioInput(!audio.enabled))
     $('midi-status').addEventListener('click', async () => {
         const on = await midi.toggle()
         $('midi-enable').textContent = on ? 'disable MIDI' : 'enable MIDI'
     })
     $('midi-clock-enable').checked = midi.followClock
-    $('midi-clock-enable').addEventListener('change', (e) => {
-        midi.followClock = e.target.checked
+    function setFollowMidiClock(on) {
+        midi.followClock = on
+        if ($('midi-clock-enable').checked !== on) $('midi-clock-enable').checked = on
         toast(midi.followClock ? 'following MIDI clock for BPM' : 'BPM is manual / tap')
-    })
+    }
+    $('midi-clock-enable').addEventListener('change', (e) => setFollowMidiClock(e.target.checked))
     // <label>-for-input association doesn't work with custom elements,
     // so forward clicks on the row's text span to the inner toggle.
     for (const row of document.querySelectorAll('.checkbox-row')) {
@@ -1824,29 +1876,11 @@ async function boot() {
 
     // MIDI learn rows
     registerMidiControls(midi, {
-        crossfader: (v01) => {
-            cancelXfadeAnimation()
-            xfadeNudgeTracker.reset()
-            state.crossfade = v01
-            compositor.setCrossfade(v01)
-            xfaderEl.value = String(v01)
-            updateLiveIndicator()
-            autoMix.noteUserOverride()
-        },
+        crossfader: moveCrossfader,
         crossfaderValue: () => state.crossfade,
-        speedA: (v01) => {
-            const s = 0.1 + v01 * 3.9
-            state.decks.A.setSpeed(s)
-            $('speed-a').value = String(s)
-            $('speed-a-val').textContent = `${s.toFixed(1)}×`
-        },
+        speedA: (v01) => setDeckSpeed('A', 0.1 + v01 * 3.9),
         speedAValue: () => (state.decks.A.speed - 0.1) / 3.9,
-        speedB: (v01) => {
-            const s = 0.1 + v01 * 3.9
-            state.decks.B.setSpeed(s)
-            $('speed-b').value = String(s)
-            $('speed-b-val').textContent = `${s.toFixed(1)}×`
-        },
+        speedB: (v01) => setDeckSpeed('B', 0.1 + v01 * 3.9),
         speedBValue: () => (state.decks.B.speed - 0.1) / 3.9,
         fxToggle: (name) => toggleFx(name),
         fxFlash: () => toggleFx('flash'),
@@ -1896,8 +1930,7 @@ async function boot() {
     $('midi-learn-clear').addEventListener('click', () => midi.clearAllAssignments())
 
     // Main resolution / loop / WebGPU
-    $('main-resolution').addEventListener('change', (e) => {
-        const [w, h] = e.target.value.split('x').map(Number)
+    function setMainResolution(w, h) {
         state.mainRes = { width: w, height: h }
         state.decks.A.resize(w, h)
         state.decks.B.resize(w, h)
@@ -1905,11 +1938,16 @@ async function boot() {
         compositor.resize(w, h)
         $('main-res').textContent = `${w}×${h}`
         toast(`main: ${w}×${h}`)
+    }
+    $('main-resolution').addEventListener('change', (e) => {
+        const [w, h] = e.target.value.split('x').map(Number)
+        setMainResolution(w, h)
     })
     const webgpuToggle = $('prefer-webgpu')
     webgpuToggle.checked = state.preferWebGPU
-    webgpuToggle.addEventListener('change', (e) => {
-        state.preferWebGPU = e.target.checked === true
+    function setPreferWebGPU(on) {
+        state.preferWebGPU = on === true
+        if (webgpuToggle.checked !== state.preferWebGPU) webgpuToggle.checked = state.preferWebGPU
         persistRendererPrefs()
         toast(state.preferWebGPU
             ? 'WebGPU preferred on next reload'
@@ -1918,7 +1956,8 @@ async function boot() {
         // unchanged for now — repaint anyway so the indicator stays
         // truthful if the operator toggles with the drawer open.
         refreshActiveRenderer()
-    })
+    }
+    webgpuToggle.addEventListener('change', (e) => setPreferWebGPU(e.target.checked === true))
     // FPS readout
     setInterval(() => {
         fpsEl.textContent = String(compositor.fps)
@@ -2269,10 +2308,25 @@ async function boot() {
         }[c]))
     }
 
+    // Resolves to the problems that kept parts of the scene from restoring.
     async function recallScene(scene) {
         toast(`recall: ${scene.name}`)
         const errors = await Scenes.apply(scene, applyAccessors())
         if (errors.length) toast(`recall had errors: ${errors[0].slice(0, 60)}`, 4000)
+        return errors
+    }
+
+    // Rename a scene like the rename control: same checks, same toast.
+    function renameScene(oldName, newName) {
+        const res = scenes.rename(oldName, newName)
+        if (res.ok && !res.unchanged) toast(`renamed: ${res.name}`)
+        return res
+    }
+
+    // Delete a scene by name. The delete button asks for confirmation first.
+    function deleteScene(name) {
+        if (editingSceneName === name) editingSceneName = null
+        return scenes.delete(name)
     }
 
     // state.curve is initialized in the state literal above and kept in
@@ -2406,13 +2460,9 @@ async function boot() {
     // Saves run one after another, in click order, so an earlier click
     // never finishes last and overwrites a later one.
     let sceneSaves = Promise.resolve()
-    $('scene-save').addEventListener('click', () => {
-        const name = sceneNameInput.value
-        if (!name.trim()) {
-            toast('name your scene first')
-            sceneNameInput.focus()
-            return
-        }
+    // Save the live state as scene `name`. Resolves to { ok: true, name } or
+    // { ok: false, error, message } after the toast that tells the user.
+    function saveScene(name) {
         let snap
         let images
         try {
@@ -2420,12 +2470,12 @@ async function boot() {
             images = Scenes.imageFiles(snap, state.decks)
         } catch (error) {
             toast(`Could not save scene: ${error.message}`, 5000)
-            return
+            return Promise.resolve({ ok: false, error: 'capture', message: error.message })
         }
         sceneSaves = sceneSaves.then(async () => {
             if (scenes.scenes.length >= MAX_SCENES && !scenes.byName(name.trim().slice(0, 40))) {
                 toast('scene list is full — delete or rename a scene first', 5000)
-                return
+                return { ok: false, error: 'full', message: 'the scene list is full' }
             }
             // On a full profile there is room only once older scenes' images
             // have moved out of localStorage, which starts at page load.
@@ -2438,16 +2488,30 @@ async function boot() {
                 await storeSceneImages([...images, ...inline])
             } catch (error) {
                 toast(`Could not save scene: ${error.message}`, 5000)
-                return
+                return { ok: false, error: 'images', message: error.message }
             }
             if (!scenes.save(name, snap)) {
                 toast('Could not save scene: browser storage is full or unavailable', 5000)
-                return
+                return { ok: false, error: 'storage', message: 'browser storage is full or unavailable' }
             }
             // Keep a name typed for the next save while this one ran.
             if (sceneNameInput.value === name) sceneNameInput.value = ''
             toast(`saved: ${name.trim()}`)
-        }).catch(error => console.error('[Scenes] save failed', error))
+            return { ok: true, name: name.trim().slice(0, 40) }
+        }).catch(error => {
+            console.error('[Scenes] save failed', error)
+            return { ok: false, error: 'internal', message: error?.message || String(error) }
+        })
+        return sceneSaves
+    }
+    $('scene-save').addEventListener('click', () => {
+        const name = sceneNameInput.value
+        if (!name.trim()) {
+            toast('name your scene first')
+            sceneNameInput.focus()
+            return
+        }
+        saveScene(name)
     })
     sceneNameInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -2646,6 +2710,103 @@ async function boot() {
         if (document.hidden) xfadeNudgeTracker.reset()
     })
 
+    // Agent API (js/agent/): window.VisualizeAgent, WebMCP tools, the
+    // ?agent=1 command form and the Seance relay. Each function below runs
+    // the code behind a control, so an agent's change updates the same
+    // labels, editors, online documents and stored settings as a person's.
+    bootstrapAgent({
+        state,
+        decks: state.decks,
+        library,
+        scenes,
+        mixer,
+        mixerStartup,
+        mixerControls: () => mixerControlsPanel,
+        compositor,
+        audio,
+        midi,
+        scheduler,
+        autoMix,
+        autoXfade,
+        recorder,
+        userEffects,
+        mainCanvas: $('main-canvas'),
+        online: () => online,
+        sessionText: (deckId) => online?.sessionText?.(deckId) ?? null,
+        hasLiveMedia: (deckId) => deckMedia[deckId].hasLiveMedia,
+        imageTools: () => import(PORTABLE_IMAGES_URL),
+        programText: collaborativeDeckText,
+        loadProgram,
+        setProgramIncluded: (title, included) => {
+            library.setIncluded(title, included)
+            for (const card of document.querySelectorAll('.program-card')) {
+                if (card.dataset.title !== title) continue
+                const toggle = card.querySelector('.pc-include')
+                if (!toggle) continue
+                toggle.checked = library.isIncluded(title)
+                card.dataset.excluded = toggle.checked ? '0' : '1'
+            }
+        },
+        setDeckSpeed,
+        setDeckDensity,
+        setRebindOptions,
+        rebindDeck,
+        moveCrossfader,
+        autoFade,
+        setCrossfadeCurve: (curve) => {
+            setCrossfadeCurve(curve)
+            $('automix-curve').value = state.curve
+        },
+        setFadeSeconds: (seconds) => {
+            state.fadeDurSec = seconds
+            autoMix.setFadeDurationSec(seconds)
+            if (fadeDurEl) fadeDurEl.value = seconds
+        },
+        selectMixerEffect,
+        setMixerParam,
+        toggleFx,
+        setAutoVj,
+        setAutoVjBars: (bars) => {
+            autoMix.setBarsPerScene(bars)
+            $('automix-bars').value = String(autoMix.barsPerScene)
+        },
+        setAutoMixEnabled: setAutoXfadeEnabled,
+        setAutoMixSource: (key) => {
+            setAutoXfadeSource(key)
+            syncAutoXfadeSourceUi()
+        },
+        setBpm: (bpm) => { tempoBar.bpm = bpm },
+        setDivider: (divider) => { tempoBar.divider = divider },
+        tapTempo: doTap,
+        resetTempoPhase: () => {
+            if (phaseResetBtn) phaseResetBtn.click()
+            else {
+                tempoBar.resetPhase()
+                syncDecksToScheduler()
+            }
+        },
+        setFollowMidiClock,
+        setMainResolution: (width, height) => {
+            setMainResolution(width, height)
+            $('main-resolution').value = `${width}x${height}`
+        },
+        setPreferWebGPU,
+        saveScene,
+        recallScene,
+        renameScene,
+        deleteScene,
+        setAudioInput,
+        setMidiInput: async (on) => {
+            if (midi.enabled === on) return
+            const now = await midi.toggle()
+            $('midi-enable').textContent = now ? 'disable MIDI' : 'enable MIDI'
+        },
+        setRecording: (on) => {
+            if (Recorder.isSupported() && recorder.isRecording !== on) recorder.toggle()
+            return recorder.isRecording
+        },
+    })
+
     // Initial load: restore the last saved working set when one exists, so
     // a reload (or crash) resumes the operator's live set instead of a
     // fresh random pair; otherwise pre-fill A/B with two random programs.
@@ -2690,6 +2851,16 @@ async function boot() {
                     return prepared
                 },
                 imageBlob: async image => (await import(PORTABLE_IMAGES_URL)).imageToBlob(image),
+                // Agent requests in the session reach this tab through the
+                // SDK's own socket (js/agent/relay.js).
+                createAgentRelay: ({ BaseSocket, uploadImage, onAgent }) =>
+                    createSeanceAgentRelay({ appVersion: APP_VERSION, BaseSocket, uploadImage, onAgent }),
+                agentDialog: $('agent-connect-dialog'),
+                agentPrompt: sessionUrl => handfish.agentConnectPrompt?.({
+                    app: 'Visualize',
+                    contractUrl: 'https://visualize.noisedeck.app/llms-full.txt',
+                    sessionUrl,
+                }) || '',
                 dialog: $('seance-dialog'),
                 toast,
                 location: window.location,
@@ -2767,6 +2938,8 @@ async function boot() {
         // share dialog — the operator already made their choice.
         clearCodeFromUrl()
     }
+
+    markAgentReady()
 
     // The decks are up and the app is usable, so say so BEFORE joining a
     // session. The toast is a single slot: announcing readiness after the join
@@ -3196,4 +3369,4 @@ function renderLearnRows(rows, midi) {
 boot().catch((err) => {
     console.error('boot failed', err)
     toast('boot failed — see console')
-})
+}).finally(markAgentReady)

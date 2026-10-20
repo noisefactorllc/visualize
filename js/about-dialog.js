@@ -5,7 +5,7 @@
 
 import { AboutDialog } from 'handfish'
 
-const APP_VERSION = '0.1.0-SNAPSHOT'
+export const APP_VERSION = '0.1.0-SNAPSHOT'
 
 const about = new AboutDialog({
     name: 'Visualize',

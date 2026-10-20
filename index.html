@@ -20,10 +20,11 @@
         {
             "imports": {
                 "handfish": "https://handfish.noisefactor.io/0/handfish.esm.min.js",
-                "/js/app.js": "/js/app.js?v=seance-0.2.2",
+                "/js/about-dialog.js": "/js/about-dialog.js?v=agent-1",
+                "/js/app.js": "/js/app.js?v=agent-1",
                 "/js/automix.js": "/js/automix.js?v=seance-0.2.2",
                 "/js/noisemaker/deck.js": "/js/noisemaker/deck.js?v=seance-0.2.2",
-                "/js/onlineCollaboration.js": "/js/onlineCollaboration.js?v=seance-0.2.2",
+                "/js/onlineCollaboration.js": "/js/onlineCollaboration.js?v=agent-1",
                 "/js/rebind.js": "/js/rebind.js?v=seance-0.2.2",
                 "/js/scenes.js": "/js/scenes.js?v=seance-0.2.2"
             }
@@ -222,6 +223,7 @@
                 <button class="hf-icon-btn tooltip" id="fullscreen-toggle" data-title="Fullscreen main (F)" aria-label="Toggle fullscreen"><span class="hf-icon">fullscreen</span></button>
                 <button class="hf-icon-btn tooltip" id="about-btn" data-title="About Visualize" aria-label="About Visualize"><span class="hf-icon">info</span></button>
                 <button class="hf-icon-btn tooltip" id="go-online-btn" data-title="Collaborate online" aria-label="Online collaboration" hidden></button>
+                <button class="hf-icon-btn tooltip" id="connect-agent-btn" data-title="connect agent..." aria-label="connect agent..." hidden><span class="hf-icon">smart_toy</span></button>
             </div>
         </header>
 
@@ -683,6 +685,7 @@
 
     <seance-dialog id="seance-dialog" heading="Go Online"
         copy="Share this set live. Taking it online creates a session anyone with the link can join."></seance-dialog>
+    <agent-connect-dialog id="agent-connect-dialog"></agent-connect-dialog>
 
     <dialog id="sync-output-dialog" class="sync-output-dialog" aria-labelledby="sync-output-title" aria-describedby="sync-output-description sync-output-preview">
         <div class="sync-output-titlebar">
@@ -811,6 +814,6 @@
         })
     })()
     </script>
-    <script type="module" src="js/app.js?v=seance-0.2.2"></script>
+    <script type="module" src="js/app.js?v=agent-1"></script>
 </body>
 </html>

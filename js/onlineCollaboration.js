@@ -80,6 +80,9 @@ class VisualizeOnlineController {
         prepareImages,
         imageBlob,
         validatePublication = () => true,
+        createAgentRelay,
+        agentDialog,
+        agentPrompt,
         dialog,
         toast = () => {},
         location = globalThis.location,
@@ -107,6 +110,11 @@ class VisualizeOnlineController {
         this.prepareImages = prepareImages
         this.imageBlob = imageBlob
         this.validatePublication = validatePublication
+        this.createAgentRelay = createAgentRelay
+        this.agentRelay = null
+        // The shared connect-agent dialog (handfish <agent-connect-dialog>).
+        this.agentDialog = agentDialog
+        this.agentPrompt = agentPrompt
         this._preparedImageText = new Map()
         this._imageVersions = new Map()
         this._uploadedImages = new Set()
@@ -268,6 +276,7 @@ class VisualizeOnlineController {
             }
             await this.online.takeOnline(images.size ? { docs, images: [...images.values()] } : docs)
             if (version !== this._actionVersion) return
+            this.agentRelay?.sessionCreated(this.online.getSessionId())
             for (const id of images.keys()) this._uploadedImages.add(id)
             this._writeSessionToUrl(this.online.getSessionId())
             this.syncStatusUi()
@@ -316,6 +325,7 @@ class VisualizeOnlineController {
     goOffline() {
         this._actionVersion++
         this._closeActiveSession()
+        if (this.agentDialog) this.agentDialog.connected = false
         this._writeSessionToUrl(null)
         this.syncStatusUi()
         this.toast('online session closed')
@@ -333,6 +343,19 @@ class VisualizeOnlineController {
         return this._writeSessionToUrlString(this.getSessionId())
     }
 
+    /**
+     * The text of a deck's document as the session holds it, or null when the
+     * session has no such document. This is what everyone in the session
+     * sees; a deck's local draft can differ.
+     */
+    sessionText(deckId) {
+        const layer = this.online
+        if (!layer?.docs || !['online', 'readonly'].includes(this.getStatus())) return null
+        const docId = layer._resolveDocId?.(DECK_DOC_IDS[deckId]) ?? DECK_DOC_IDS[deckId]
+        const doc = layer.docs.get(docId)
+        return doc?.available ? doc.serverText : null
+    }
+
     syncStatusUi() {
         if (!this.dialog) return
         const status = this.getStatus()
@@ -346,6 +369,10 @@ class VisualizeOnlineController {
         this.dialog.state = onlineStatus ? status : (status === 'connecting' ? 'connecting' : 'offline')
         this.dialog.sessionId = onlineStatus ? sessionId : ''
         this.dialog.sessionUrl = shareUrl
+        if (this.agentDialog) {
+            this.agentDialog.state = this.dialog.state
+            this.agentDialog.prompt = shareUrl && this.agentPrompt ? this.agentPrompt(shareUrl) : ''
+        }
     }
 
     async _ensureOnline() {
@@ -354,13 +381,23 @@ class VisualizeOnlineController {
 
         this._onlinePromise = import(this.sdkUrl)
             .then((sdk) => {
+                // An agent in the session reaches this tab over the SDK's own
+                // socket: the agent relay wraps the socket class the SDK would use.
+                this.agentRelay = this.createAgentRelay?.({
+                    BaseSocket: this.runtimeConfig.WebSocket || globalThis.WebSocket,
+                    uploadImage: blob => this.online.uploadImage(blob),
+                    onAgent: () => {
+                        if (this.agentDialog) this.agentDialog.connected = true
+                    },
+                }) || null
+                const SocketClass = this.agentRelay?.WebSocket || this.runtimeConfig.WebSocket
                 this.online = sdk.createOnlineDslLayer({
                     seanceUrl: this.seanceUrl,
                     defaultDocId: DECK_DOC_IDS.A,
                     location: this.location,
                     publicAppUrl: this.location?.href,
                     ...(this.runtimeConfig.fetch ? { fetch: this.runtimeConfig.fetch } : {}),
-                    ...(this.runtimeConfig.WebSocket ? { WebSocket: this.runtimeConfig.WebSocket } : {}),
+                    ...(SocketClass ? { WebSocket: SocketClass } : {}),
                     ...(this.runtimeConfig.anonToken ? { anonToken: this.runtimeConfig.anonToken } : {}),
                     ...(this.runtimeConfig.connectionId ? { connectionId: this.runtimeConfig.connectionId } : {}),
                 })
@@ -424,6 +461,12 @@ class VisualizeOnlineController {
             this.joinSession(event.detail?.sessionId)
         })
         dialog?.addEventListener('go-offline', () => this.goOffline())
+        // The connect-agent dialog's Go Online step takes the set online the
+        // same way the go-online dialog does.
+        const agentDialog = this.agentDialog
+        agentDialog?.addEventListener('go-online', () => this.takeOnline())
+        agentDialog?.addEventListener('copy-failed', () => this.toast('failed to copy the prompt', 5000))
+        agentDialog?.addEventListener('connected', () => this.toast('Agent connected'))
         dialog?.addEventListener('copy-url', async (event) => {
             const url = event.detail?.sessionUrl || this.getShareUrl()
             if (!url) return

@@ -57,9 +57,13 @@ test('end-to-end smoke', async ({ page }) => {
     await expect(page.locator('html')).toHaveAttribute('data-language', 'industrial')
     // Colored logotype wordmark, ALL CAPS.
     await expect(page.locator('.hf-logotype .hf-logotype-text')).toHaveText('VISUALIZE')
-    // Top-bar icon cluster: settings, fullscreen, about, and collaboration.
-    await expect(page.locator('.hf-topbar-cluster .hf-icon-btn')).toHaveCount(4)
+    // Top-bar icon cluster: settings, fullscreen, about, collaboration, and
+    // connect agent.
+    await expect(page.locator('.hf-topbar-cluster .hf-icon-btn')).toHaveCount(5)
     await expect(page.locator('#go-online-btn')).toBeVisible()
+    // It shows when the handfish that the page loads has the connect-agent dialog.
+    const agentDialog = await page.evaluate(() => Boolean(customElements.get('agent-connect-dialog')))
+    await expect(page.locator('#connect-agent-btn')).toBeVisible({ visible: agentDialog })
     // The <tempo-bar> component replaced the inline tempo DOM and bound its
     // scheduler to the app's test hook.
     await expect(page.locator('tempo-bar .tempo-bar__bpm')).toBeVisible()
