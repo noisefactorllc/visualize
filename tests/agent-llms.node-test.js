@@ -5,6 +5,7 @@
 // agent API returns, and documented defaults match the handlers.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFile, readdir } from 'node:fs/promises'
 import { COMMAND_GROUPS } from '../js/agent/descriptions.js'
 import { SCHEMAS, validate } from '../js/agent/schemas.js'
@@ -31,14 +32,13 @@ test('every command has a handler in commands.js', async () => {
     assert.deepEqual(Object.keys(SCHEMAS).filter(name => !handlers.has(name)), [])
 })
 
+// The shared nf-agent/1 relay, byte for byte. Update it only by copying the
+// reviewed relay, and update this digest with it.
+const SHARED_RELAY_SHA256 = 'fe245367d3432f8ee4481d6dd820ecb3700d1b765fcbe43bfed90039600c2828'
+
 test('the relay copy is the shared agent relay (nf-agent/1)', async () => {
-    const relay = await readFile(new URL('relay.js', AGENT_DIR), 'utf8')
-    assert.match(relay, /export const RELAY = 'nf-agent\/1'/)
-    // Only the tab that created the session answers, while it owns the
-    // session, and '*' reaches only describe.
-    assert.match(relay, /const answering = \(\) => Boolean\(self\) && self === owner && created\.has\(session\)/)
-    assert.match(relay, /\} else if \(frame\.to !== tabId\) \{\n\s+return/)
-    assert.match(relay, /import \{ API_VERSION, makeFailure, makeSuccess \} from '\.\/dispatcher\.js'/)
+    const relay = await readFile(new URL('relay.js', AGENT_DIR))
+    assert.equal(createHash('sha256').update(relay).digest('hex'), SHARED_RELAY_SHA256)
 })
 
 test('llms-full.txt matches a fresh render (run node scripts/build-llms-full.mjs)', async () => {
