@@ -18,6 +18,7 @@ const LIGHT_PROGRAMS = [
     { title: 'agent red', tagline: 'red test program', tint: '#ff0000', tags: ['abstract', 'bass'], category: 'abstract', dsl: RED },
     { title: 'agent green', tagline: 'green test program', tint: '#00ff00', tags: ['abstract'], category: 'abstract', dsl: GREEN },
     { title: 'agent blue', tagline: 'blue test program', tint: '#0000ff', tags: ['geometric'], category: 'geometric', dsl: BLUE },
+    { title: 'agent noise', tagline: 'noise test program', tint: '#888888', tags: ['geometric'], category: 'geometric', dsl: 'search synth\nnoise(seed: 7, ridges: true).write(o0)\nrender(o0)' },
     { title: 'Camera Input', tagline: 'utility', tint: '#888888', tags: ['util'], mediaSource: 'camera', dsl: 'search synth\nmedia().write(o0)\nrender(o0)' },
 ]
 
@@ -167,9 +168,9 @@ test('library commands load programs like the cards and the shuffle buttons', as
             random: random.result.programs,
         }
     })
-    expect(out.search.total).toBe(3)
+    expect(out.search.total).toBe(4)
     expect(out.search.programs[0]).toEqual({ title: 'agent red', tagline: 'red test program', category: 'abstract', tags: ['abstract', 'bass'], autoVj: true })
-    expect(out.geometric).toEqual(['agent blue'])
+    expect(out.geometric).toEqual(['agent blue', 'agent noise'])
     expect(out.program.dsl).toBe(BLUE)
     expect(out.load).toEqual({ deck: 'A', title: 'agent blue' })
     expect(out.label).toBe('agent blue')
@@ -180,9 +181,8 @@ test('library commands load programs like the cards and the shuffle buttons', as
     expect(out.util.result.included).toBe(false)
     expect(out.util.warnings).toEqual(['Utility programs are never in the Auto-VJ pool.'])
     // agent green is out of the pool and Camera Input is a utility.
-    expect(new Set([out.random.A, out.random.B])).toEqual(new Set(['agent red', 'agent blue']))
-    await expect.poll(() => canvasPixel(page, 'A'))
-        .toEqual(out.random.A === 'agent red' ? [255, 0, 0, 255] : [0, 0, 255, 255])
+    for (const title of [out.random.A, out.random.B]) expect(['agent red', 'agent blue', 'agent noise']).toContain(title)
+    expect(out.random.A).not.toBe(out.random.B)
 })
 
 test('control commands move the same controls as the person', async ({ page }) => {
@@ -305,4 +305,35 @@ test('browser-only commands turn audio input on and save a recording as a downlo
     ])
     expect(stopped.result).toEqual({ recording: false })
     expect(download.suggestedFilename()).toMatch(/\.(webm|mp4)$/)
+})
+
+test('a program that fails after it installs puts the previous program back as it was', async ({ page }) => {
+    await openVisualize(page)
+    const out = await page.evaluate(async () => {
+        const A = window.VisualizeAgent
+        const deck = window.__visualize.decks.B
+        await A.loadProgram({ title: 'agent noise', deck: 'B' })
+        const rebound = await A.rebind({ deck: 'B', kind: 'midi' })
+        const before = {
+            dsl: deck.currentDsl, title: deck.currentName, overrides: JSON.stringify(deck.rebind.overrides),
+            original: deck.rebind.originalDsl, tagline: document.getElementById('deck-b-tagline').textContent,
+        }
+        // An image the deck holds whose bytes do not decode: the program
+        // compiles and installs, then the image fails to bind.
+        const id = 'f'.repeat(64)
+        deck.images.push({ id, blob: new Blob(['not an image'], { type: 'image/png' }), mimeType: 'image/png', width: 1, height: 1 })
+        const failed = await A.setProgram({ deck: 'B', dsl: `search synth\nmedia(url: "image:${id}").write(o0)\nrender(o0)` })
+        return {
+            rebound: rebound.result.applied, failed: failed.error?.code, before,
+            after: {
+                dsl: deck.currentDsl, title: deck.currentName, overrides: JSON.stringify(deck.rebind.overrides),
+                original: deck.rebind.originalDsl, tagline: document.getElementById('deck-b-tagline').textContent,
+            },
+        }
+    })
+    expect(out.rebound).toBe(true)
+    expect(out.failed).toBe('COMPILE_FAILED')
+    expect(out.before.tagline).toBe('noise test program')
+    expect(out.before.overrides).not.toBe('{}')
+    expect(out.after).toEqual(out.before)
 })

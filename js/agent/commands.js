@@ -212,7 +212,7 @@ async function ensureImages(dsl, deckId, ctx, via) {
 
 async function runProgram(deckId, program, ctx) {
     const deck = ctx.decks[deckId]
-    const before = { dsl: deck.currentDsl, title: deck.currentName }
+    const before = ctx.captureDeckProgram(deckId)
     const res = await ctx.loadProgram(deckId, program)
     if (res?.superseded) {
         throw commandError('CONFLICT_SUPERSEDED',
@@ -220,8 +220,9 @@ async function runProgram(deckId, program, ctx) {
     }
     if (!res?.success) {
         // A deck that installed the program and then failed to bind its
-        // image would keep the new program; put the previous one back.
-        if (before.dsl && deck.currentDsl !== before.dsl) await ctx.loadProgram(deckId, before)
+        // image would keep the new program; put the previous one back, with
+        // its tagline and rebound parameters.
+        if (before.running && deck.currentDsl !== before.running) await ctx.restoreDeckProgram(deckId, before)
         throw commandError('COMPILE_FAILED',
             `The renderer rejected the program. Deck ${deckId} still runs its previous program. ${res?.error || ''}`.trim(),
             { deck: deckId })

@@ -939,6 +939,34 @@ async function boot() {
         return res
     }
 
+    // The program a deck runs, as loadProgram and the rebind buttons left it,
+    // so that restoreDeckProgram can put it back after a failed load.
+    function captureDeckProgram(deckId) {
+        const deck = state.decks[deckId]
+        return {
+            title: deck.currentName,
+            tagline: deckLabels[deckId]?.tag.textContent || '',
+            dsl: deck.rebind.originalDsl || deck.currentDsl,
+            running: deck.currentDsl,
+            overrides: JSON.parse(JSON.stringify(deck.rebind.overrides || {})),
+        }
+    }
+
+    // Load a captured program again: its title, tagline and text, then its
+    // rebound parameters. Resolves to the load result.
+    async function restoreDeckProgram(deckId, saved) {
+        const deck = state.decks[deckId]
+        const res = await loadProgram(deckId, { title: saved.title, tagline: saved.tagline, dsl: saved.dsl })
+        if (!res?.success || !Object.keys(saved.overrides).length) return res
+        deck.rebind.overrides = saved.overrides
+        if (await rebind.applyRebinds(deck)) {
+            resetCollaborativeDeckText(deckId, { syncOpen: false })
+            publishDeckDsl(deckId, 'restore')
+            syncDeckEditor(deckId)
+        }
+        return res
+    }
+
     function updateDensityButton(deckId) {
         const btn = $(`deck-${deckId.toLowerCase()}-density`)
         if (!btn) return
@@ -2796,6 +2824,8 @@ async function boot() {
         imageTools: () => import(PORTABLE_IMAGES_URL),
         programText: collaborativeDeckText,
         loadProgram,
+        captureDeckProgram,
+        restoreDeckProgram,
         setProgramIncluded: (title, included) => {
             library.setIncluded(title, included)
             for (const card of document.querySelectorAll('.program-card')) {
