@@ -1693,6 +1693,15 @@ async function boot() {
         button.hidden = !onlineCollaborationEnabled || !customElements.get('agent-connect-dialog')
             || !(online?.canConnectAgent?.() ?? true)
     }
+    // Online, the session button offers the way back: it opens the session,
+    // where Go Offline is.
+    function refreshGoOnlineButton() {
+        const button = $('go-online-btn')
+        if (!button) return
+        const live = ['online', 'readonly'].includes(online?.getStatus?.())
+        button.dataset.title = live ? 'go offline...' : 'Collaborate online'
+        button.setAttribute('aria-label', live ? 'go offline...' : 'Online collaboration')
+    }
     $('connect-agent-btn').addEventListener('click', () => {
         online?.syncStatusUi?.()
         $('agent-connect-dialog')?.show?.()
@@ -2949,7 +2958,10 @@ async function boot() {
                 createAgentRelay: ({ BaseSocket, uploadImage, onAgent }) =>
                     createSeanceAgentRelay({ appVersion: APP_VERSION, BaseSocket, uploadImage, onAgent }),
                 agentDialog: $('agent-connect-dialog'),
-                onStatusUi: () => refreshConnectAgentButton(),
+                onStatusUi: () => {
+                    refreshConnectAgentButton()
+                    refreshGoOnlineButton()
+                },
                 agentPrompt: sessionUrl => handfish.agentConnectPrompt?.({
                     app: 'Visualize',
                     contractUrl: 'https://visualize.noisedeck.app/llms-full.txt',

@@ -121,6 +121,28 @@ async function waitForOnlineJoin(page) {
     await closeDialog(page)
 }
 
+test('while the set is online, the session button offers going offline', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        const page = await newOnlinePage(context, server)
+        const button = page.locator('#go-online-btn')
+        await expect(button).toHaveAttribute('data-title', 'Collaborate online')
+        await takeOnline(page)
+        await expect(button).toHaveAttribute('data-title', 'go offline...')
+        await expect(button).toHaveAttribute('aria-label', 'go offline...')
+        // It still opens the session, where Go Offline is.
+        await openDialog(page)
+        await page.locator('#seance-dialog [data-action="go-offline"]').click()
+        await expect(page.locator('#seance-dialog .hf-seance-status-text')).toHaveText('Offline')
+        await closeDialog(page)
+        await expect(button).toHaveAttribute('data-title', 'Collaborate online')
+        await expect(button).toHaveAttribute('aria-label', 'Online collaboration')
+    } finally {
+        await context.close()
+    }
+})
+
 test('deck A and deck B sync independently in one Seance session', async ({ browser }) => {
     const server = new FakeSeanceServer()
     const context = await browser.newContext()
