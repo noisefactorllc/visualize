@@ -21,7 +21,7 @@
 import { commandError } from './dispatcher.js'
 import { buildSnapshot, crossfaderSnapshot, deckSnapshot, fxSnapshot, autoMixSourceKey, autoMixSourceName } from './snapshot.js'
 import { BAR_CHOICES } from './schemas.js'
-import { compile as compileDsl, extractEffectNamesFromDsl, getAllEffects, getEffect, stdEnums } from '../noisemaker/bundle.js'
+import { compile as compileDsl, extractEffectNamesFromDsl, getAllEffects, getEffect, lex, stdEnums } from '../noisemaker/bundle.js'
 import { curatedRuntimeDsl } from '../noisemaker/curatedEffects.js'
 import { MIXERS, getMixer as mixerById } from '../mixers.js'
 import { fileInlineImages } from '../sharingLoader.js'
@@ -48,8 +48,8 @@ async function frames(count) {
     for (let i = 0; i < count; i++) await nextFrame()
 }
 
-export async function getState(_args, ctx) {
-    return { result: buildSnapshot(ctx) }
+export async function getState(_args, ctx, via = {}) {
+    return { result: buildSnapshot(ctx, via) }
 }
 
 export async function getProgram({ deck = 'A' }, ctx, via = {}) {
@@ -71,9 +71,19 @@ export async function getProgram({ deck = 'A' }, ctx, via = {}) {
     return { result: { dsl, running: Boolean(current) && current === text } }
 }
 
-// A program that names the `user` namespace: in its search line, or as
-// `user.effect()` or `from(user, ...)`.
-const USER_NAMESPACE = /^\s*search\b[^\n]*\buser\b|\buser\s*\.\s*\w+\s*\(|\bfrom\s*\(\s*user\b/m
+// A program that names the `user` namespace anywhere: in its search list
+// (which can run over several lines), as `user.effect()`, or in
+// `from(user, ...)`. The lexer decides, so layout cannot hide the name. A
+// program that does not lex fails as a syntax error without being compiled.
+function namesUserNamespace(text) {
+    let tokens
+    try {
+        tokens = lex(text)
+    } catch {
+        return false
+    }
+    return tokens.some(token => token.type === 'IDENT' && token.lexeme === 'user')
+}
 
 // The engine sees a program the way a deck compiles it: a curated library
 // program runs its curated form, and media() loses its `url` argument,
@@ -81,7 +91,7 @@ const USER_NAMESPACE = /^\s*search\b[^\n]*\buser\b|\buser\s*\.\s*\w+\s*\(|\bfrom
 // user effects installed in the person's browser, nor learn which exist.
 async function engineProgram(dsl, ctx, via) {
     const runtime = curatedRuntimeDsl(dsl)
-    if (via.remote && USER_NAMESPACE.test(runtime)) {
+    if (via.remote && namesUserNamespace(runtime)) {
         return {
             text: runtime,
             stop: true,
@@ -354,9 +364,13 @@ export async function loadProgram({ title, deck = 'A' }, ctx, via = {}) {
 }
 
 // Like Library.randomExcept: a random Auto-VJ pool program whose title is not
-// in `exclude`, or any pool program when every one is excluded.
+// in `exclude`, or any pool program when every one is excluded. The pool is
+// the person's stored choice, so a session draws from the whole library
+// instead, leaving out utility programs and the user section.
 function randomPoolProgram(library, exclude, via) {
-    const pool = library.programs.filter(p => library.isIncluded(p.title) && !(via.remote && isUserProgram(p)))
+    const pool = library.programs.filter(p => via.remote
+        ? !library.constructor.isUtil(p) && !isUserProgram(p)
+        : library.isIncluded(p.title))
     const eligible = pool.filter(p => !exclude.includes(p.title))
     const from = eligible.length ? eligible : pool
     return from.length ? from[Math.floor(Math.random() * from.length)] : null
@@ -372,7 +386,9 @@ export async function randomize({ deck = 'A' }, ctx, via = {}) {
         picks = { [deck]: randomPoolProgram(library, [decks[deck].currentName], via) }
     }
     if (Object.values(picks).some(program => !program)) {
-        throw commandError('NOT_FOUND_PROGRAM', 'The Auto-VJ pool is empty. Include programs with setAutoVjPool.', {})
+        throw commandError('NOT_FOUND_PROGRAM', via.remote
+            ? 'The library has no program to pick.'
+            : 'The Auto-VJ pool is empty. Include programs with setAutoVjPool.', {})
     }
     await Promise.all(Object.entries(picks).map(([id, program]) => runProgram(id, program, ctx)))
     return { result: { programs: Object.fromEntries(Object.entries(picks).map(([id, program]) => [id, program.title])) } }
@@ -391,7 +407,11 @@ function deckControls(ctx, deck) {
     return { deck, speed, density, bandpass, oscillators }
 }
 
-export async function setDeck({ deck = 'A', speed, density, bandpass, oscillators }, ctx) {
+// A change from a session is live only: it does not overwrite the person's
+// stored settings.
+const storing = via => ({ persist: !via.remote })
+
+export async function setDeck({ deck = 'A', speed, density, bandpass, oscillators }, ctx, via = {}) {
     if (speed !== undefined) ctx.setDeckSpeed(deck, speed)
     if (density !== undefined) {
         ctx.setDeckDensity(deck, density === 'auto'
@@ -399,7 +419,7 @@ export async function setDeck({ deck = 'A', speed, density, bandpass, oscillator
             : { mode: 'manual', value: Number(density) / 100 })
     }
     if (bandpass !== undefined || oscillators !== undefined) {
-        ctx.setRebindOptions(deck, { bandpass, oscillatorCount: oscillators })
+        ctx.setRebindOptions(deck, { bandpass, oscillatorCount: oscillators }, storing(via))
     }
     return { result: deckControls(ctx, deck) }
 }
@@ -410,8 +430,8 @@ export async function rebind({ deck = 'A', kind }, ctx) {
     return { result: { deck, kind, applied: Boolean(applied) } }
 }
 
-export async function setCrossfader({ position, curve, fadeSeconds }, ctx) {
-    if (curve !== undefined) ctx.setCrossfadeCurve(curve)
+export async function setCrossfader({ position, curve, fadeSeconds }, ctx, via = {}) {
+    if (curve !== undefined) ctx.setCrossfadeCurve(curve, storing(via))
     if (fadeSeconds !== undefined) ctx.setFadeSeconds(fadeSeconds)
     if (position !== undefined) ctx.moveCrossfader(position)
     return { result: crossfaderSnapshot(ctx) }
@@ -501,7 +521,7 @@ function checkMixerParams(effectId, params) {
     }
 }
 
-export async function setMixer({ effect, params = {} }, ctx) {
+export async function setMixer({ effect, params = {} }, ctx, via = {}) {
     const mixer = await readyMixer(ctx)
     const target = effect || mixer.currentMixer.id
     if (target !== mixer.currentMixer.id) {
@@ -512,8 +532,8 @@ export async function setMixer({ effect, params = {} }, ctx) {
         }
     }
     checkMixerParams(target, params)
-    if (target !== mixer.currentMixer.id) await ctx.selectMixerEffect(target)
-    for (const [name, value] of Object.entries(params)) ctx.setMixerParam(name, value)
+    if (target !== mixer.currentMixer.id) await ctx.selectMixerEffect(target, storing(via))
+    for (const [name, value] of Object.entries(params)) ctx.setMixerParam(name, value, storing(via))
     return { result: mixerResult(mixer) }
 }
 
@@ -532,24 +552,30 @@ function checkBars(field, value) {
     }
 }
 
-export async function setAutoVj({ enabled, bars }, ctx) {
+export async function setAutoVj({ enabled, bars }, ctx, via = {}) {
+    if (via.remote && enabled === true) {
+        // Auto-VJ loads programs from the person's stored pool, user programs
+        // included, and publishes them.
+        throw commandError('REMOTE_UNAVAILABLE',
+            'Auto-VJ draws from the person\'s stored Auto-VJ pool, so a session cannot turn it on. Use randomize or loadProgram.', {})
+    }
     if (bars !== undefined) checkBars('bars', bars)
     if (bars !== undefined) ctx.setAutoVjBars(bars)
     if (enabled !== undefined) ctx.setAutoVj(enabled)
     return { result: { enabled: ctx.autoMix.enabled, bars: ctx.autoMix.barsPerScene } }
 }
 
-export async function setAutoMix({ enabled, source }, ctx) {
-    if (source !== undefined) ctx.setAutoMixSource(autoMixSourceKey(source))
-    if (enabled !== undefined) ctx.setAutoMixEnabled(enabled)
+export async function setAutoMix({ enabled, source }, ctx, via = {}) {
+    if (source !== undefined) ctx.setAutoMixSource(autoMixSourceKey(source), storing(via))
+    if (enabled !== undefined) ctx.setAutoMixEnabled(enabled, storing(via))
     return { result: { enabled: ctx.autoXfade.enabled, source: autoMixSourceName(ctx.autoXfade.source) } }
 }
 
-export async function setTempo({ bpm, divider, tap, resetPhase, followMidiClock }, ctx) {
+export async function setTempo({ bpm, divider, tap, resetPhase, followMidiClock }, ctx, via = {}) {
     if (divider !== undefined) checkBars('divider', divider)
-    if (followMidiClock !== undefined) ctx.setFollowMidiClock(followMidiClock)
+    if (followMidiClock !== undefined) ctx.setFollowMidiClock(followMidiClock, storing(via))
     if (bpm !== undefined) ctx.setBpm(bpm)
-    if (divider !== undefined) ctx.setDivider(divider)
+    if (divider !== undefined) ctx.setDivider(divider, storing(via))
     if (resetPhase) ctx.resetTempoPhase()
     if (tap) ctx.tapTempo()
     const { scheduler, midi } = ctx
@@ -646,17 +672,24 @@ export async function listUserEffects(_args, { userEffects }) {
     }
 }
 
-export async function getThumbnail({ maxDimension = 256, format = 'jpg', source = 'output' }, ctx, via = {}) {
-    // Live camera or video input stays in the person's browser. The output
-    // shows both decks.
-    if (via.remote && (source === 'output' ? ['A', 'B'] : [source]).some(deck => ctx.hasLiveMedia(deck))) {
+// Live camera or video pixels stay in the person's browser. A deck can show
+// them until it runs a program without media(), and the output shows both
+// decks, or the frame it froze on.
+function refuseLiveMedia(ctx, source) {
+    const live = ctx.liveMedia()
+    if (source === 'output' ? live.A || live.B || live.frozen : live[source]) {
         throw commandError('REMOTE_UNAVAILABLE',
-            'A deck shows live camera or video input, which stays in the person\'s browser. Its image is not available through a session.',
+            'The image can show live camera or video input, which stays in the person\'s browser. It is not available through a session.',
             { source })
     }
+}
+
+export async function getThumbnail({ maxDimension = 256, format = 'jpg', source = 'output' }, ctx, via = {}) {
+    if (via.remote) refuseLiveMedia(ctx, source)
     // Give a program that just loaded its first frames on the deck, the
     // mixer and the output canvas. Capture only reads the canvas.
     await frames(source === 'output' ? 3 : 2)
+    if (via.remote) refuseLiveMedia(ctx, source)
     const canvas = source === 'output' ? ctx.mainCanvas : ctx.decks[source].canvas
     const scale = Math.min(1, maxDimension / Math.max(canvas.width, canvas.height, 1))
     const out = document.createElement('canvas')

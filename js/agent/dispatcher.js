@@ -41,9 +41,9 @@ export function commandError(code, message, details = {}) {
     return err
 }
 
-function safeSnapshot(ctx) {
+function safeSnapshot(ctx, via = {}) {
     try {
-        return buildSnapshot(ctx)
+        return buildSnapshot(ctx, via)
     } catch (err) {
         console.warn('[agent] snapshot failed:', err)
         return null
@@ -74,12 +74,12 @@ export function registerCommand(agent, name, handler) {
             const schema = SCHEMAS[name]
             if (schema) {
                 const v = validate(args, schema)
-                if (!v.ok) return { envelope: makeFailure(name, v.code, v.message, v.details, safeSnapshot(ctx)) }
+                if (!v.ok) return { envelope: makeFailure(name, v.code, v.message, v.details, safeSnapshot(ctx, via)) }
             }
             const out = await handler(args, ctx, via)
-            return { envelope: makeSuccess(name, out.result, safeSnapshot(ctx), out.warnings || []), image: out.image || null }
+            return { envelope: makeSuccess(name, out.result, safeSnapshot(ctx, via), out.warnings || []), image: out.image || null }
         } catch (err) {
-            const state = safeSnapshot(ctx)
+            const state = safeSnapshot(ctx, via)
             if (err?.__agentError) {
                 const { code, message, details } = err.__agentError
                 return { envelope: makeFailure(name, code, message, details, state) }

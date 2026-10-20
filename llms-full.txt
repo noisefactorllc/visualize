@@ -97,13 +97,23 @@ How it works, so you can explain it to the person:
   person is not reachable through a session: `listScenes`, `scene`,
   `listUserEffects` and `setAutoVjPool` answer `REMOTE_UNAVAILABLE`; the
   library's `user` section and `user` effects are left out of `searchLibrary`,
-  `searchEffects` and `getEffectDefinition`; and a program that names the
-  `user` namespace fails with a `USER_EFFECT` diagnostic.
-- What Visualize keeps out of the session stays out: `getProgram` returns the
-  text that the session holds for a deck, not an unpublished draft; while a
-  deck shows live camera or video input, `getThumbnail` of that deck or of the
-  output answers `REMOTE_UNAVAILABLE`; and `setProgram` accepts only images
-  that the session already holds.
+  `searchEffects` and `getEffectDefinition`; a program that names the `user`
+  namespace anywhere fails with a `USER_EFFECT` diagnostic; `randomize` picks
+  from the whole library except utility and `user` programs, not from the
+  person's Auto-VJ pool; and `setAutoVj` cannot turn Auto-VJ on, because
+  Auto-VJ draws from that pool (it can turn it off and set its cycle).
+- Changes through a session are live but are not stored as the person's
+  settings: the crossfade curve, the mixer effect and its parameters, the
+  rebind options, Auto-Mix on or off and its source, the tempo divider and
+  following the MIDI clock keep the values the person stored.
+- What Visualize keeps out of the session stays out: `getProgram` and the
+  state snapshot describe the text that the session holds for a deck, not an
+  unpublished draft; `getThumbnail` answers `REMOTE_UNAVAILABLE` for a deck
+  that can show live camera or video pixels (from the moment its source first
+  shows until the deck runs a program without `media()`, because a `media()`
+  program keeps showing the last frame after its source stops), for the output
+  while either deck can, and for a frozen output that froze while one could;
+  and `setProgram` accepts only images that the session already holds.
 - Commands that act on the person's browser rather than on the performance
   answer `REMOTE_UNAVAILABLE`: `setAudioInput`, `setMidiInput`, `setAudio`
   (input sensitivity), `setRenderer` and `record`. `commands` marks every
@@ -328,7 +338,8 @@ state: {
 
 A syntax error has code `SYNTAX`. A `media()` image that is not named
 `image:<sha256>` has code `MEDIA_URL`. Through a session, a program that names
-the `user` namespace has code `USER_EFFECT`. Diagnostics with severity
+the `user` namespace anywhere has code `USER_EFFECT`, without saying whether
+any user effect exists. Diagnostics with severity
 `warning` do not stop a program.
 
 ---
@@ -385,7 +396,7 @@ Every command rejects an argument that it does not declare, with `INVALID_ARGS_U
 
 #### `getState`
 
-Returns the state snapshot. Every envelope already includes it in `state`.
+Returns the state snapshot. Every envelope already includes it in `state`. Through a session, a deck's `title`, `chars` and `running` describe the text that the session holds for it.
 
 Returns: the snapshot.
 
@@ -405,7 +416,7 @@ Arguments:
 
 #### `validateProgram`
 
-Compiles `dsl` without applying it. Both decks compile a program the same way. Through a session, a program that names the `user` namespace gets a `USER_EFFECT` error diagnostic.
+Compiles `dsl` without applying it. Both decks compile a program the same way. Through a session, a program that names the `user` namespace anywhere gets only a `USER_EFFECT` error diagnostic.
 
 Returns: `{ valid, diagnostics }`.
 
@@ -485,7 +496,7 @@ Arguments:
 
 #### `randomize`
 
-Loads a random program from the Auto-VJ pool into deck `deck`, or into both decks, like the shuffle buttons. A deck gets a different program from the one it runs.
+Loads a random program from the Auto-VJ pool into deck `deck`, or into both decks, like the shuffle buttons. A deck gets a different program from the one it runs. Through a session the pick comes from the whole library except utility and `user` programs, not from the person's pool.
 
 Returns: `{ programs }`, the loaded titles by deck, such as `{ A: "..." }`.
 
@@ -597,7 +608,7 @@ Arguments:
 
 #### `setAutoVj`
 
-Turns Auto-VJ on or off and sets its cycle length in bars: 1, 2, 4, 8, 16 or 32. Every cycle, Auto-VJ loads a random pool program into the deck that is not live and fades to it. Turning Auto-VJ on turns Auto-Mix off. The cycle length is also the period of an Auto-Mix oscillator.
+Turns Auto-VJ on or off and sets its cycle length in bars: 1, 2, 4, 8, 16 or 32. Every cycle, Auto-VJ loads a random pool program into the deck that is not live and fades to it. Turning Auto-VJ on turns Auto-Mix off. The cycle length is also the period of an Auto-Mix oscillator. A session can turn Auto-VJ off and set the cycle, but not turn it on: Auto-VJ draws from the person's stored pool.
 
 Returns: `{ enabled, bars }`.
 
@@ -709,7 +720,7 @@ Arguments: none.
 
 #### `getThumbnail`
 
-Returns an image of the output canvas, or with `source` of one deck canvas. The output image shows the mix, strobe and flash. It does not show `invert`, `bw` and `zoom`, which are display effects on the canvas element. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`; while a deck shows live camera or video input, a session cannot take an image of that deck or of the output (`REMOTE_UNAVAILABLE`).
+Returns an image of the output canvas, or with `source` of one deck canvas. The output image shows the mix, strobe and flash. It does not show `invert`, `bw` and `zoom`, which are display effects on the canvas element. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`; a session cannot take an image of a deck that can show live camera or video pixels, of the output while either deck can, or of an output that froze while one could (`REMOTE_UNAVAILABLE`).
 
 Returns: `{ bytes, mimeType, width, height, source }`, with `bytes` in base64. Through a session: `{ image: { id, mimeType, bytes }, mimeType, width, height, source }`, where `image.bytes` is the byte count.
 

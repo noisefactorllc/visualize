@@ -18,7 +18,7 @@ export const COMMAND_GROUPS = [
         title: 'Read state',
         commands: {
             getState: {
-                does: 'Returns the state snapshot. Every envelope already includes it in `state`.',
+                does: 'Returns the state snapshot. Every envelope already includes it in `state`. Through a session, a deck\'s `title`, `chars` and `running` describe the text that the session holds for it.',
                 returns: 'the snapshot',
             },
             getProgram: {
@@ -31,7 +31,7 @@ export const COMMAND_GROUPS = [
         title: 'Programs',
         commands: {
             validateProgram: {
-                does: 'Compiles `dsl` without applying it. Both decks compile a program the same way. Through a session, a program that names the `user` namespace gets a `USER_EFFECT` error diagnostic.',
+                does: 'Compiles `dsl` without applying it. Both decks compile a program the same way. Through a session, a program that names the `user` namespace anywhere gets only a `USER_EFFECT` error diagnostic.',
                 returns: '`{ valid, diagnostics }`',
             },
             setProgram: {
@@ -69,7 +69,7 @@ export const COMMAND_GROUPS = [
                 returns: '`{ deck, title }`',
             },
             randomize: {
-                does: 'Loads a random program from the Auto-VJ pool into deck `deck`, or into both decks, like the shuffle buttons. A deck gets a different program from the one it runs.',
+                does: 'Loads a random program from the Auto-VJ pool into deck `deck`, or into both decks, like the shuffle buttons. A deck gets a different program from the one it runs. Through a session the pick comes from the whole library except utility and `user` programs, not from the person\'s pool.',
                 returns: '`{ programs }`, the loaded titles by deck, such as `{ A: "..." }`',
             },
             setAutoVjPool: {
@@ -126,7 +126,7 @@ export const COMMAND_GROUPS = [
         title: 'Automation',
         commands: {
             setAutoVj: {
-                does: 'Turns Auto-VJ on or off and sets its cycle length in bars: 1, 2, 4, 8, 16 or 32. Every cycle, Auto-VJ loads a random pool program into the deck that is not live and fades to it. Turning Auto-VJ on turns Auto-Mix off. The cycle length is also the period of an Auto-Mix oscillator.',
+                does: 'Turns Auto-VJ on or off and sets its cycle length in bars: 1, 2, 4, 8, 16 or 32. Every cycle, Auto-VJ loads a random pool program into the deck that is not live and fades to it. Turning Auto-VJ on turns Auto-Mix off. The cycle length is also the period of an Auto-Mix oscillator. A session can turn Auto-VJ off and set the cycle, but not turn it on: Auto-VJ draws from the person\'s stored pool.',
                 returns: '`{ enabled, bars }`',
             },
             setAutoMix: {
@@ -187,7 +187,7 @@ export const COMMAND_GROUPS = [
         title: 'Images',
         commands: {
             getThumbnail: {
-                does: 'Returns an image of the output canvas, or with `source` of one deck canvas. The output image shows the mix, strobe and flash. It does not show `invert`, `bw` and `zoom`, which are display effects on the canvas element. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`; while a deck shows live camera or video input, a session cannot take an image of that deck or of the output (`REMOTE_UNAVAILABLE`).',
+                does: 'Returns an image of the output canvas, or with `source` of one deck canvas. The output image shows the mix, strobe and flash. It does not show `invert`, `bw` and `zoom`, which are display effects on the canvas element. Through a Seance session the image is added to the session as its own bytes, and `image` replaces `bytes`; a session cannot take an image of a deck that can show live camera or video pixels, of the output while either deck can, or of an output that froze while one could (`REMOTE_UNAVAILABLE`).',
                 returns: '`{ bytes, mimeType, width, height, source }`, with `bytes` in base64. Through a session: `{ image: { id, mimeType, bytes }, mimeType, width, height, source }`, where `image.bytes` is the byte count',
             },
         },

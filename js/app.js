@@ -1084,8 +1084,9 @@ async function boot() {
     }
 
     // Set a deck's rebind options, like its bandpass and oscillator-count
-    // buttons. Fields left undefined keep their value.
-    function setRebindOptions(deckId, { bandpass, oscillatorCount }) {
+    // buttons. Fields left undefined keep their value. `persist: false`
+    // leaves the stored options alone.
+    function setRebindOptions(deckId, { bandpass, oscillatorCount }, { persist = true } = {}) {
         const r = state.decks[deckId].rebind
         if (bandpass !== undefined) {
             r.bandpass = bandpass
@@ -1095,7 +1096,7 @@ async function boot() {
             r.oscillatorCount = oscillatorCount
             updateOscCountBtn(deckId)
         }
-        persistRebindUiState()
+        if (persist) persistRebindUiState()
     }
 
     function wireRebindButtons() {
@@ -1147,6 +1148,30 @@ async function boot() {
         deckMedia.A.tick()
         deckMedia.B.tick()
     })
+
+    // Which canvases can show live camera or video pixels, for the agent API,
+    // which keeps them out of a session. A deck counts from the frame its
+    // live source first uploads until it runs a program without media(): a
+    // media() program keeps showing the last frame after its source stops. A
+    // frozen output keeps the frame it froze on until it runs again.
+    const liveTaint = { A: false, B: false }
+    let frozenTaint = false
+    function liveMedia() {
+        for (const id of ['A', 'B']) {
+            if (deckMedia[id].hasLiveMedia) liveTaint[id] = true
+            else if (liveTaint[id] && !deckMedia[id].isMediaProgram()) liveTaint[id] = false
+        }
+        if (!compositor.freeze) frozenTaint = false
+        else if (liveTaint.A || liveTaint.B) frozenTaint = true
+        return { A: liveTaint.A, B: liveTaint.B, frozen: frozenTaint }
+    }
+    compositor.onFrame(() => liveMedia())
+    const _originalSetFreeze = compositor.setFreeze.bind(compositor)
+    compositor.setFreeze = (active) => {
+        liveMedia()
+        _originalSetFreeze(active)
+        liveMedia()
+    }
 
     function getProgramForDeck(deckId) {
         const title = state.decks[deckId].currentName
@@ -1308,19 +1333,20 @@ async function boot() {
     }
 
     // Switch to a mixer effect at its defaults, like the mixer picker.
-    async function selectMixerEffect(id) {
+    // `persist: false` leaves the stored mixer choice alone.
+    async function selectMixerEffect(id, { persist = true } = {}) {
         await mixer.setMixerEffect(id)
         mixerControlsPanel?.show(mixer.currentMixer.id)
         const sel = $('mixer-effect')
         if (sel && sel.value !== mixer.currentMixer.id) sel.value = mixer.currentMixer.id
-        persistMixer()
+        if (persist) persistMixer()
     }
 
     // Set one parameter of the current mixer effect, like its control.
-    function setMixerParam(name, value) {
+    function setMixerParam(name, value, { persist = true } = {}) {
         mixer.setOverride(name, value)
         mixerControlsPanel?.show(mixer.currentMixer.id)
-        persistMixerDebounced()
+        if (persist) persistMixerDebounced()
     }
 
     let mixerControlsPanel = null
@@ -1546,33 +1572,33 @@ async function boot() {
     syncAutoXfadeSourceUi()
     updateAutoXfadeToggleUi()
 
-    function setAutoXfadeEnabled(on) {
+    function setAutoXfadeEnabled(on, { persist = true } = {}) {
         autoXfade.setEnabled(on)
         updateAutoXfadeToggleUi()
         // The onEnableChange wiring above already disables autoMix when
         // autoXfade goes on; mirror its pill state here.
         $('automix-toggle').dataset.state = autoMix.enabled ? 'on' : 'off'
-        persistAutoXfade()
+        if (persist) persistAutoXfade()
     }
     autoXfadeToggleEl.addEventListener('click', () => setAutoXfadeEnabled(!autoXfade.enabled))
 
     // `v` is a source control value: 'osc:0', 'audio:low', 'midi:0'.
-    function setAutoXfadeSource(v) {
+    function setAutoXfadeSource(v, { persist = true } = {}) {
         const [kind, rest] = v.split(':')
         if (kind === 'osc') autoXfade.setSource({ kind: 'osc', oscType: parseInt(rest, 10) })
         else if (kind === 'audio') autoXfade.setSource({ kind: 'audio', band: rest })
         else if (kind === 'midi') autoXfade.setSource({ kind: 'midi', channel: parseInt(rest, 10) })
-        persistAutoXfade()
+        if (persist) persistAutoXfade()
     }
     autoXfadeSourceEl.addEventListener('change', () => setAutoXfadeSource(autoXfadeSourceEl.value))
     $('automix-bars').addEventListener('change', (e) => {
         autoMix.setBarsPerScene(clampBarsPerScene(e.target.value))
     })
-    function setCrossfadeCurve(value) {
+    function setCrossfadeCurve(value, { persist = true } = {}) {
         state.curve = parseCrossfadeCurve(value)
         autoMix.setCurve(state.curve)
         compositor.setCurve(state.curve)
-        persistCurve()
+        if (persist) persistCurve()
     }
     $('automix-curve').addEventListener('change', (e) => setCrossfadeCurve(e.target.value))
 
@@ -1864,7 +1890,11 @@ async function boot() {
         $('midi-enable').textContent = on ? 'disable MIDI' : 'enable MIDI'
     })
     $('midi-clock-enable').checked = midi.followClock
-    function setFollowMidiClock(on) {
+    function setFollowMidiClock(on, { persist = true } = {}) {
+        if (!persist) {
+            withoutStoring(['visualize.midi.clock.v1'], () => setFollowMidiClock(on))
+            return
+        }
         midi.followClock = on
         if ($('midi-clock-enable').checked !== on) $('midi-clock-enable').checked = on
         toast(midi.followClock ? 'following MIDI clock for BPM' : 'BPM is manual / tap')
@@ -2718,10 +2748,30 @@ async function boot() {
         if (document.hidden) xfadeNudgeTracker.reset()
     })
 
-    // Agent API (js/agent/): window.VisualizeAgent, WebMCP tools, the
-    // ?agent=1 command form and the Seance relay. Each function below runs
-    // the code behind a control, so an agent's change updates the same
-    // labels, editors, online documents and stored settings as a person's.
+    // Run `change` and then put back what it wrote to the stored settings
+    // under `keys`: a change from a session is live only.
+    function withoutStoring(keys, change) {
+        const saved = keys.map(key => {
+            try { return [key, localStorage.getItem(key)] } catch { return [key, undefined] }
+        })
+        try {
+            return change()
+        } finally {
+            for (const [key, value] of saved) {
+                if (value === undefined) continue
+                try {
+                    if (value === null) localStorage.removeItem(key)
+                    else localStorage.setItem(key, value)
+                } catch { /* storage unavailable */ }
+            }
+        }
+    }
+
+    // Agent API (js/agent/): window.VisualizeAgent, WebMCP tools and the
+    // Seance relay. Each function below runs the code behind a control, so an
+    // agent's change updates the same labels, editors and online documents as
+    // a person's. A change from a session (`persist: false`) does not
+    // overwrite the person's stored settings.
     bootstrapAgent({
         state,
         decks: state.decks,
@@ -2742,6 +2792,7 @@ async function boot() {
         online: () => online,
         sessionText: (deckId) => online?.sessionText?.(deckId) ?? null,
         hasLiveMedia: (deckId) => deckMedia[deckId].hasLiveMedia,
+        liveMedia,
         imageTools: () => import(PORTABLE_IMAGES_URL),
         programText: collaborativeDeckText,
         loadProgram,
@@ -2761,8 +2812,8 @@ async function boot() {
         rebindDeck,
         moveCrossfader,
         autoFade,
-        setCrossfadeCurve: (curve) => {
-            setCrossfadeCurve(curve)
+        setCrossfadeCurve: (curve, options) => {
+            setCrossfadeCurve(curve, options)
             $('automix-curve').value = state.curve
         },
         setFadeSeconds: (seconds) => {
@@ -2779,12 +2830,16 @@ async function boot() {
             $('automix-bars').value = String(autoMix.barsPerScene)
         },
         setAutoMixEnabled: setAutoXfadeEnabled,
-        setAutoMixSource: (key) => {
-            setAutoXfadeSource(key)
+        setAutoMixSource: (key, options) => {
+            setAutoXfadeSource(key, options)
             syncAutoXfadeSourceUi()
         },
         setBpm: (bpm) => { tempoBar.bpm = bpm },
-        setDivider: (divider) => { tempoBar.divider = divider },
+        // The tempo bar stores its divider itself.
+        setDivider: (divider, { persist = true } = {}) => {
+            if (persist) tempoBar.divider = divider
+            else withoutStoring([tempoBar.getAttribute('storage-key')].filter(Boolean), () => { tempoBar.divider = divider })
+        },
         tapTempo: doTap,
         resetTempoPhase: () => {
             if (phaseResetBtn) phaseResetBtn.click()

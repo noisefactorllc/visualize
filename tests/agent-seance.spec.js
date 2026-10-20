@@ -67,6 +67,29 @@ async function takeOnline(page) {
     return code
 }
 
+// The person loads Camera Input into deck B and picks a camera.
+async function startCamera(page) {
+    await page.evaluate(() => window.VisualizeAgent.loadProgram({ title: 'Camera Input', deck: 'B' }))
+    const camera = page.locator('#deck-b-media-camera')
+    await expect.poll(() => camera.evaluate(select => (select.getOptions?.() || []).filter(o => o.value).length),
+        { timeout: 30_000 * SCALE }).toBeGreaterThan(0)
+    await camera.evaluate(select => {
+        select.value = select.getOptions().find(option => option.value).value
+        select.dispatchEvent(new Event('change'))
+    })
+    await expect.poll(() => page.evaluate(() => window.VisualizeAgent._ctx.hasLiveMedia('B')), { timeout: 30_000 * SCALE }).toBe(true)
+}
+
+// Wait until the tab has nothing for deck B's document waiting to publish,
+// then make a round trip on its connection, so any publish has arrived.
+async function settled(page, ask) {
+    await expect.poll(() => page.evaluate(() => {
+        const doc = window.__visualize.online.online.docs.get('deck:B')
+        return Boolean(doc && !doc.inFlight && !doc.proposalTimer && doc.text === doc.serverText)
+    }), { timeout: 30_000 * SCALE }).toBe(true)
+    await ask('getState')
+}
+
 test('an agent in the online session drives the owner\'s tab and sees its canvas as uploaded image bytes', async ({ page, browser, baseURL }) => {
     const origin = new URL(baseURL).origin
     const server = await startSeanceServer({ origins: [origin] })
@@ -132,6 +155,8 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
         expect(refused.envelope.error.code).toBe('INVALID_PROGRAM')
         expect(refused.envelope.error.details.diagnostics.some(d => d.code === 'S001')).toBe(true)
         expect(await page.evaluate(() => window.__visualize.decks.B.currentDsl)).toBe(RED)
+        await settled(page, ask)
+        expect(agent.docs.get('deck:B').text).toBe(RED)
 
         // An image the agent adds to the session reaches a deck by its id.
         const blue = solidPng([0, 0, 255])
@@ -188,6 +213,11 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
         expect(userEffect.envelope.error.code).toBe('NOT_FOUND_EFFECT')
         const userProgram = await ask('validateProgram', { dsl: 'search user\nanything().write(o0)\nrender(o0)' })
         expect(userProgram.envelope.result.diagnostics.map(d => d.code)).toEqual(['USER_EFFECT'])
+        // The search list can run over several lines; the parsed program counts.
+        const splitSearch = await ask('validateProgram', { dsl: 'search synth,\nuser\nanything().write(o0)\nrender(o0)' })
+        expect(splitSearch.envelope.result.diagnostics.map(d => d.code)).toEqual(['USER_EFFECT'])
+        const qualified = await ask('setProgram', { deck: 'B', dsl: 'search synth\nuser.anything().write(o0)\nrender(o0)' })
+        expect(qualified.envelope.error.details.diagnostics.map(d => d.code)).toEqual(['USER_EFFECT'])
         const unknown = await ask('noSuchCommand')
         expect(unknown.envelope.error.code).toBe('NOT_FOUND_COMMAND')
 
@@ -199,18 +229,38 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
         expect(linked.envelope.error.code).toBe('OUTSIDE_LINK')
         expect(await page.evaluate(() => window.__visualize.decks.A.currentDsl)).toBe(imageProgram)
 
-        // Live camera input stays in the person's browser. The person loads
-        // Camera Input into deck B and picks the default camera.
-        await page.evaluate(() => window.VisualizeAgent.loadProgram({ title: 'Camera Input', deck: 'B' }))
-        await expect.poll(() => agent.docs.get('deck:B')?.text, { timeout: 30_000 * SCALE }).toBe(CAMERA)
-        const camera = page.locator('#deck-b-media-camera')
-        await expect.poll(() => camera.evaluate(select => (select.getOptions?.() || []).filter(o => o.value).length),
-            { timeout: 30_000 * SCALE }).toBeGreaterThan(0)
-        await camera.evaluate(select => {
-            select.value = select.getOptions().find(option => option.value).value
-            select.dispatchEvent(new Event('change'))
+        // A session does not use the person's Auto-VJ pool: with every program
+        // left out of it, the page has nothing to pick and a session still does.
+        await page.evaluate(async () => {
+            for (const title of ['agent red', 'agent green']) await window.VisualizeAgent.setAutoVjPool({ title, included: false })
         })
-        await expect.poll(() => page.evaluate(() => window.VisualizeAgent._ctx.hasLiveMedia('B')), { timeout: 30_000 * SCALE }).toBe(true)
+        expect((await page.evaluate(() => window.VisualizeAgent.randomize({ deck: 'A' }))).error.code).toBe('NOT_FOUND_PROGRAM')
+        const shuffled = await ask('randomize', { deck: 'A' })
+        expect(shuffled.envelope.ok, JSON.stringify(shuffled.envelope.error)).toBe(true)
+        expect(['agent red', 'agent green']).toContain(shuffled.envelope.result?.programs?.A)
+        // Auto-VJ draws from that pool, so a session cannot turn it on.
+        const autoVj = await ask('setAutoVj', { enabled: true })
+        expect(autoVj.envelope.error.code).toBe('REMOTE_UNAVAILABLE')
+        expect(await page.evaluate(() => window.__visualize.autoMix.enabled)).toBe(false)
+
+        // Session changes are live but leave the person's stored settings alone.
+        const stored = () => page.evaluate(() => ({
+            curve: localStorage.getItem('visualize.curve.v1'),
+            mixer: localStorage.getItem('visualize.mixer.v1'),
+            rebind: localStorage.getItem('visualize.rebind.v1'),
+            autoMix: localStorage.getItem('visualize.autoxfade.v1'),
+        }))
+        const before = await stored()
+        expect((await ask('setCrossfader', { curve: 'sharp' })).envelope.result.curve).toBe('sharp')
+        expect((await ask('setMixer', { effect: 'mixer/split', params: { softness: 0.3 } })).envelope.result.effect).toBe('mixer/split')
+        expect((await ask('setDeck', { deck: 'A', bandpass: false, oscillators: 3 })).envelope.result.oscillators).toBe(3)
+        expect((await ask('setAutoMix', { source: 'audio:mid' })).envelope.result.source).toBe('audio:mid')
+        await expect.poll(() => page.evaluate(() => window.__visualize.mixer.currentMixer.id)).toBe('mixer/split')
+        expect(await stored()).toEqual(before)
+
+        // Live camera input stays in the person's browser.
+        await startCamera(page)
+        await expect.poll(() => agent.docs.get('deck:B')?.text, { timeout: 30_000 * SCALE }).toBe(CAMERA)
         for (const source of ['B', 'output']) {
             const live = await ask('getThumbnail', { maxDimension: 32, source })
             expect(live.envelope.error.code).toBe('REMOTE_UNAVAILABLE')
@@ -220,8 +270,41 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
         // a session reads the text the session holds, not the deck's draft.
         await page.evaluate(green => window.VisualizeAgent.setProgram({ deck: 'B', dsl: green }), GREEN)
         expect((await page.evaluate(() => window.VisualizeAgent.getProgram({ deck: 'B' }))).result.dsl).toBe(GREEN)
+        await settled(page, ask)
         expect((await ask('getProgram', { deck: 'B' })).envelope.result).toEqual({ dsl: CAMERA, running: false })
         expect(agent.docs.get('deck:B').text).toBe(CAMERA)
+        // The state a session reads describes the session's text too.
+        const draftState = (await ask('getState')).envelope.result.decks.B
+        expect(draftState).toMatchObject({ title: '', chars: CAMERA.length, running: false })
+
+        // A frozen output keeps its camera frame after the camera stops: a
+        // session cannot take it until the output runs again.
+        await startCamera(page)
+        expect((await ask('setFx', { freeze: true })).envelope.result.freeze).toBe(true)
+        expect((await ask('loadProgram', { title: 'agent red', deck: 'B' })).envelope.ok).toBe(true)
+        await expect.poll(() => page.evaluate(() => window.VisualizeAgent._ctx.hasLiveMedia('B'))).toBe(false)
+        expect((await ask('getThumbnail', { maxDimension: 32, source: 'output' })).envelope.error.code).toBe('REMOTE_UNAVAILABLE')
+        expect((await ask('getThumbnail', { maxDimension: 32, source: 'B' })).envelope.ok).toBe(true)
+        expect((await ask('setFx', { freeze: false })).envelope.result.freeze).toBe(false)
+        expect((await ask('getThumbnail', { maxDimension: 32, source: 'output' })).envelope.ok).toBe(true)
+
+        // A camera that stops while Camera Input still runs leaves its last
+        // frame in the deck: here a switch to another camera fails.
+        await startCamera(page)
+        await page.evaluate(() => {
+            navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error('camera busy'))
+            const select = document.getElementById('deck-b-media-camera')
+            select.value = select.getOptions().map(option => option.value).find(value => value && value !== '__active__')
+            select.dispatchEvent(new Event('change'))
+        })
+        await expect.poll(() => page.evaluate(() => window.VisualizeAgent._ctx.hasLiveMedia('B'))).toBe(false)
+        expect(await page.evaluate(() => window.__visualize.decks.B.currentDsl)).toBe(CAMERA)
+        for (const source of ['B', 'output']) {
+            expect((await ask('getThumbnail', { maxDimension: 32, source })).envelope.error.code).toBe('REMOTE_UNAVAILABLE')
+        }
+        // A program that replaces the camera's texture ends it.
+        expect((await ask('loadProgram', { title: 'agent green', deck: 'B' })).envelope.ok).toBe(true)
+        expect((await ask('getThumbnail', { maxDimension: 32, source: 'B' })).envelope.ok).toBe(true)
 
         // A second Visualize tab, another person's, joins the session. It is
         // not the owner's, so it sends no relay frames at all.

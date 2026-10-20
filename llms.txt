@@ -97,13 +97,23 @@ How it works, so you can explain it to the person:
   person is not reachable through a session: `listScenes`, `scene`,
   `listUserEffects` and `setAutoVjPool` answer `REMOTE_UNAVAILABLE`; the
   library's `user` section and `user` effects are left out of `searchLibrary`,
-  `searchEffects` and `getEffectDefinition`; and a program that names the
-  `user` namespace fails with a `USER_EFFECT` diagnostic.
-- What Visualize keeps out of the session stays out: `getProgram` returns the
-  text that the session holds for a deck, not an unpublished draft; while a
-  deck shows live camera or video input, `getThumbnail` of that deck or of the
-  output answers `REMOTE_UNAVAILABLE`; and `setProgram` accepts only images
-  that the session already holds.
+  `searchEffects` and `getEffectDefinition`; a program that names the `user`
+  namespace anywhere fails with a `USER_EFFECT` diagnostic; `randomize` picks
+  from the whole library except utility and `user` programs, not from the
+  person's Auto-VJ pool; and `setAutoVj` cannot turn Auto-VJ on, because
+  Auto-VJ draws from that pool (it can turn it off and set its cycle).
+- Changes through a session are live but are not stored as the person's
+  settings: the crossfade curve, the mixer effect and its parameters, the
+  rebind options, Auto-Mix on or off and its source, the tempo divider and
+  following the MIDI clock keep the values the person stored.
+- What Visualize keeps out of the session stays out: `getProgram` and the
+  state snapshot describe the text that the session holds for a deck, not an
+  unpublished draft; `getThumbnail` answers `REMOTE_UNAVAILABLE` for a deck
+  that can show live camera or video pixels (from the moment its source first
+  shows until the deck runs a program without `media()`, because a `media()`
+  program keeps showing the last frame after its source stops), for the output
+  while either deck can, and for a frozen output that froze while one could;
+  and `setProgram` accepts only images that the session already holds.
 - Commands that act on the person's browser rather than on the performance
   answer `REMOTE_UNAVAILABLE`: `setAudioInput`, `setMidiInput`, `setAudio`
   (input sensitivity), `setRenderer` and `record`. `commands` marks every
@@ -328,7 +338,8 @@ state: {
 
 A syntax error has code `SYNTAX`. A `media()` image that is not named
 `image:<sha256>` has code `MEDIA_URL`. Through a session, a program that names
-the `user` namespace has code `USER_EFFECT`. Diagnostics with severity
+the `user` namespace anywhere has code `USER_EFFECT`, without saying whether
+any user effect exists. Diagnostics with severity
 `warning` do not stop a program.
 
 ---

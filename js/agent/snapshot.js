@@ -33,14 +33,18 @@ export function autoMixSourceKey(name) {
 
 const round = (value, places = 3) => Number.isFinite(value) ? Number(value.toFixed(places)) : value
 
-export function deckSnapshot(ctx, id) {
+// Through a session (`via.remote`) a deck's program is described by the text
+// the session holds, as getProgram returns it: a draft or a program kept out
+// of the session (live camera input) shows neither its length nor its title.
+export function deckSnapshot(ctx, id, via = {}) {
     const deck = ctx.decks[id]
-    const text = ctx.programText(id) || ''
+    const text = (via.remote ? ctx.sessionText(id) : ctx.programText(id)) || ''
     const density = ctx.state.deckDensity[id]
+    const running = Boolean(deck.currentDsl) && deck.currentDsl === text
     return {
-        title: deck.currentName || '',
+        title: via.remote && !running ? '' : deck.currentName || '',
         chars: text.length,
-        running: Boolean(deck.currentDsl) && deck.currentDsl === text,
+        running,
         speed: round(deck.speed),
         density: { mode: density.mode, value: density.value },
         bandpass: deck.rebind.bandpass !== false,
@@ -67,11 +71,11 @@ export function fxSnapshot({ compositor }) {
     }
 }
 
-export function buildSnapshot(ctx) {
+export function buildSnapshot(ctx, via = {}) {
     const { state, decks, mixer, autoMix, autoXfade, scheduler, audio, midi, recorder } = ctx
     return {
         schemaVersion: SCHEMA_VERSION,
-        decks: { A: deckSnapshot(ctx, 'A'), B: deckSnapshot(ctx, 'B') },
+        decks: { A: deckSnapshot(ctx, 'A', via), B: deckSnapshot(ctx, 'B', via) },
         crossfader: crossfaderSnapshot(ctx),
         mixer: { effect: ctx.mixerControls() ? mixer.currentMixer.id : null },
         fx: fxSnapshot(ctx),
