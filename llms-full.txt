@@ -26,7 +26,8 @@ their audio, decks and output. It needs a shell with Node.js 22.4 or later.
 1. Ask the person to open https://visualize.noisedeck.app/, click
    **connect agent...** beside the Seance button in the top bar, then
    **Go Online**, then **Copy Prompt**, and paste the prompt to you. The prompt
-   names this contract and the session link. (Without that button: the Seance
+   names this contract and the session link. The button is not offered in a
+   tab that joined someone else's session. (Without that button: the Seance
    button, whose tooltip is "Collaborate online", then **Take Online**, then
    send you the session code that the dialog shows after "Online", or the
    session URL that **Copy URL** copies.)

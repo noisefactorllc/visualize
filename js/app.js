@@ -1631,6 +1631,14 @@ async function boot() {
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
     $('about-btn').addEventListener('click', () => aboutDialog.show())
     $('go-online-btn').addEventListener('click', () => $('seance-dialog')?.show())
+    // "connect agent..." shows where an agent can be answered: offline, or
+    // online in a session this tab took online.
+    function refreshConnectAgentButton() {
+        const button = $('connect-agent-btn')
+        if (!button) return
+        button.hidden = !onlineCollaborationEnabled || !customElements.get('agent-connect-dialog')
+            || !(online?.canConnectAgent?.() ?? true)
+    }
     $('connect-agent-btn').addEventListener('click', () => {
         online?.syncStatusUi?.()
         $('agent-connect-dialog')?.show?.()
@@ -2856,6 +2864,7 @@ async function boot() {
                 createAgentRelay: ({ BaseSocket, uploadImage, onAgent }) =>
                     createSeanceAgentRelay({ appVersion: APP_VERSION, BaseSocket, uploadImage, onAgent }),
                 agentDialog: $('agent-connect-dialog'),
+                onStatusUi: () => refreshConnectAgentButton(),
                 agentPrompt: sessionUrl => handfish.agentConnectPrompt?.({
                     app: 'Visualize',
                     contractUrl: 'https://visualize.noisedeck.app/llms-full.txt',

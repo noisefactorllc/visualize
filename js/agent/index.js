@@ -49,12 +49,14 @@ export function markAgentReady() {
 
 /**
  * The Seance relay for this tab (see relay.js): its WebSocket class goes to the
- * Seance SDK, sessionCreated marks a session this tab took online, and onAgent
- * hears the first request from each agent. Only that tab answers, while it
- * owns the session, and only commands not marked `remote: false`.
+ * Seance SDK, sessionCreated marks a session this tab took online, onAgent
+ * hears the first request on each agent connection, and answers() says whether
+ * this tab answers its current session. Only the tab that took the session
+ * online answers, while it owns the session, and only commands not marked
+ * `remote: false`.
  *
  * @param {{appVersion: string, uploadImage: (blob: Blob) => Promise<string>, onAgent?: Function, BaseSocket?: typeof WebSocket}} options
- * @returns {{ WebSocket: typeof WebSocket, sessionCreated: (sessionId: string) => void }}
+ * @returns {{ WebSocket: typeof WebSocket, sessionCreated: (sessionId: string) => void, answers: () => boolean }}
  */
 export function createSeanceAgentRelay({ appVersion, uploadImage, onAgent, BaseSocket }) {
     return createAgentRelay({

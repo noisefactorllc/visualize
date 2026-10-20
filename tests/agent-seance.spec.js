@@ -7,7 +7,11 @@
  * server carries the session (see startSeanceServer in seanceLocal.js).
  */
 import { test, expect } from '@playwright/test'
+import { execFile } from 'child_process'
 import { createHash } from 'crypto'
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { dirname, join } from 'path'
 import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 import { SeanceAgentClient, routePortableImagesLocal, routeSeanceServer, startSeanceServer } from './seanceLocal.js'
 import { solidPng } from './sharingLocal.js'
@@ -88,6 +92,8 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
         const described = await agent.request('describe')
         expect(described.app).toBe('visualize')
         expect(described.envelope.ok).toBe(true)
+        // The person had no connect-agent dialog open: the toast confirms.
+        await expect(page.locator('#toast')).toHaveText('Agent connected')
         const commands = Object.fromEntries(described.envelope.result.commands.map(command => [command.name, command]))
         expect(commands.setProgram.args.required).toEqual(['dsl'])
         expect(commands.setProgram.args.properties.deck.enum).toEqual(['A', 'B'])
@@ -224,6 +230,9 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
         guest.on('websocket', socket => socket.on('framesent', frame => guestSent.push(String(frame.payload))))
         await openVisualize(guest, server, `${origin}/?seance=${code}`)
         await guest.waitForFunction(() => window.__visualize?.online?.getStatus?.() === 'online', null, { timeout: 60_000 * SCALE })
+        // Only the tab that took the session online offers "connect agent...".
+        await expect(guest.locator('#connect-agent-btn')).toBeHidden()
+        await expect(page.locator('#connect-agent-btn')).toBeVisible()
         const describedAgain = await agent.request('describe')
         expect(describedAgain.from).toBe(tab)
         const owned = await ask('getState')
@@ -257,6 +266,7 @@ test('connect agent walks the person through going online, copying the prompt an
         // The button beside the Seance button opens the shared dialog.
         const button = page.getByRole('button', { name: 'connect agent...', exact: true })
         await expect(button).toBeVisible()
+        await expect(button).toHaveAttribute('data-title', 'connect agent...')
         await button.click()
         const dialog = page.locator('#agent-connect-dialog dialog')
         await expect(dialog).toBeVisible()
@@ -272,17 +282,28 @@ test('connect agent walks the person through going online, copying the prompt an
         await dialog.locator('[data-action="copy-prompt"]').click()
         await expect.poll(states).toEqual(['done', 'done', 'active'])
         const prompt = await page.evaluate(() => navigator.clipboard.readText())
-        expect(prompt).toBe([
-            'Connect to my Visualize session and help me with it.',
-            'Read https://visualize.noisedeck.app/llms-full.txt first.',
-            'Then run:',
-            '  curl -fsSLO https://noisedeck.app/agent/seance-agent.mjs',
-            `  node seance-agent.mjs join '${origin}/?seance=${code}'`,
-        ].join('\n'))
+        // The prompt is handfish's, for Visualize's contract and this session.
+        expect(prompt).toBe(await page.evaluate(async url => (await import('handfish')).agentConnectPrompt({
+            app: 'Visualize', contractUrl: 'https://visualize.noisedeck.app/llms-full.txt', sessionUrl: url,
+        }), page.url()))
+        expect(prompt.split('\n')[0]).toBe('Connect to my Visualize session and help me with it.')
+        expect(prompt).toContain('https://visualize.noisedeck.app/llms-full.txt')
 
-        // The agent follows the prompt's last line and asks what the tab can do.
-        const joinUrl = prompt.trim().split('\n').at(-1).trim().split(' ').at(-1).replace(/'/g, '')
-        await agent.join(new URL(joinUrl).searchParams.get('seance'))
+        // The agent runs the prompt's last line in a shell as written. A
+        // stand-in for the agent tool reports the arguments the shell passed.
+        const tool = mkdtempSync(join(tmpdir(), 'visualize-agent-prompt-'))
+        let args
+        try {
+            writeFileSync(join(tool, 'seance-agent.mjs'), 'process.stdout.write(JSON.stringify(process.argv.slice(2)))\n')
+            const line = prompt.trim().split('\n').at(-1).trim()
+            args = await new Promise((done, fail) => execFile('/bin/sh', ['-c', line], {
+                cwd: tool, env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH}` },
+            }, (error, stdout) => error ? fail(error) : done(JSON.parse(stdout))))
+        } finally {
+            rmSync(tool, { recursive: true, force: true })
+        }
+        expect(args).toEqual(['join', `${origin}/?seance=${code}`])
+        await agent.join(new URL(args[1]).searchParams.get('seance'))
         expect((await agent.request('describe')).app).toBe('visualize')
         await expect.poll(states).toEqual(['done', 'done', 'done'])
         await expect(dialog).toBeHidden({ timeout: 10_000 * SCALE })

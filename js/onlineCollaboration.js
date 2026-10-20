@@ -83,6 +83,7 @@ class VisualizeOnlineController {
         createAgentRelay,
         agentDialog,
         agentPrompt,
+        onStatusUi = () => {},
         dialog,
         toast = () => {},
         location = globalThis.location,
@@ -115,6 +116,7 @@ class VisualizeOnlineController {
         // The shared connect-agent dialog (handfish <agent-connect-dialog>).
         this.agentDialog = agentDialog
         this.agentPrompt = agentPrompt
+        this.onStatusUi = onStatusUi
         this._preparedImageText = new Map()
         this._imageVersions = new Map()
         this._uploadedImages = new Set()
@@ -373,6 +375,18 @@ class VisualizeOnlineController {
             this.agentDialog.state = this.dialog.state
             this.agentDialog.prompt = shareUrl && this.agentPrompt ? this.agentPrompt(shareUrl) : ''
         }
+        this.onStatusUi()
+    }
+
+    /**
+     * "connect agent..." helps only where an agent can be answered: offline
+     * (going online makes this tab the session's), or online in the session
+     * this tab took online. A tab that joined someone else's session cannot.
+     */
+    canConnectAgent() {
+        const status = this.getStatus()
+        if (status === 'offline' || status === 'connecting') return true
+        return Boolean(this.agentRelay?.answers?.())
     }
 
     async _ensureOnline() {
@@ -387,7 +401,10 @@ class VisualizeOnlineController {
                     BaseSocket: this.runtimeConfig.WebSocket || globalThis.WebSocket,
                     uploadImage: blob => this.online.uploadImage(blob),
                     onAgent: () => {
-                        if (this.agentDialog) this.agentDialog.connected = true
+                        // The open dialog lights its last step and confirms as
+                        // it closes; with the dialog closed, confirm at once.
+                        if (this.agentDialog?.open) this.agentDialog.connected = true
+                        else this.toast('Agent connected')
                     },
                 }) || null
                 const SocketClass = this.agentRelay?.WebSocket || this.runtimeConfig.WebSocket

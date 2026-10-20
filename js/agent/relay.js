@@ -19,8 +19,10 @@
  * browser fetch it: agents add images to the session and name them
  * `image:<sha256>`.
  *
- * The first request from each participant tells the app that an agent has
- * connected (`onAgent`), so it can confirm the connection to the person.
+ * The first request on each connection tells the app that an agent has
+ * connected (`onAgent`), so it can confirm the connection to the person; an
+ * agent that reconnects is reported again. `answers()` says whether this tab
+ * answers its current session at all.
  *
  * The relay reads and writes the SDK's socket through the WebSocket class it
  * hands to the SDK, so the SDK itself needs no change.
@@ -141,10 +143,10 @@ function newTabId() {
  * @param {() => Array<object>} options.catalog - Command descriptions for `describe`.
  * @param {(command: string, args: object) => Promise<{envelope: object, image?: Blob}>} options.invoke
  * @param {(blob: Blob) => Promise<string>} options.uploadImage - Uploads bytes to the session; returns the image id.
- * @param {(agent: {userId: string, username: string}) => void} [options.onAgent] - Called once for each
- *   participant whose request this tab answers in a session.
+ * @param {(agent: {userId: string, username: string}) => void} [options.onAgent] - Called for the first
+ *   request this tab answers on each connection in a session.
  * @param {typeof WebSocket} [options.BaseSocket]
- * @returns {{ WebSocket: typeof WebSocket, tabId: string, sessionCreated: (sessionId: string) => void }}
+ * @returns {{ WebSocket: typeof WebSocket, tabId: string, sessionCreated: (sessionId: string) => void, answers: () => boolean }}
  *   Call sessionCreated with the session id once this tab has taken a session online.
  */
 export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage, onAgent, BaseSocket = globalThis.WebSocket }) {
@@ -303,8 +305,8 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
         if (!assembled.done || !assembled.body || typeof assembled.body !== 'object') return
         // A flood of requests waits for no one: past a few, the tab drops them.
         if (pending >= MAX_PENDING) return
-        if (typeof frame.user_id === 'string' && !agents.has(frame.user_id)) {
-            agents.add(frame.user_id)
+        if (typeof frame.connection_id === 'string' && !agents.has(frame.connection_id)) {
+            agents.add(frame.connection_id)
             try {
                 onAgent?.({ userId: frame.user_id, username: frame.username || '' })
             } catch (err) {
@@ -334,5 +336,5 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
         }
     })
 
-    return { WebSocket: RelaySocket, tabId, sessionCreated }
+    return { WebSocket: RelaySocket, tabId, sessionCreated, answers: answering }
 }
