@@ -14,6 +14,10 @@ https://visualize.noisedeck.app/llms-full.txt
 The DSL itself (syntax, effects, parameters, surfaces) is specified by the
 Noisemaker contract: https://noisemaker.app/llms-full.txt
 
+For the roles and control paths of the other Noise Factor visual products,
+including Timeline's project-folder CLI and Layers' separate document, read
+the product map at https://noisedeck.app/llms-full.txt.
+
 ## Connect
 
 Visualize runs in the person's browser. Use the first route that you can use.
