@@ -19,6 +19,8 @@ on:
       - 'css/**'
       - 'js/**'
       - 'data/**'
+      - 'llms.txt'
+      - 'llms-full.txt'
       - '.github/workflows/deploy.yml'
 
 # No job uses the repo GITHUB_TOKEN; the dispatch authenticates with the app token.
