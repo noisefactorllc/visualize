@@ -34,7 +34,7 @@ test('every command has a handler in commands.js', async () => {
 
 // The shared nf-agent/1 relay, byte for byte. Update it only by copying the
 // reviewed relay, and update this digest with it.
-const SHARED_RELAY_SHA256 = 'fe245367d3432f8ee4481d6dd820ecb3700d1b765fcbe43bfed90039600c2828'
+const SHARED_RELAY_SHA256 = '976b8550a2ec439e8d79b61fac1a32fabb2eb53e80e6cd73e2a2d20fc1b8a867'
 
 test('the relay copy is the shared agent relay (nf-agent/1)', async () => {
     const relay = await readFile(new URL('relay.js', AGENT_DIR))

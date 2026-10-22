@@ -27,13 +27,24 @@
  * The relay reads and writes the SDK's socket through the WebSocket class it
  * hands to the SDK, so the SDK itself needs no change.
  *
+ * A program change that an agent's command makes reaches the session as this
+ * tab's own edits, under the person's name. So while a command that can change
+ * the program runs, and until the edits it caused have gone out and been
+ * accepted, the tab notes each edit it sends. The response names them
+ * (`edits`), and the agent counts every other edit as the person's. An edit
+ * the tab sends soon after the person typed, clicked or dragged in the page
+ * may be theirs, so it is not named. `complete: false` says that edits may
+ * still follow the response.
+ *
  * Frame shapes (the agent side is /agent/seance-agent.mjs):
  *   request   { relay, kind: 'request', id, to: tabId | '*', body: { command, args } }
- *   response  { relay, kind: 'response', id, from: tabId, app, body: envelope }
+ *   response  { relay, kind: 'response', id, from: tabId, app, edits?, body: envelope }
+ *             edits: { docs: [[docId, authorSeq]], nodes: [author_seq], complete }
  *   announce  { relay, kind: 'announce', from, app, body: describe result }
  *   bye       { relay, kind: 'bye', from, app, body: {} }
  * `'*'` reaches only `describe`. A body too large for one Seance frame travels
- * as JSON text slices: `part`, `parts` and `chunk` replace `body`.
+ * as JSON text slices: `part`, `parts` and `chunk` replace `body`, and
+ * `edits` travels in a last slice of its own.
  *
  * @module agent/relay
  */
@@ -57,6 +68,21 @@ const IMAGE_WINDOW_MS = 10 * 60 * 1000
 const IMAGE_TEXT = /data:image\/[^;,"'\s]*;base64,/i
 const OUTSIDE_LINK = /\burl\s*:\s*\\?["']\s*(?:https?:)?\/\//i
 const CREATED_KEY = 'nf-agent-relay:created'
+// The SDK sends a change within its proposal throttle, and only after the
+// server accepts the edit before it. A command's edits have all gone out once
+// the tab has sent none for a moment and none waits for the server. Compiling
+// a program can hold the page for seconds, so the wait allows for that.
+const EDITS_QUIET_MS = 400
+const EDITS_MAX_MS = 10000
+const EDITS_LIMIT = 256
+// An edit can leave the tab a while after the input that made it: the SDK
+// throttles and queues edits, an app may publish after a delay or a load, and
+// a compile can hold the page for seconds. So the person's input stays recent
+// until the page has run this long without new input, time it was held aside.
+const PERSON_RECENT_MS = 2000
+const PERSON_TICK_MS = 100
+const PERSON_INPUT = ['keydown', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'wheel',
+    'input', 'change', 'paste', 'cut', 'drop']
 
 function readCreated() {
     try {
@@ -85,8 +111,10 @@ export function seanceSize(value) {
     return size
 }
 
-export function relayFrames(head, body) {
-    const whole = { type: 'clicked-button', relay: RELAY, ...head, body }
+// `last` holds fields that travel once: in the whole frame, or in a final
+// slice of its own with an empty chunk.
+export function relayFrames(head, body, last = null) {
+    const whole = { type: 'clicked-button', relay: RELAY, ...head, ...last, body }
     if (seanceSize(whole) <= MAX_FRAME_BYTES) return [whole]
     const text = JSON.stringify(body)
     const slices = []
@@ -105,7 +133,11 @@ export function relayFrames(head, body) {
         if (pair) at += 1
     }
     slices.push(text.slice(start))
-    return slices.map((chunk, part) => ({ type: 'clicked-button', relay: RELAY, ...head, part, parts: slices.length, chunk }))
+    if (last) slices.push('')
+    return slices.map((chunk, part) => ({
+        type: 'clicked-button', relay: RELAY, ...head, ...(last && part === slices.length - 1 ? last : {}),
+        part, parts: slices.length, chunk,
+    }))
 }
 
 export function createAssembler() {
@@ -163,8 +195,137 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
     let tokens = SEND_BURST
     let tokensAt = Date.now()
     let chain = Promise.resolve()
+    // The commands whose edits the tab is noting, and the edits it sent that
+    // the server has not yet accepted or refused, with when it sent them.
+    const watching = new Set()
+    const unanswered = new Map()
+    let lastSentAt = 0
+    let lastAnswerAt = 0
+    let personActive = false
+    let activeFor = 0
+    let personInputAt = 0
+    let tickAt = 0
+    let activeTimer = null
 
     const answering = () => Boolean(self) && self === owner && created.has(session)
+
+    function editKey(frame) {
+        if (frame?.type === 'doc-edit' || frame?.type === 'doc-ack' || frame?.type === 'doc-reject') {
+            return typeof frame.docId === 'string' && Number.isInteger(frame.authorSeq) ? ['doc', frame.docId, frame.authorSeq] : null
+        }
+        if (/^poly-(token-upsert|token-delete|ack|reject)$/.test(frame?.type || '')) {
+            return Number.isInteger(frame.author_seq) ? ['node', frame.author_seq] : null
+        }
+        return null
+    }
+
+    function noteSent(data) {
+        if (!data.includes('"doc-edit"') && !data.includes('"poly-token-')) return
+        let key
+        try {
+            key = editKey(JSON.parse(data))
+        } catch {
+            return
+        }
+        if (!key) return
+        const now = Date.now()
+        const id = key.join('\n')
+        unanswered.set(id, now)
+        lastSentAt = now
+        if (personActive) return
+        for (const scope of watching) {
+            const list = key[0] === 'doc' ? scope.docs : scope.nodes
+            if (list.length >= EDITS_LIMIT) {
+                scope.complete = false
+                continue
+            }
+            list.push(key[0] === 'doc' ? [key[1], key[2]] : key[1])
+            scope.pending.add(id)
+            scope.lastNamed = now
+        }
+    }
+
+    function noteAnswer(data) {
+        if (!unanswered.size || !/"(doc-ack|doc-reject|poly-ack|poly-reject)"/.test(data)) return
+        try {
+            const key = editKey(JSON.parse(data))
+            if (!key) return
+            const id = key.join('\n')
+            unanswered.delete(id)
+            const now = Date.now()
+            lastAnswerAt = now
+            for (const scope of watching) if (scope.pending.delete(id)) scope.lastNamed = now
+        } catch { /* not an answer */ }
+    }
+
+    function waitsForServer(now) {
+        for (const [key, at] of unanswered) {
+            // The server answers a retransmit it already took with silence.
+            if (now - at > EDITS_MAX_MS) unanswered.delete(key)
+            else return true
+        }
+        return false
+    }
+
+    // Returns finish(): it waits for the command's edits to go out and be
+    // answered, then returns the edits to name. While the person is using the
+    // page, whatever the tab sends next is counted as theirs, so their edits
+    // do not hold the answer.
+    function watchEdits() {
+        const scope = { docs: [], nodes: [], pending: new Set(), lastNamed: 0, complete: true }
+        watching.add(scope)
+        return async () => {
+            const started = Date.now()
+            for (;;) {
+                const now = Date.now()
+                const busy = scope.pending.size > 0 || (!personActive && waitsForServer(now))
+                const quiet = now - Math.max(started, scope.lastNamed, personActive ? 0 : Math.max(lastSentAt, lastAnswerAt))
+                if (quiet >= EDITS_QUIET_MS && !busy) break
+                if (now - started >= EDITS_MAX_MS) {
+                    if (scope.pending.size || now - scope.lastNamed < EDITS_QUIET_MS) scope.complete = false
+                    break
+                }
+                await new Promise(done => setTimeout(done, Math.max(20, EDITS_QUIET_MS - quiet)))
+            }
+            watching.delete(scope)
+            return { docs: scope.docs, nodes: scope.nodes, complete: scope.complete }
+        }
+    }
+
+    // A timer that counts the time the page runs: a tick that comes much too
+    // late was held up, and that time does not count. A hidden page's timers
+    // are slowed, so there every tick counts. A page held up all the time
+    // still lets the input go after a while.
+    function tickPersonInput() {
+        const now = Date.now()
+        const step = now - tickAt
+        tickAt = now
+        if (step < PERSON_TICK_MS * 3 || document.visibilityState === 'hidden') activeFor += step
+        if (activeFor >= PERSON_RECENT_MS || now - personInputAt >= EDITS_MAX_MS) {
+            personActive = false
+            activeTimer = null
+            return
+        }
+        activeTimer = setTimeout(tickPersonInput, PERSON_TICK_MS)
+    }
+
+    function changesProgram(command) {
+        try {
+            return !catalog().find(item => item?.name === command)?.readOnly
+        } catch {
+            return true
+        }
+    }
+
+    for (const type of PERSON_INPUT) {
+        window.addEventListener(type, event => {
+            if (!event.isTrusted || (type === 'pointermove' && !event.buttons)) return
+            personActive = true
+            activeFor = 0
+            personInputAt = tickAt = Date.now()
+            activeTimer ??= setTimeout(tickPersonInput, PERSON_TICK_MS)
+        }, { capture: true, passive: true })
+    }
 
     function sessionCreated(sessionId) {
         if (typeof sessionId !== 'string' || !sessionId) return
@@ -229,6 +390,8 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
     async function respond(frame, target) {
         const { command, args } = frame.body || {}
         let envelope
+        // Every answer but describe's names the edits the command sent.
+        let edits = command === 'describe' ? null : { docs: [], nodes: [], complete: true }
         if (command === 'describe') {
             envelope = makeSuccess('describe', describe(), null)
         } else if (frame.to !== tabId) {
@@ -242,22 +405,27 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
             envelope = makeFailure(command, 'OUTSIDE_LINK',
                 'A program from a session cannot name media by an outside link. Add the image with image-put and refer to it as image:<sha256>.')
         } else {
-            let out
+            const finish = changesProgram(command) ? watchEdits() : null
             try {
-                out = await invoke(command, args === undefined ? {} : args)
-            } catch (err) {
-                out = { envelope: makeFailure(command, 'INTERNAL_ERROR', err?.message || String(err)) }
-            }
-            envelope = out.envelope
-            if (IMAGE_TEXT.test(JSON.stringify(envelope))) {
-                envelope = makeFailure(command, 'IMAGE_AS_TEXT',
-                    'The answer holds an image as text, which a session does not carry. Ask the person to share the image as a file.',
-                    {}, envelope.state)
-            } else if (envelope.ok && out.image) {
-                envelope = await storeImage(command, envelope, out.image)
+                let out
+                try {
+                    out = await invoke(command, args === undefined ? {} : args)
+                } catch (err) {
+                    out = { envelope: makeFailure(command, 'INTERNAL_ERROR', err?.message || String(err)) }
+                }
+                envelope = out.envelope
+                if (IMAGE_TEXT.test(JSON.stringify(envelope))) {
+                    envelope = makeFailure(command, 'IMAGE_AS_TEXT',
+                        'The answer holds an image as text, which a session does not carry. Ask the person to share the image as a file.',
+                        {}, envelope.state)
+                } else if (envelope.ok && out.image) {
+                    envelope = await storeImage(command, envelope, out.image)
+                }
+            } finally {
+                if (finish) edits = await finish()
             }
         }
-        await send(relayFrames({ kind: 'response', id: frame.id, from: tabId, app }, envelope), target)
+        await send(relayFrames({ kind: 'response', id: frame.id, from: tabId, app }, envelope, edits ? { edits } : null), target)
     }
 
     function track(frame, target) {
@@ -280,6 +448,7 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
         const target = this
         if (typeof event.data !== 'string') return
         const data = event.data
+        noteAnswer(data)
         if (!data.includes(RELAY) && !data.includes('"welcome"') && !data.includes('"owner-changed"') &&
             !data.includes('"session-snapshot"')) return
         let frame
@@ -325,8 +494,16 @@ export function createAgentRelay({ app, appVersion, catalog, invoke, uploadImage
             owner = null
             this.addEventListener('message', onMessage)
             this.addEventListener('close', () => {
-                if (socket === this) socket = null
+                if (socket === this) {
+                    socket = null
+                    unanswered.clear()
+                }
             })
+        }
+
+        send(data) {
+            if (this === socket && typeof data === 'string' && answering()) noteSent(data)
+            super.send(data)
         }
     }
 
