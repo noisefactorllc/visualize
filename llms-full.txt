@@ -62,19 +62,22 @@ node seance-agent.mjs set --args '{"deck":"B"}' program.dsl
 node seance-agent.mjs look                          # image of the output
 node seance-agent.mjs look --args '{"source":"B"}'  # image of deck B
 node seance-agent.mjs wait --doc deck:B --since <rev>
-node seance-agent.mjs image-put photo.png           # prints image:<sha256>
+node seance-agent.mjs image-put photo.png           # result.ref is image:<sha256>
 node seance-agent.mjs leave
 ```
 
-`look` saves the image as a file and prints its path. Images travel as
-bytes; the tool never prints image data. `program --json` adds the document
+`look` saves the image as a file; its path is
+`result.envelope.result.image.path`. Images travel as bytes; the tool never
+prints image data. `program --json` adds the document
 revision for `wait --since`. `set` and `validate` read `-` as standard input.
-Output is JSON except the program text. A result drops the state snapshot
+Output is JSON except the program text and the `commands` list (`commands
+--json` gives JSON). A result drops the state snapshot
 unless you add `--state`.
 
 The session has two documents: `deck:A` (the default) and `deck:B`. A
 program that a deck runs is in its document, so people in the session see
-your changes. `wait` returns when a person changes a program.
+your changes. `wait` returns when a person changes deck A's program; add
+`--doc deck:B` to watch deck B.
 
 To move a program and its images between apps, join both sessions and use
 `transfer`. Name the deck with `--from-args` or `--to-args`:
@@ -145,11 +148,21 @@ Agent tool errors (exit code 2, `error.code`):
 - `NO_APP_TAB`: the tab that took the session online did not answer. Ask the
   person to keep it open, or to go online again and send the new code.
 - `TIMEOUT`: the tab did not answer in time. Check `status`, then try again.
-- `READONLY`: the session lets this agent only read.
+- `READONLY`: the session lets this agent only read the program text:
+  `program`, `wait` and `status` work, and every app command, `commands` and
+  `look` included, is refused. Ask the person to allow guests to edit.
 - `SESSION_CLOSED`, `SESSION_REFUSED`: the connection closed, or the session
   server refused a request (the message says why).
 - `IMAGE_FAILED`, `NO_DOCUMENT`, `USAGE`, `INVALID_JSON`: an image transfer
   failed, a document is missing, or the command line was wrong.
+- `CONNECT_FAILED`, `RATE_LIMITED`: `join` could not reach the session server,
+  or the server is limiting joins from this address. Wait a minute, then join
+  again.
+- `INVALID_IMAGE`, `BAD_RESPONSE`: an image id is malformed, or the app sent
+  an answer that the tool could not read.
+- `DAEMON_FAILED`, `INTERNAL_ERROR`: the tool's background process did not
+  start, or the tool failed. If it happens again, run `stop` and join again.
+- A file that the tool cannot read gives the system's code, such as `ENOENT`.
 
 ### 2. WebMCP (browser tools)
 
@@ -262,7 +275,8 @@ What is special about programs in Visualize:
   also in this browser's scene images); otherwise `setProgram` fails with
   `NOT_FOUND_IMAGE`. Any
   other `url` value (a web link or inline image data) is refused with a
-  `MEDIA_URL` diagnostic.
+  `MEDIA_URL` diagnostic; through a session, the tab refuses it first with
+  `OUTSIDE_LINK` or `IMAGE_AS_TEXT`.
 
 ---
 
