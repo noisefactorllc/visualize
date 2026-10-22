@@ -153,6 +153,8 @@ Agent tool errors (exit code 2, `error.code`):
   `look` included, is refused. Ask the person to allow guests to edit.
 - `SESSION_CLOSED`, `SESSION_REFUSED`: the connection closed, or the session
   server refused a request (the message says why).
+- `ISLAND`: a `transfer` to or from a Layers session. Layers shares nothing
+  with the other apps.
 - `IMAGE_FAILED`, `NO_DOCUMENT`, `USAGE`, `INVALID_JSON`: an image transfer
   failed, a document is missing, or the command line was wrong.
 - `CONNECT_FAILED`, `RATE_LIMITED`: `join` could not reach the session server,
