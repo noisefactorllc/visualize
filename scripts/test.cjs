@@ -239,7 +239,12 @@ async function main() {
 
   const browsersPath = ensureExecutableBrowser(installProc, Boolean(selection));
   if (browsersPath === null) {
-    process.exit(nodeRun.status || 0);
+    // Only a changed-path run returns null (the full suite exits 1 inside
+    // ensureExecutableBrowser). The selection chose browser specs, so a
+    // missing browser must fail the run: an unexecuted test never counts
+    // as passing.
+    console.error('[scripts/test] no executable chromium headless shell: the selected browser specs did not run');
+    process.exit(1);
   }
   const pwPort = await pickPwPort();
   const cores = os.cpus().length;
