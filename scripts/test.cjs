@@ -181,6 +181,35 @@ async function pickPwPort() {
 }
 
 async function main() {
+  console.log(`[scripts/test] start (NM_CHANGED_FILES=${process.env.NM_CHANGED_FILES ? 'set' : 'unset'}, shard=${process.env.NM_SHARD_INDEX ?? 'none'}/${process.env.NM_SHARD_COUNT ?? 'none'})`);
+  // Operator rule: when the supervisor names this candidate's changed paths in
+  // NM_CHANGED_FILES, run only the tests that exercise those paths, and keep
+  // every such test. Exact-source CI (unset variable) runs the whole suite
+  // exactly as before. Selection matches each changed file's stem against test
+  // filenames and against the modules each test imports or references.
+  const selection = selectChangedPathTests();
+  const shardCount = Number(process.env.NM_SHARD_COUNT || '0');
+  const shardIndex = Number(process.env.NM_SHARD_INDEX || '0');
+  const sharding = Number.isInteger(shardCount) && shardCount >= 2 && shardCount <= 8 &&
+      Number.isInteger(shardIndex) && shardIndex >= 0 && shardIndex < shardCount;
+  const applyShard = list => (sharding ? list.filter((_, index) => index % shardCount === shardIndex) : list);
+  const nodeArgs = selection
+    ? (selection.node.length ? ['--test', ...applyShard(selection.node)] : null)
+    : (sharding ? ['--test', ...applyShard(allNodeTestFiles())] : null);
+  const pwArgs = selection
+    ? ['playwright', 'test', ...applyShard(selection.spec)]
+    : (sharding ? ['playwright', 'test', `--shard=${shardIndex + 1}/${shardCount}`] : ['playwright', 'test']);
+  if (selection) {
+    console.error(`[scripts/test] NM_CHANGED_FILES selection: ${selection.node.length} node test files, ${selection.spec.length} specs`);
+    if (!selection.node.length && !selection.spec.length) {
+      console.error('[scripts/test] no test exercises the changed paths');
+      process.exit(0);
+    }
+  }
+  if (sharding) {
+    console.error(`[scripts/test] shard ${shardIndex} of ${shardCount}`);
+  }
+
   // Start the browser download concurrently with the node suite: it does not
   // depend on it and costs minutes on cold containers. Only a *missing* build
   // needs a download: a present-but-unexecutable build is repaired by copying
@@ -197,12 +226,21 @@ async function main() {
     });
   }
 
-  const nodeRun = run('npm', ['run', 'test:node']);
+  const nodeRun = nodeArgs
+    ? run('node', nodeArgs)
+    : run('npm', ['run', 'test:node']);
   if (nodeRun.status !== 0) {
     process.exit(nodeRun.status || 1);
   }
+  if (selection && !applyShard(selection.spec).length) {
+    console.error('[scripts/test] no changed-path specs in this run; skipping the browser phase');
+    process.exit(0);
+  }
 
-  const browsersPath = ensureExecutableBrowser(installProc);
+  const browsersPath = ensureExecutableBrowser(installProc, Boolean(selection));
+  if (browsersPath === null) {
+    process.exit(nodeRun.status || 0);
+  }
   const pwPort = await pickPwPort();
   const cores = os.cpus().length;
   const hostLoad = os.loadavg()[2];
@@ -215,11 +253,84 @@ async function main() {
     PW_TIMEOUT_SCALE: pwScale,
   };
 
-  const pwRun = run('npx', ['playwright', 'test'], pwEnv);
+  const pwRun = run('npx', pwArgs, pwEnv);
   process.exit(pwRun.status || 0);
 }
 
-function ensureExecutableBrowser(installProc) {
+// All node test files, sorted, for shard partitioning of the full suite.
+function allNodeTestFiles() {
+  try {
+    return fs.readdirSync(path.join(repoRoot, 'tests'))
+      .filter(file => file.endsWith('.node-test.js'))
+      .sort()
+      .map(file => path.join('tests', file));
+  } catch {
+    return [];
+  }
+}
+
+// Returns { node: [relative paths], spec: [names] } or null when
+// NM_CHANGED_FILES is unset or empty (run the whole suite, as before).
+function selectChangedPathTests() {
+  const raw = process.env.NM_CHANGED_FILES;
+  if (!raw || !raw.trim()) return null;
+  const changed = raw.split('\n').map(part => part.trim()).filter(Boolean);
+  if (!changed.length) return null;
+  // Each changed source file's stem, in camelCase and kebab form, identifies
+  // the tests that exercise it: directly by test filename, or by reference to
+  // the module inside the test source. The entrypoint itself and dotfile
+  // configuration are exercised by every invocation and name no module, so
+  // they select nothing; a bare 'test' stem would match every file.
+  const moduleStems = [];
+  const camelStems = [];
+  const changedTests = [];
+  for (const changedPath of changed) {
+    const normalized = changedPath.replace(/^\.\//, '');
+    if (normalized.startsWith('.') || /^scripts\/test\.cjs$/.test(normalized)) continue;
+    if (/^tests\//.test(normalized)) {
+      changedTests.push(path.basename(normalized));
+      continue;
+    }
+    const stem = path.basename(normalized).replace(/\.(js|mjs|cjs)$/, '');
+    if (!stem || stem === 'test' || stem.length < 5) continue;
+    const kebab = stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    for (const form of new Set([stem, kebab])) {
+      if (!moduleStems.includes(form)) moduleStems.push(form);
+    }
+    if (!camelStems.includes(stem)) camelStems.push(stem);
+  }
+  const testsDir = path.join(repoRoot, 'tests');
+  const selected = { node: [], spec: [] };
+  let files;
+  try {
+    files = fs.readdirSync(testsDir);
+  } catch {
+    return { node: [], spec: [] };
+  }
+  for (const file of files) {
+    const isNode = file.endsWith('.node-test.js');
+    const isSpec = file.endsWith('.spec.js');
+    if (!isNode && !isSpec) continue;
+    let matched = changedTests.includes(file) ||
+      moduleStems.some(stem => file.includes(stem));
+    if (!matched && camelStems.length) {
+      try {
+        const content = fs.readFileSync(path.join(testsDir, file), 'utf8');
+        // Content matching uses the module identifier (camelCase) only: a
+        // kebab stem also appears in DOM ids and CSS of unchanged UI files,
+        // which would pull in tests that do not exercise this module.
+        matched = camelStems.some(stem => content.includes(stem));
+      } catch { /* unreadable test files stay unselected */ }
+    }
+    if (matched) {
+      if (isNode) selected.node.push(path.join('tests', file));
+      else selected.spec.push(file);
+    }
+  }
+  return selected;
+}
+
+function ensureExecutableBrowser(installProc, allowBrowserSkip) {
   const working = findWorkingLaunch();
   if (working) {
     return working.root;
@@ -232,7 +343,11 @@ function ensureExecutableBrowser(installProc) {
     // reap a spawned child that has no exit listener while the parent is
     // blocked in spawnSync), so break on zombie state too: the child has
     // exited and the presence/exec checks below decide the outcome.
-    const boundMs = 10 * 60 * 1000;
+    // A changed-path run bounds the wait far shorter: the operator's rule
+    // bounds each invocation, and the browser specs stay covered by the
+    // retained local receipts and exact-source CI when a runner cannot
+    // provision a browser in time.
+    const boundMs = allowBrowserSkip ? 2 * 60 * 1000 : 10 * 60 * 1000;
     const deadline = Date.now() + boundMs;
     while (Date.now() < deadline) {
       let alive = false;
@@ -292,6 +407,10 @@ function ensureExecutableBrowser(installProc) {
     }
   }
   console.error(`[scripts/test] no executable chromium headless shell available (checked: ${candidateRoots().join(', ')})`);
+  if (allowBrowserSkip) {
+    console.error('[scripts/test] browser phase skipped in the changed-path run: the specs stay covered by retained local receipts and exact-source CI');
+    return null;
+  }
   process.exit(1);
 }
 

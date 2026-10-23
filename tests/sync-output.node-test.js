@@ -308,10 +308,10 @@ test('publishes the Visualize mixer renderer through a bounded Sync sender sink'
     assert.equal(createSender[1], 'Visualize Main')
     assert.equal(createSender[2].exportQueue, fixture.queue)
     assert.equal(createSender[2].maxBufferedFrames, 1)
-    assert.deepEqual(
-        fixture.events.find((event) => event[0] === 'queue'),
-        ['queue', { slots: 3 }]
-    )
+    const queueOptions = fixture.events.find((event) => event[0] === 'queue')[1]
+    assert.equal(queueOptions.slots, 3)
+    assert.equal(typeof queueOptions.onError, 'function',
+        'the export queue must receive an error handler so readback failures surface')
 
     assert.equal(fixture.attachedSink.submit('mixer-texture', 42), true)
     assert.deepEqual(

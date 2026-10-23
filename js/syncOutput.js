@@ -3,6 +3,11 @@ import { syncCredentialStore } from './sync/credentials.js'
 import { SyncH264CanvasSender, supportsH264CanvasOutput } from './syncH264CanvasSender.js'
 
 const MAX_SENDER_NAME_BYTES = 64
+// A single failed frame readback must not end the output: one dropped frame
+// is invisible next to the render loop. Readback failures that repeat while
+// no frame completes mean the backend stopped exporting, and the output
+// must surface that instead of holding the sending state with no traffic.
+const EXPORT_FAILURE_LIMIT = 3
 const RGBA8_BYTES_PER_PIXEL = 4
 const MAX_V1_PAYLOAD_BYTES = 0xffffffff
 const STATS_INTERVAL_MS = 250
@@ -312,6 +317,9 @@ export class SyncOutputController {
         this._welcome = null
         this._sender = null
         this._exportQueue = null
+        this._exportFailureStreak = 0
+        this._lastExportError = ''
+        this._lastExportSent = 0
         this._removeSink = null
         this._statsTimer = null
         this._liveGeneration = 0
@@ -759,7 +767,10 @@ export class SyncOutputController {
                             logger: this._logger
                         })
                     } else {
-                        resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+                        resources.queue = this._renderer.createFrameExportQueue({
+                            slots: 3,
+                            onError: (error) => this._handleExportError(error)
+                        })
                         if (!resources.queue) {
                             throw outputError(
                                 'SYNC_EXPORT_UNAVAILABLE',
@@ -828,6 +839,9 @@ export class SyncOutputController {
             this._liveDescriptor = configuredDescriptor
             this._livePipeline = rendererIdentity.pipeline
             this._compressedSender = compressed
+            this._exportFailureStreak = 0
+            this._lastExportError = ''
+            this._lastExportSent = 0
             resources.queue = null
             resources.sender = null
             resources.removeSink = null
@@ -969,7 +983,46 @@ export class SyncOutputController {
         if (generation !== this._liveGeneration || this._state.status !== 'sending' || !this._sender) {
             return
         }
-        this._setState({ stats: this._copyStats(this._sender.stats) })
+        const stats = this._sender.stats
+        if (Number(stats.sent) > this._lastExportSent) this._exportFailureStreak = 0
+        this._lastExportSent = Number(stats.sent)
+        this._setState({ stats: this._copyStats(stats) })
+    }
+
+    _handleExportError(error) {
+        if (this._disposed || this._state.status !== 'sending' || !this._sender) return
+        this._exportFailureStreak += 1
+        if (this._exportFailureStreak < EXPORT_FAILURE_LIMIT) return
+        const cause = error instanceof Error ? error.message : (error ? String(error) : '')
+        this._lastExportError = cause
+        const generation = this._liveGeneration
+        const sender = this._sender
+        const exportQueue = this._exportQueue
+        this._clearStatsTimer()
+        this._clearRecoveryProbationTimer()
+        const removeSink = this._removeSink
+        this._invalidateLiveSession(generation)
+        this._exportFailureStreak = 0
+        try { removeSink?.() } catch {
+            // The export failure is already terminal for this live session.
+        }
+        try { sender?.close() } catch {
+            // The export failure is already terminal for this live session.
+        }
+        try { exportQueue?.close() } catch {
+            // The export failure is already terminal for this live session.
+        }
+        this._releaseClient()
+        this._setState({
+            status: 'error',
+            connected: false,
+            senderName: null,
+            error: publicError('SYNC_EXPORT_UNAVAILABLE',
+                cause
+                    ? `The active graphics backend cannot export frames for Sync: ${cause}`
+                    : 'The active graphics backend cannot export frames for Sync')
+        })
+        if (cause) this._logger?.warn?.('Sync frame export failed repeatedly:', cause)
     }
 
     _sinkConfigured(sender, generation, descriptor) {
@@ -1149,7 +1202,10 @@ export class SyncOutputController {
                     logger: this._logger
                 })
             } else {
-                resources.queue = this._renderer.createFrameExportQueue({ slots: 3 })
+                resources.queue = this._renderer.createFrameExportQueue({
+                    slots: 3,
+                    onError: (error) => this._handleExportError(error)
+                })
                 if (!resources.queue || typeof resources.queue.close !== 'function') {
                     throw outputError(
                         'SYNC_EXPORT_UNAVAILABLE',
@@ -1199,6 +1255,9 @@ export class SyncOutputController {
             this._liveDescriptor = configuredDescriptor
             this._livePipeline = context.pipeline
             this._compressedSender = supportsH264CanvasOutput(welcome)
+            this._exportFailureStreak = 0
+            this._lastExportError = ''
+            this._lastExportSent = 0
             resources.client = null
             resources.queue = null
             resources.sender = null
@@ -1393,6 +1452,9 @@ export class SyncOutputController {
         this._liveDescriptor = null
         this._livePipeline = null
         this._compressedSender = false
+        this._exportFailureStreak = 0
+        this._lastExportError = ''
+        this._lastExportSent = 0
     }
 
     _clearStatsTimer() {
