@@ -30,7 +30,8 @@ const POPUP_HTML = `<!DOCTYPE html>
     color: rgba(255,255,255,0.3); font-family: monospace; font-size: 11px;
     pointer-events: none; transition: opacity 1s ease 3s; opacity: 1;
   }
-  body.played .hint { opacity: 0; }
+  body.played .hint { animation: hint-fade 1s ease 3s forwards; }
+  @keyframes hint-fade { to { opacity: 0; } }
 </style>
 </head>
 <body class="played">
