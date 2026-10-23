@@ -991,6 +991,14 @@ export class SyncOutputController {
 
     _handleExportError(error) {
         if (this._disposed || this._state.status !== 'sending' || !this._sender) return
+        const sent = Number(this._sender.stats?.sent) || 0
+        if (sent > this._lastExportSent) {
+            // Frames completed since the last observed error, even between
+            // stats ticks: the backend is still exporting. This failure
+            // starts a new streak instead of extending the old one.
+            this._lastExportSent = sent
+            this._exportFailureStreak = 0
+        }
         this._exportFailureStreak += 1
         if (this._exportFailureStreak < EXPORT_FAILURE_LIMIT) return
         const cause = error instanceof Error ? error.message : (error ? String(error) : '')

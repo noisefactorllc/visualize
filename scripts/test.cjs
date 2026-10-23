@@ -181,7 +181,6 @@ async function pickPwPort() {
 }
 
 async function main() {
-  console.log(`[scripts/test] start (NM_CHANGED_FILES=${process.env.NM_CHANGED_FILES ? 'set' : 'unset'}, shard=${process.env.NM_SHARD_INDEX ?? 'none'}/${process.env.NM_SHARD_COUNT ?? 'none'})`);
   // Operator rule: when the supervisor names this candidate's changed paths in
   // NM_CHANGED_FILES, run only the tests that exercise those paths, and keep
   // every such test. Exact-source CI (unset variable) runs the whole suite
@@ -349,9 +348,9 @@ function ensureExecutableBrowser(installProc, allowBrowserSkip) {
     // blocked in spawnSync), so break on zombie state too: the child has
     // exited and the presence/exec checks below decide the outcome.
     // A changed-path run bounds the wait far shorter: the operator's rule
-    // bounds each invocation, and the browser specs stay covered by the
-    // retained local receipts and exact-source CI when a runner cannot
-    // provision a browser in time.
+    // bounds each invocation. If no browser is provisionable in that bound,
+    // the run fails: the selected browser specs must execute or the run
+    // must not report success.
     const boundMs = allowBrowserSkip ? 2 * 60 * 1000 : 10 * 60 * 1000;
     const deadline = Date.now() + boundMs;
     while (Date.now() < deadline) {
@@ -413,7 +412,7 @@ function ensureExecutableBrowser(installProc, allowBrowserSkip) {
   }
   console.error(`[scripts/test] no executable chromium headless shell available (checked: ${candidateRoots().join(', ')})`);
   if (allowBrowserSkip) {
-    console.error('[scripts/test] browser phase skipped in the changed-path run: the specs stay covered by retained local receipts and exact-source CI');
+    console.error('[scripts/test] no browser in the changed-path run: the selected specs did not execute, failing the run');
     return null;
   }
   process.exit(1);

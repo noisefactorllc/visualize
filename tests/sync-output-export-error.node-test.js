@@ -159,3 +159,82 @@ test('completed sends reset the export failure streak', async () => {
     assert.equal(controller.state.status, 'error')
     assert.equal(controller.state.error?.code, 'SYNC_EXPORT_UNAVAILABLE')
 })
+
+// Failures that interleave with continuing traffic inside one stats interval
+// must never end a healthy output: the error handler itself must observe the
+// completed frames, not wait for the next 250 ms tick.
+test('errors between completed sends inside one stats interval keep the output sending', async () => {
+    let exportOnError = null
+    const fakeQueue = {
+        configure() {},
+        get available() { return true },
+        enqueue() { return true },
+        poll() {},
+        close() {}
+    }
+    const canvas = { width: 640, height: 360 }
+    const sender = {
+        id: 'sender-1',
+        configure() {},
+        submit() {},
+        deferRender() { return false },
+        close() {},
+        closed: new Promise(() => {}),
+        stats: { accepted: 0, droppedBusy: 0, droppedBackpressure: 0, sent: 0, failed: 0 }
+    }
+    const controller = new SyncOutputController({
+        renderer: {
+            pipeline: {},
+            addSink: () => () => {},
+            createFrameExportQueue(options) { exportOnError = options.onError; return fakeQueue }
+        },
+        getCanvas: () => canvas,
+        connectionProvider: createDefaultSyncConnectionProvider({
+            credentialStore: {
+                current: () => ({ token: 't' }), publish: (c) => c, clear: () => {}
+            },
+            transport: {}
+        }),
+        // The stats tick never fires in this test: every reset must come
+        // from the error handler observing completed sends.
+        setInterval() { return 0 },
+        clearInterval() {},
+        setTimeout() { return 0 },
+        clearTimeout() {}
+    })
+    controller._connectionProvider = {
+        credentialStore: controller._connectionProvider.credentialStore,
+        createClient: () => ({
+            async connect() {
+                return { version: '0.3.3', capabilities: { providers: [{
+                    id: 'test', direction: 'send', available: true, selected: true
+                }] } }
+            },
+            async createSender() { return sender },
+            close() {}
+        })
+    }
+
+    await controller.connect()
+    await controller.start('Visualize native receiver')
+    assert.equal(controller.state.status, 'sending')
+
+    // Errors and completed frames alternate within one stats interval.
+    exportOnError(new Error('readback failed'))
+    sender.stats.sent = 1
+    exportOnError(new Error('readback failed'))
+    sender.stats.sent = 2
+    exportOnError(new Error('readback failed'))
+    sender.stats.sent = 3
+    exportOnError(new Error('readback failed'))
+    sender.stats.sent = 4
+    exportOnError(new Error('readback failed'))
+    assert.equal(controller.state.status, 'sending',
+        'errors interleaved with completed frames must never end the output')
+
+    // A real stall: repeated errors with no completed frame between them.
+    exportOnError(new Error('readback failed'))
+    exportOnError(new Error('readback failed'))
+    assert.equal(controller.state.status, 'error')
+    assert.equal(controller.state.error?.code, 'SYNC_EXPORT_UNAVAILABLE')
+})
