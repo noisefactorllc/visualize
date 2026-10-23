@@ -82,6 +82,24 @@ test('icon actions and custom app controls expose readable accessible names', as
                 await expect(button).toHaveAccessibleName(tooltip)
             }
         }
+        // Icon-and-text controls are named by their visible text only: the
+        // icon font's ligature word is hidden from assistive technology.
+        const iconAndText = {
+            '#library-random': 'random',
+            '#audio-status': 'audio off',
+            '#midi-status': 'midi off',
+            '#automixer-toggle': 'auto-mix',
+            '#automix-toggle': 'auto-vj',
+            '#deck-a-osc-count': '×0',
+            '#deck-b-osc-count': '×0',
+            '#deck-a-density': '50%',
+            '#deck-b-density': '50%',
+        }
+        for (const [selector, name] of Object.entries(iconAndText)) {
+            const button = page.locator(selector)
+            await expect(button).toHaveAccessibleName(name)
+            await expect(button.locator('.icon')).toHaveAttribute('aria-hidden', 'true')
+        }
         const includeToggles = page.locator('.pc-include .ts-track')
         expect(await includeToggles.count()).toBeGreaterThan(0)
         for (const toggle of await includeToggles.all()) {
