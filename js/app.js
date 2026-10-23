@@ -55,6 +55,7 @@ import {
 } from './drawerEscape.js'
 import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
 import { bootstrapAgent, createSeanceAgentRelay, markAgentReady } from './agent/index.js'
+import { RESOLUTIONS } from './agent/schemas.js'
 // Pulls handfish's <code-editor> custom element (auto-registers on import)
 // plus the DSL syntax tokenizer, the Seance logo graphic (for the go-online
 // toolbar button), and the <seance-dialog> element (declared in index.html;
@@ -87,9 +88,33 @@ function persistRendererPrefs() {
     } catch {}
 }
 
+// The main output resolution, restored before the decks, the mixer and the
+// compositor are built. Only a value the resolution dropdown offers is used.
+const RESOLUTION_STORAGE_KEY = 'visualize.resolution.v1'
+
+function loadMainResolution() {
+    try {
+        const raw = localStorage.getItem(RESOLUTION_STORAGE_KEY)
+        const parsed = raw ? JSON.parse(raw) : null
+        if (RESOLUTIONS.includes(`${parsed?.width}x${parsed?.height}`)) {
+            return { width: parsed.width, height: parsed.height }
+        }
+    } catch {}
+    return { width: 1280, height: 720 }
+}
+
+function persistMainResolution() {
+    try {
+        localStorage.setItem(RESOLUTION_STORAGE_KEY, JSON.stringify({
+            width: state.mainRes.width,
+            height: state.mainRes.height
+        }))
+    } catch {}
+}
+
 const state = {
     decks: { A: null, B: null },
-    mainRes: { width: 1280, height: 720 },
+    mainRes: loadMainResolution(),
     loopDuration: 10,
     preferWebGPU: loadRendererPrefs().preferWebGPU,
     crossfade: 0,
@@ -2005,7 +2030,8 @@ async function boot() {
     $('midi-learn-clear').addEventListener('click', () => midi.clearAllAssignments())
 
     // Main resolution / loop / WebGPU
-    function setMainResolution(w, h) {
+    // `persist: false` leaves the stored resolution alone.
+    function setMainResolution(w, h, { persist = true } = {}) {
         state.mainRes = { width: w, height: h }
         state.decks.A.resize(w, h)
         state.decks.B.resize(w, h)
@@ -2013,7 +2039,10 @@ async function boot() {
         compositor.resize(w, h)
         $('main-res').textContent = `${w}×${h}`
         toast(`main: ${w}×${h}`)
+        if (persist) persistMainResolution()
     }
+    $('main-resolution').value = `${state.mainRes.width}x${state.mainRes.height}`
+    $('main-res').textContent = `${state.mainRes.width}×${state.mainRes.height}`
     $('main-resolution').addEventListener('change', (e) => {
         const [w, h] = e.target.value.split('x').map(Number)
         setMainResolution(w, h)
@@ -2888,8 +2917,8 @@ async function boot() {
             }
         },
         setFollowMidiClock,
-        setMainResolution: (width, height) => {
-            setMainResolution(width, height)
+        setMainResolution: (width, height, options) => {
+            setMainResolution(width, height, options)
             $('main-resolution').value = `${width}x${height}`
         },
         setPreferWebGPU,

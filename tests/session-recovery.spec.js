@@ -102,3 +102,32 @@ test('the live set is restored after a reload', async ({ page }) => {
         !m.includes('GPU stall') && !m.includes('willReadFrequently'))
     expect(unexpectedErrors, unexpectedErrors.join('\n')).toEqual([])
 })
+
+test('the main resolution survives a reload', async ({ page }) => {
+    test.slow()
+    const booted = () => page.waitForFunction(() => !!window.__visualize?.scenes,
+        null, { timeout: 30_000 * SCALE })
+    const output = () => page.evaluate(() => {
+        const canvas = document.getElementById('main-canvas')
+        return {
+            dropdown: document.getElementById('main-resolution').value,
+            canvas: `${canvas.width}x${canvas.height}`,
+            label: document.getElementById('main-res').textContent,
+        }
+    })
+
+    await routeLegacyPrograms(page)
+    await page.goto('/')
+    await booted()
+    expect(await output()).toEqual({ dropdown: '1280x720', canvas: '1280x720', label: '1280×720' })
+
+    // Pick a non-default resolution through the real settings dropdown.
+    await page.click('#settings-toggle')
+    await page.click('#main-resolution .select-trigger')
+    await page.getByRole('option', { name: '1920×1080 (full HD)' }).click()
+    await expect.poll(output).toEqual({ dropdown: '1920x1080', canvas: '1920x1080', label: '1920×1080' })
+
+    await page.reload()
+    await booted()
+    expect(await output()).toEqual({ dropdown: '1920x1080', canvas: '1920x1080', label: '1920×1080' })
+})

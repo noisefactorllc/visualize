@@ -588,10 +588,10 @@ export async function setAudio({ sensitivity }, { audio }) {
     return { result: { enabled: audio.enabled, sensitivity: audio.sensitivity } }
 }
 
-export async function setOutput({ resolution }, ctx) {
+export async function setOutput({ resolution }, ctx, via = {}) {
     if (resolution !== undefined) {
         const [width, height] = resolution.split('x').map(Number)
-        ctx.setMainResolution(width, height)
+        ctx.setMainResolution(width, height, storing(via))
     }
     const { width, height } = ctx.state.mainRes
     return { result: { width, height, backend: ctx.decks.A.activeBackend } }

@@ -249,12 +249,14 @@ test('an agent in the online session drives the owner\'s tab and sees its canvas
             mixer: localStorage.getItem('visualize.mixer.v1'),
             rebind: localStorage.getItem('visualize.rebind.v1'),
             autoMix: localStorage.getItem('visualize.autoxfade.v1'),
+            resolution: localStorage.getItem('visualize.resolution.v1'),
         }))
         const before = await stored()
         expect((await ask('setCrossfader', { curve: 'sharp' })).envelope.result.curve).toBe('sharp')
         expect((await ask('setMixer', { effect: 'mixer/split', params: { softness: 0.3 } })).envelope.result.effect).toBe('mixer/split')
         expect((await ask('setDeck', { deck: 'A', bandpass: false, oscillators: 3 })).envelope.result.oscillators).toBe(3)
         expect((await ask('setAutoMix', { source: 'audio:mid' })).envelope.result.source).toBe('audio:mid')
+        expect((await ask('setOutput', { resolution: '640x360' })).envelope.result).toMatchObject({ width: 640, height: 360 })
         await expect.poll(() => page.evaluate(() => window.__visualize.mixer.currentMixer.id)).toBe('mixer/split')
         expect(await stored()).toEqual(before)
 
