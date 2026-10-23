@@ -232,7 +232,7 @@ shows a start card. Commands wait until the person (or you) clicks
 const A = window.VisualizeAgent
 const dsl = [
     'search synth, filter',
-    'let bass = audio(band: 0, min: 0.5, max: 3)',
+    'let bass = audio(band: 0, min: 0.5, max: 1)',
     'noise(ridges: true, speed: bass).write(o0)',
     'render(o0)',
 ].join('\n')
@@ -255,14 +255,20 @@ DSL rules that agents most often get wrong:
 
 What is special about programs in Visualize:
 
-- Audio: `let bass = audio(band: 0, min: 0.5, max: 3)` declares a binding;
+- Audio: `let bass = audio(band: 0, min: 0.5, max: 1)` declares a binding;
   use its name as a parameter value. Bands are 0 (low), 1 (mid) and 2 (high).
-  The parameter is `min` at silence and `max` at full level. Bindings move
+  `min` and `max` are fractions of the parameter's range, from 0 (its lowest
+  value) to 1 (its highest). The engine clamps them to that span and gives no
+  diagnostic. The parameter is at the `min` fraction at silence and at the
+  `max` fraction at full level. `getEffectDefinition` gives the range. For
+  example, `noise` `speed` runs from -100 to 100, so `speed: bass` is 0 at
+  silence and 100 at full level. Bindings move
   only while audio input is on (`state.audio.enabled`); the person turns it on.
   `setAudio` sets the input sensitivity. `rebind` rewrites random parameters into
   new `audio()` or `midi()` bindings.
-- Oscillators: `let swing = osc(type: oscKind.sine, min: 0.2, max: 2)` moves a
-  parameter in time with the deck loop, so it follows the tempo.
+- Oscillators: `let swing = osc(type: oscKind.sine, min: 0.2, max: 1)` moves a
+  parameter between the same fractions of its range in time with the deck
+  loop, so it follows the tempo.
 - Curated programs: library programs in the `curated` section run effects from
   the `curated` namespace (`searchEffects({ namespace: 'curated' })`).
   `getProgram` and `getLibraryProgram` return them with `search curated`. Keep

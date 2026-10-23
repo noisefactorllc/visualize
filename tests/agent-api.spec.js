@@ -4,6 +4,7 @@
  * command runs the code behind a control, so these specs check both the
  * envelope and the control the person sees.
  */
+import { readFileSync } from 'node:fs'
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './seanceLocal.js'
@@ -89,6 +90,90 @@ test('setProgram runs a valid program on one deck and refuses an invalid one', a
     expect(out.stillRed).toBe(true)
     expect(out.deckA).toBe(true)
     await expect.poll(() => canvasPixel(page, 'B')).toEqual([255, 0, 0, 255])
+})
+
+// A guide example can compile and still not do what the guide says: the
+// engine clamps automation min and max to 0..1 without a diagnostic, then maps
+// the result onto the range of the parameter that receives it. So each
+// automation example runs on a deck, and the engine's own resolver gives the
+// parameter value at the ends of its input.
+test('the guide\'s automation examples give their parameter the values the guide states', async ({ page }) => {
+    const guide = readFileSync(new URL('../llms.txt', import.meta.url), 'utf8')
+    const text = guide.replace(/\s+/g, ' ')
+    const exampleDsl = [.../const dsl = \[\n([\s\S]*?)\n\]\.join/.exec(guide)[1].matchAll(/'([^']*)'/g)]
+        .map(m => m[1]).join('\n')
+    const binding = /^let (\w+) = /m.exec(exampleDsl)[1]
+    const [, func, param] = new RegExp(`(\\w+)\\([^)]*\\b(\\w+): ${binding}\\b`).exec(exampleDsl)
+    const namespaces = /^search (.+)$/m.exec(exampleDsl)[1].split(/,\s*/)
+    const literal = (call, field) => Number(new RegExp(`\\b${field}: (-?[\\d.]+)`).exec(call)[1])
+    const calls = [...new Set([...text.matchAll(/\b(?:audio|osc)\([^)]*\bmin: [^)]*\)/g)].map(m => m[0]))]
+        .map(call => ({
+            call,
+            type: call.startsWith('audio(') ? 'Audio' : 'Oscillator',
+            min: literal(call, 'min'),
+            max: literal(call, 'max'),
+            dsl: exampleDsl.replace(/^let .*$/m, `let ${binding} = ${call}`),
+        }))
+    expect(calls.map(c => c.type)).toEqual(expect.arrayContaining(['Audio', 'Oscillator']))
+    expect(calls.some(c => c.dsl === exampleDsl), 'the example program uses a documented binding').toBe(true)
+
+    await openVisualize(page)
+    const out = await page.evaluate(async ({ calls, func, param, namespaces }) => {
+        const A = window.VisualizeAgent
+        let definition = null
+        for (const namespace of namespaces) {
+            const env = await A.getEffectDefinition({ effectId: `${namespace}/${func}` })
+            if (env.ok) { definition = env.result.params.find(p => p.name === param); break }
+        }
+        const results = []
+        for (const { call, dsl } of calls) {
+            const check = (await A.validateProgram({ dsl })).result
+            const run = await A.setProgram({ dsl, deck: 'B' })
+            const pipeline = window.__visualize.decks.B.inner.pipeline
+            const pass = pipeline.graph.passes.find(p => p.uniforms?.[param]?.type)
+            const automation = pass.uniforms[param]
+            const spec = pass.uniformSpecs[param]
+            // The engine's resolver, with a fixed input instead of the live one.
+            const resolve = (audio, time) =>
+                pipeline.resolveUniformValue.call({ externalState: { audio } }, automation, time, spec)
+            let values
+            if (automation.type === 'Audio') {
+                const level = v => ({ low: v, mid: v, high: v, vol: v })
+                values = [resolve(level(0), 0), resolve(level(1), 0)]
+            } else {
+                values = Array.from({ length: 257 }, (_, i) => resolve(null, i / 256))
+            }
+            results.push({
+                call, valid: check.valid, diagnostics: check.diagnostics, ok: run.ok,
+                type: automation.type, min: automation.min, max: automation.max, spec,
+                low: Math.min(...values), high: Math.max(...values),
+            })
+        }
+        return { definition, results }
+    }, { calls: calls.map(({ call, dsl }) => ({ call, dsl })), func, param, namespaces })
+
+    const { min: from, max: to } = out.definition
+    for (const expected of calls) {
+        const got = out.results.find(r => r.call === expected.call)
+        expect(got, expected.call).toMatchObject({ valid: true, diagnostics: [], ok: true, type: expected.type })
+        // The engine keeps the bounds that the guide writes.
+        expect([got.min, got.max], expected.call).toEqual([expected.min, expected.max])
+        expect(got.spec, expected.call).toMatchObject({ min: from, max: to })
+        // The parameter runs between those fractions of its range.
+        expect(got.low, expected.call).toBeCloseTo(from + expected.min * (to - from), 6)
+        expect(got.high, expected.call).toBeCloseTo(from + expected.max * (to - from), 6)
+    }
+
+    // The guide's own statement of what the example does to its parameter.
+    const num = '(-?\\d+(?:\\.\\d+)?)'
+    const claim = new RegExp(`\`${func}\` \`${param}\` runs from ${num} to ${num}, so \`${param}: ${binding}\` ` +
+        `is ${num} at silence and ${num} at full level`).exec(text)
+    expect(claim, 'the guide states the values that the example gives its parameter').not.toBeNull()
+    const [statedFrom, statedTo, atSilence, atFull] = claim.slice(1).map(Number)
+    expect([statedFrom, statedTo]).toEqual([from, to])
+    const example = out.results.find(r => r.call === calls.find(c => c.dsl === exampleDsl).call)
+    expect(example.low).toBeCloseTo(atSilence, 6)
+    expect(example.high).toBeCloseTo(atFull, 6)
 })
 
 test('arguments are checked and thumbnails come back as small images', async ({ page }) => {
