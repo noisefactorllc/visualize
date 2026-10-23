@@ -363,6 +363,18 @@ test('scene commands save, rename, recall and delete without a dialog', async ({
 })
 
 test('browser-only commands turn audio input on and save a recording as a download', async ({ page }) => {
+    await page.addInitScript(() => {
+        window.__recordedBytes = 0
+        const NativeMediaRecorder = window.MediaRecorder
+        window.MediaRecorder = class extends NativeMediaRecorder {
+            constructor(...args) {
+                super(...args)
+                this.addEventListener('dataavailable', event => {
+                    window.__recordedBytes += event.data.size
+                })
+            }
+        }
+    })
     await openVisualize(page)
     const audio = await page.evaluate(async () => {
         const A = window.VisualizeAgent
@@ -384,6 +396,7 @@ test('browser-only commands turn audio input on and save a recording as a downlo
     const started = await page.evaluate(() => window.VisualizeAgent.record({ recording: true }))
     expect(started.result).toEqual({ recording: true })
     await expect(page.locator('#record-toggle')).toHaveAttribute('data-state', 'on')
+    await page.waitForFunction(() => window.__recordedBytes > 0)
     const [download, stopped] = await Promise.all([
         page.waitForEvent('download', { timeout: 30_000 * SCALE }),
         page.evaluate(() => window.VisualizeAgent.record({ recording: false })),
