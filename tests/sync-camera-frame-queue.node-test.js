@@ -277,3 +277,22 @@ test('useNativeShm enforces timestamp watermark and reports error on regression'
     assert.equal(owner.active, false)
     await owner.stop()
 })
+
+test('a throwing unsubscribe fails once without recursing through stop', bounded, async () => {
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    const errors = []
+    let unsubscribes = 0
+    const owner = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: () => () => { unsubscribes++; throw new Error('unsubscribe failed') },
+        isCurrent: () => true,
+        upload: () => ({ width: 1, height: 1 }),
+        onError: error => errors.push(error),
+    })
+    const stopped = owner.stop()
+    assert.equal(unsubscribes, 1, 'the unsubscribe runs once, not once per reentrant stop')
+    assert.equal(errors.length, 1, 'the error reports once')
+    assert.equal(owner.active, false)
+    await stopped
+    assert.equal(owner._stopped, stopped, 'stop still settles its own stop promise')
+})

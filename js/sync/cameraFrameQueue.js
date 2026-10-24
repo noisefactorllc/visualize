@@ -28,6 +28,7 @@ export class SyncCameraFrameQueue {
         this._uploading = false
         this._uploadDone = Promise.resolve()
         this._stopped = null
+        this._stopping = false
         this._watermark = previous || { timestamp: -Infinity, sequence: -Infinity, error: null, owner: null }
         this._watermark.owner = this
         tracks.set(track, this._watermark)
@@ -185,6 +186,8 @@ export class SyncCameraFrameQueue {
 
     stop() {
         if (this._stopped) return this._stopped
+        if (this._stopping) return this._stopped
+        this._stopping = true
         this.active = false
         if (this._shmUnsubscribe) {
             try { this._shmUnsubscribe() } catch (error) { this._fail(error) }
