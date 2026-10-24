@@ -16,15 +16,33 @@ import path from 'node:path'
 
 const require = createRequire(import.meta.url)
 const {
+    BUILDS,
+    buildForChannel,
     canExecute,
     defaultBrowsersRoot,
+    findChromiumForRevision,
     findLaunchBinary,
     findShellForRevision,
     parsePortRange,
     pickPwPort,
     probePort,
+    requiredRevision,
     requiredShellRevision
 } = require('../scripts/test.cjs')
+const { chromium } = require('playwright-core')
+const SHELL = BUILDS['chromium-headless-shell']
+
+// A browsers root holding a full Chromium build of `revision`, with the
+// executable at the path playwright-core expects inside the build.
+async function fakeChromiumRoot(revision) {
+    const root = await mkdtemp(path.join(tmpdir(), 'pw-root-'))
+    const parts = chromium.executablePath().split(path.sep)
+    const inBuild = parts.slice(parts.findIndex(part => /^chromium-\d+$/.test(part)) + 1)
+    const bin = path.join(root, `chromium-${revision}`, ...inBuild)
+    await mkdir(path.dirname(bin), { recursive: true })
+    await writeFile(bin, '#!/bin/sh\n')
+    return { root, bin }
+}
 
 async function fakeShellRoot(revision) {
     const root = await mkdtemp(path.join(tmpdir(), 'pw-root-'))
@@ -46,7 +64,7 @@ test('a root with only a different browser revision does not satisfy the lookup'
     try {
         assert.equal(findShellForRevision(stale.root, revision), null)
         assert.equal(findShellForRevision(stale.root, '9999'), stale.bin)
-        assert.equal(findLaunchBinary(stale.root), null,
+        assert.equal(findLaunchBinary(stale.root, SHELL), null,
             'a wrong-revision shell must not be accepted as the launch binary')
     } finally {
         await rm(stale.root, { recursive: true, force: true })
@@ -58,9 +76,43 @@ test('the required revision resolves wherever it is installed', async () => {
     const right = await fakeShellRoot(revision)
     try {
         assert.equal(findShellForRevision(right.root, revision), right.bin)
-        assert.equal(findLaunchBinary(right.root), right.bin)
+        assert.equal(findLaunchBinary(right.root, SHELL), right.bin)
     } finally {
         await rm(right.root, { recursive: true, force: true })
+    }
+})
+
+test('full Chromium is the default build, and PW_CHANNEL picks another', () => {
+    assert.equal(buildForChannel(undefined), BUILDS.chromium)
+    assert.equal(buildForChannel(''), BUILDS.chromium)
+    assert.equal(buildForChannel('chromium'), BUILDS.chromium)
+    assert.equal(buildForChannel('chromium-headless-shell'), SHELL)
+    // Browsers Playwright does not download keep the headless shell provisioning.
+    assert.equal(buildForChannel('chrome'), SHELL)
+    assert.deepEqual(BUILDS.chromium.installArgs, ['chromium', '--no-shell'])
+    assert.deepEqual(SHELL.installArgs, ['chromium', '--only-shell'])
+})
+
+test('the required full Chromium revision resolves, and another revision does not', async () => {
+    const revision = requiredRevision('chromium')
+    assert.ok(revision && /^\d+$/.test(revision), `unexpected revision: ${revision}`)
+    const right = await fakeChromiumRoot(revision)
+    const stale = await fakeChromiumRoot('9999')
+    try {
+        assert.equal(findChromiumForRevision(right.root, revision), right.bin)
+        assert.equal(findLaunchBinary(right.root, BUILDS.chromium), right.bin)
+        assert.equal(findLaunchBinary(stale.root, BUILDS.chromium), null,
+            'a wrong-revision Chromium must not be accepted as the launch binary')
+        // A root with only the headless shell does not satisfy a full Chromium launch.
+        const shellOnly = await fakeShellRoot(requiredShellRevision())
+        try {
+            assert.equal(findLaunchBinary(shellOnly.root, BUILDS.chromium), null)
+        } finally {
+            await rm(shellOnly.root, { recursive: true, force: true })
+        }
+    } finally {
+        await rm(right.root, { recursive: true, force: true })
+        await rm(stale.root, { recursive: true, force: true })
     }
 })
 

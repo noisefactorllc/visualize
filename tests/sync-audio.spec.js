@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
+import { launchOptions } from '../playwright.config.js'
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 const defaultDaemon = path.resolve(import.meta.dirname, '../../sync/build/sync_audio_test_server')
@@ -29,13 +30,8 @@ test.describe.configure({ retries: 1 })
 // (the permission-denied coverage lives in sync-audio-permission.spec.js).
 test.use({
     launchOptions: {
-        channel: process.env.PW_CHANNEL,
-        args: [
-            '--use-fake-ui-for-media-stream',
-            '--use-fake-device-for-media-stream',
-            '--disable-features=LocalNetworkAccessChecks',
-            ...(process.env.PW_GPU_ARGS ? process.env.PW_GPU_ARGS.split(' ') : []),
-        ],
+        ...launchOptions,
+        args: [...launchOptions.args, '--disable-features=LocalNetworkAccessChecks'],
     },
 })
 

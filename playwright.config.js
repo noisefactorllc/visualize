@@ -21,6 +21,26 @@ const proxy = proxyServer
     }
     : undefined
 
+// The browser build and its flags. Full Chromium is the default: it renders
+// WebGL on the GPU and has hardware H.264 encoding, which the curated-program
+// and Sync H.264 specs need. The headless shell renders WebGL in software
+// (SwiftShader) and has no hardware encoder. PW_CHANNEL picks another build
+// (chromium-headless-shell, chrome, msedge); scripts/test.cjs provisions the
+// same default. PW_GPU_ARGS replaces the default flags, which turn WebGPU on
+// for the WebGPU specs; an empty PW_GPU_ARGS passes none.
+// Fake audio + video devices so the audio spec can exercise the
+// real getUserMedia / AudioContext / Analyser path against a
+// deterministic synthetic mic. --use-fake-ui-for-media-stream
+// auto-grants permission so we don't hang on the OS prompt.
+export const launchOptions = {
+    channel: process.env.PW_CHANNEL || 'chromium',
+    args: [
+        '--use-fake-ui-for-media-stream',
+        '--use-fake-device-for-media-stream',
+        ...(process.env.PW_GPU_ARGS ?? '--enable-unsafe-webgpu').split(' ').filter(Boolean),
+    ],
+}
+
 export default defineConfig({
     testDir: './tests',
     testIgnore: '**/*.node-test.js',
@@ -47,18 +67,7 @@ export default defineConfig({
         viewport: process.env.PW_VIEWPORT
             ? (([w, h]) => ({ width: Number(w), height: Number(h) }))(process.env.PW_VIEWPORT.split('x'))
             : { width: 1280, height: 720 },
-        // Fake audio + video devices so the audio spec can exercise the
-        // real getUserMedia / AudioContext / Analyser path against a
-        // deterministic synthetic mic. --use-fake-ui-for-media-stream
-        // auto-grants permission so we don't hang on the OS prompt.
-        launchOptions: {
-            channel: process.env.PW_CHANNEL,
-            args: [
-                '--use-fake-ui-for-media-stream',
-                '--use-fake-device-for-media-stream',
-                ...(process.env.PW_GPU_ARGS ? process.env.PW_GPU_ARGS.split(' ') : []),
-            ],
-        },
+        launchOptions,
     },
     webServer: {
         // Robust static server (survives aborted sockets under parallel

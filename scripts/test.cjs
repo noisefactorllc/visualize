@@ -3,7 +3,7 @@
  * Test entrypoint: node suite, then the Playwright browser suite.
  *
  * Constrained runner containers either lack the Playwright browser download
- * or mount $HOME (noexec) so the downloaded chromium headless shell cannot be
+ * or mount $HOME (noexec) so the downloaded browser build cannot be
  * executed (spawn EACCES). This wrapper keeps the full required suite while
  * repairing the environment: it starts the browser download concurrently with
  * the node suite, and if the binary cannot be executed, copies it to an
@@ -50,22 +50,43 @@ function copyTree(src, dest) {
   }
 }
 
+// The browser build the Playwright suite launches, by its Playwright channel
+// name. playwright.config.js reads the same PW_CHANNEL with the same default:
+// full Chromium, which renders WebGL on the GPU and encodes H.264 in hardware.
+// The headless shell (PW_CHANNEL=chromium-headless-shell) renders WebGL in
+// software. Other channels (chrome, msedge) are browsers Playwright does not
+// download; for them the headless shell is provisioned, as before.
+const BUILDS = {
+  chromium: { browser: 'chromium', dir: 'chromium', installArgs: ['chromium', '--no-shell'] },
+  'chromium-headless-shell': { browser: 'chromium-headless-shell', dir: 'chromium_headless_shell', installArgs: ['chromium', '--only-shell'] },
+};
+
+function buildForChannel(channel) {
+  return BUILDS[channel || 'chromium'] || BUILDS['chromium-headless-shell'];
+}
+
+const BUILD = buildForChannel(process.env.PW_CHANNEL);
+
 // Playwright resolves browser builds by revision (browsers.json of the
 // installed playwright-core), so a root holding a *different* revision — e.g.
 // an ops-managed browsers directory installed for another product's Playwright
 // version — must not satisfy the lookup: the required revision's executable is
 // still missing and every launch would fail with "Executable doesn't exist".
-function requiredShellRevision() {
+function requiredRevision(browserName) {
   try {
     // playwright-core's exports map does not expose browsers.json; resolve the
     // package entry and read the manifest from the package root.
     const browsersJson = path.join(path.dirname(require.resolve('playwright-core')), 'browsers.json');
     const parsed = JSON.parse(fs.readFileSync(browsersJson, 'utf8'));
-    const entry = (parsed.browsers || []).find(b => b.name === 'chromium-headless-shell');
+    const entry = (parsed.browsers || []).find(b => b.name === browserName);
     return entry && entry.revision !== undefined ? String(entry.revision) : null;
   } catch {
     return null;
   }
+}
+
+function requiredShellRevision() {
+  return requiredRevision('chromium-headless-shell');
 }
 
 function findShellForRevision(browsersRoot, revision) {
@@ -77,14 +98,35 @@ function findShellForRevision(browsersRoot, revision) {
   return fs.existsSync(bin) ? bin : null;
 }
 
-function findLaunchBinary(browsersRoot) {
-  // Headless launches use the chromium headless shell for the exact revision
-  // the installed playwright package pins; fall back to the legacy heuristic
-  // only when the revision cannot be determined.
-  const revision = requiredShellRevision();
+// Full Chromium's executable sits at a platform-specific path inside its
+// revision directory (an app bundle on macOS); playwright-core knows the path.
+function chromiumExecutableInBuild() {
+  try {
+    const parts = require('playwright-core').chromium.executablePath().split(path.sep);
+    const at = parts.findIndex(part => /^chromium-\d+$/.test(part));
+    return at === -1 ? null : parts.slice(at + 1).join(path.sep);
+  } catch {
+    return null;
+  }
+}
+
+function findChromiumForRevision(browsersRoot, revision) {
+  const inBuild = chromiumExecutableInBuild();
+  if (!inBuild) return null;
+  const bin = path.join(browsersRoot, `chromium-${revision}`, inBuild);
+  return fs.existsSync(bin) ? bin : null;
+}
+
+function findLaunchBinary(browsersRoot, build = BUILD) {
+  // Launches use the selected build for the exact revision the installed
+  // playwright package pins; fall back to the legacy heuristic only when the
+  // revision cannot be determined.
+  const revision = requiredRevision(build.browser);
   if (revision !== null) {
     try {
-      return findShellForRevision(browsersRoot, revision);
+      return build.browser === 'chromium'
+        ? findChromiumForRevision(browsersRoot, revision)
+        : findShellForRevision(browsersRoot, revision);
     } catch {
       return null;
     }
@@ -216,10 +258,10 @@ async function main() {
   // The download targets the exec-permitted copy cache: an override
   // PLAYWRIGHT_BROWSERS_PATH may be mounted read-only (shared browser roots).
   let installProc = null;
-  const shellPresent = candidateRoots().some(root => fs.existsSync(root) && findLaunchBinary(root));
-  if (!shellPresent) {
-    console.error('[scripts/test] Playwright chromium headless shell missing; downloading during the node suite...');
-    installProc = spawn('npx', ['playwright', 'install', 'chromium', '--only-shell'], {
+  const buildPresent = candidateRoots().some(root => fs.existsSync(root) && findLaunchBinary(root));
+  if (!buildPresent) {
+    console.error(`[scripts/test] Playwright ${BUILD.browser} build missing; downloading during the node suite...`);
+    installProc = spawn('npx', ['playwright', 'install', ...BUILD.installArgs], {
       stdio: 'inherit',
       env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: tmpCacheRoot },
     });
@@ -242,7 +284,7 @@ async function main() {
     // ensureExecutableBrowser). The selection chose browser specs, so a
     // missing browser must fail the run: an unexecuted test never counts
     // as passing.
-    console.error('[scripts/test] no executable chromium headless shell: the selected browser specs did not run');
+    console.error(`[scripts/test] no executable ${BUILD.browser} build: the selected browser specs did not run`);
     process.exit(1);
   }
   const pwPort = await pickPwPort();
@@ -388,14 +430,14 @@ function ensureExecutableBrowser(installProc, allowBrowserSkip) {
   if (cached && canExecute(cached)) {
     return localRoot;
   }
-  const revision = requiredShellRevision();
+  const revision = requiredRevision(BUILD.browser);
   for (const sourceRoot of candidateRoots()) {
     if (sourceRoot === localRoot || !fs.existsSync(sourceRoot)) continue;
     const names = fs.readdirSync(sourceRoot, { withFileTypes: true })
       .filter(entry => entry.isDirectory() && (
         entry.name.startsWith('ffmpeg') ||
         (revision !== null
-          ? entry.name === `chromium_headless_shell-${revision}`
+          ? entry.name === `${BUILD.dir}-${revision}`
           : entry.name.startsWith('chromium'))
       ))
       .map(entry => entry.name);
@@ -410,7 +452,7 @@ function ensureExecutableBrowser(installProc, allowBrowserSkip) {
       return localRoot;
     }
   }
-  console.error(`[scripts/test] no executable chromium headless shell available (checked: ${candidateRoots().join(', ')})`);
+  console.error(`[scripts/test] no executable ${BUILD.browser} build available (checked: ${candidateRoots().join(', ')})`);
   if (allowBrowserSkip) {
     console.error('[scripts/test] no browser in the changed-path run: the selected specs did not execute, failing the run');
     return null;
@@ -423,13 +465,17 @@ if (require.main === module) {
 }
 
 module.exports = {
+  BUILDS,
+  buildForChannel,
   canExecute,
   defaultBrowsersRoot,
+  findChromiumForRevision,
   findLaunchBinary,
   findShellForRevision,
   findWorkingLaunch,
   parsePortRange,
   pickPwPort,
   probePort,
+  requiredRevision,
   requiredShellRevision,
 };
