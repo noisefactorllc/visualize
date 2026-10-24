@@ -686,12 +686,12 @@ async function boot() {
     // Recorder
     const recorder = new Recorder($('main-canvas'), {
         onTick: (ms) => { $('record-time').textContent = formatRecTime(ms) },
-        onStateChange: (recording) => {
+        onStateChange: (recording, { saved = true } = {}) => {
             const btn = $('record-toggle')
             btn.dataset.state = recording ? 'on' : 'off'
             setTooltip(btn, recording ? 'Stop recording (R)' : 'Record main output (R)')
             if (!recording) $('record-time').textContent = '0:00'
-            toast(recording ? 'recording…' : 'recording saved')
+            toast(recording ? 'recording…' : saved ? 'recording saved' : 'recording too short to save')
         },
         onWarning: (msg) => toast(msg, 6000)
     })

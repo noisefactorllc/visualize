@@ -145,16 +145,19 @@ export class Recorder {
         const fallbackType = this._fileExtension() === 'mp4' ? 'video/mp4' : 'video/webm'
         const blob = new Blob(session.chunks, { type: this._mimeType || fallbackType })
         session.chunks = []
+        // A recording stopped before the browser's MediaRecorder captured
+        // anything holds no data, and no file is saved for it.
+        const saved = blob.size > 0
         // Only the live recording's stop drives the UI: a superseded
         // session finalizes and downloads silently so the record button,
         // the toast and the elapsed timer keep describing the recording
         // that is actually running.
         if (this._session === session) {
             this._session = null
-            this._onStateChange(false)
+            this._onStateChange(false, { saved })
             this._startTime = 0
         }
-        if (blob.size === 0) return
+        if (!saved) return
         this._download(blob)
     }
 
