@@ -4,7 +4,7 @@
  * command runs the code behind a control, so these specs check both the
  * envelope and the control the person sees.
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal, routeEngineLocal } from './handfishLocal.js'
 import { routePortableImagesLocal } from './seanceLocal.js'
@@ -403,6 +403,7 @@ test('browser-only commands turn audio input on and save a recording as a downlo
     ])
     expect(stopped.result).toEqual({ recording: false })
     expect(download.suggestedFilename()).toMatch(/\.(webm|mp4)$/)
+    expect(statSync(await download.path()).size).toBeGreaterThan(0)
 })
 
 test('a program that fails after it installs puts the previous program back as it was', async ({ page }) => {
