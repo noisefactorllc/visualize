@@ -296,3 +296,29 @@ test('a throwing unsubscribe fails once without recursing through stop', bounded
     await stopped
     assert.equal(owner._stopped, stopped, 'stop still settles its own stop promise')
 })
+
+test('a reentrant stop during teardown returns the shared stop promise, never null', bounded, async () => {
+    const track = Object.assign(new EventTarget(), { kind: 'video', label: 'Sync Camera', readyState: 'live' })
+    const errors = []
+    let unsubscribes = 0
+    let reentrant = null
+    const owner = new SyncCameraFrameQueue(track, {
+        useNativeShm: true,
+        shmSubscriber: () => () => { unsubscribes++; throw new Error('unsubscribe failed') },
+        isCurrent: () => true,
+        upload: () => ({ width: 1, height: 1 }),
+        onError: error => {
+            errors.push(error)
+            // Runs inside the first stop's synchronous teardown, while the
+            // shared stop promise must already be assigned.
+            reentrant = owner.stop()
+        },
+    })
+    const stopped = owner.stop()
+    assert.ok(reentrant, 'the reentrant stop returns an awaitable promise')
+    assert.equal(reentrant, stopped, 'every call shares one stop promise')
+    assert.equal(owner.stop(), stopped, 'later calls share the same promise')
+    assert.equal(unsubscribes, 1)
+    assert.equal(errors.length, 1)
+    await stopped
+})

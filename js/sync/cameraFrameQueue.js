@@ -28,7 +28,6 @@ export class SyncCameraFrameQueue {
         this._uploading = false
         this._uploadDone = Promise.resolve()
         this._stopped = null
-        this._stopping = false
         this._watermark = previous || { timestamp: -Infinity, sequence: -Infinity, error: null, owner: null }
         this._watermark.owner = this
         tracks.set(track, this._watermark)
@@ -186,16 +185,19 @@ export class SyncCameraFrameQueue {
 
     stop() {
         if (this._stopped) return this._stopped
-        if (this._stopping) return this._stopped
-        this._stopping = true
         this.active = false
+        // Assign the shared stop promise before teardown runs, so a reentrant
+        // stop (for example _fail during the unsubscribe) awaits the same
+        // settled cleanup instead of receiving null.
+        let settleStopped
+        this._stopped = new Promise(resolve => { settleStopped = resolve })
         if (this._shmUnsubscribe) {
             try { this._shmUnsubscribe() } catch (error) { this._fail(error) }
             this._shmUnsubscribe = null
         }
         // Defer the await so reentrant stop inside upload waits for the current
         // upload promise assignment and its bitmap's finally block.
-        this._stopped = Promise.resolve().then(async () => {
+        settleStopped(Promise.resolve().then(async () => {
             await this._pumpDone
             await this._uploadDone
             await cancelled
@@ -203,7 +205,7 @@ export class SyncCameraFrameQueue {
                 try { this._reader.releaseLock() } catch (error) { this._fail(error) }
             }
             if (this._watermark.owner === this) this._watermark.owner = null
-        })
+        }))
         this.track.removeEventListener('ended', this._ended)
         while (this._pending.length) this._close(this._pending.shift())
         let cancelled = Promise.resolve()
