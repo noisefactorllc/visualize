@@ -10,7 +10,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { COMMAND_GROUPS } from '../js/agent/descriptions.js'
 import { SCHEMAS, validate } from '../js/agent/schemas.js'
 import { REMOTE, catalog } from '../js/agent/transports.js'
-import { LLMS_PATH, LLMS_FULL_PATH, renderLlmsFull } from '../scripts/build-llms-full.mjs'
+import { LLMS_PATH, LLMS_FULL_PATH, renderLlmsFull, renderReference } from '../scripts/build-llms-full.mjs'
 
 const AGENT_DIR = new URL('../js/agent/', import.meta.url)
 const described = () => COMMAND_GROUPS.flatMap(group => Object.keys(group.commands))
@@ -43,6 +43,20 @@ test('the relay copy is the shared agent relay (nf-agent/1)', async () => {
 
 test('llms-full.txt matches a fresh render (run node scripts/build-llms-full.mjs)', async () => {
     assert.equal(await readFile(LLMS_FULL_PATH, 'utf8'), await renderLlmsFull())
+})
+
+test('the reference and tool schemas list the supported bar lengths', () => {
+    const reference = renderReference()
+    for (const [command, field] of [['setAutoVj', 'bars'], ['setTempo', 'divider']]) {
+        const section = reference.split(`#### \`${command}\``)[1].split('#### ')[0]
+        assert.ok(section.includes(`- \`${field}\`: integer, one of \`1\`, \`2\`, \`4\`, \`8\`, \`16\`, \`32\``))
+        const tool = catalog().find(entry => entry.name === command)
+        assert.deepEqual(tool.args.properties[field].enum, [1, 2, 4, 8, 16, 32])
+    }
+})
+
+test('the command reference does not report a command count', () => {
+    assert.doesNotMatch(renderReference(), /Visualize has \d+ commands\./)
 })
 
 test('llms.txt lists every error code that the agent API returns, and no other', async () => {

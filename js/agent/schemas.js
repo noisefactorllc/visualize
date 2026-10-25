@@ -81,7 +81,7 @@ export const SCHEMAS = {
     }),
     setAutoVj: strict({
         enabled: { type: 'boolean' },
-        bars: { type: 'integer', min: 1, max: 32 },
+        bars: { type: 'integer', min: 1, max: 32, enum: BAR_CHOICES },
     }),
     setAutoMix: strict({
         enabled: { type: 'boolean' },
@@ -89,7 +89,7 @@ export const SCHEMAS = {
     }),
     setTempo: strict({
         bpm: { type: 'number', min: 40, max: 300 },
-        divider: { type: 'integer', min: 1, max: 32 },
+        divider: { type: 'integer', min: 1, max: 32, enum: BAR_CHOICES },
         tap: { type: 'boolean' },
         resetPhase: { type: 'boolean' },
         followMidiClock: { type: 'boolean' },

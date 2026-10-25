@@ -42,11 +42,10 @@ function commandSection(name, { does, returns, remote }) {
 }
 
 export function renderReference() {
-    const total = COMMAND_GROUPS.reduce((n, group) => n + Object.keys(group.commands).length, 0)
     const out = [
         '## Command reference',
         '',
-        `Visualize has ${total} commands. Call a command as \`await window.VisualizeAgent.<name>(args)\`,`,
+        'Call a command as `await window.VisualizeAgent.<name>(args)`,',
         'as the WebMCP tool `visualize_<name>`, or through a Seance session with `seance-agent.mjs call <name>`.',
         'Every command rejects an argument that it does not declare, with `INVALID_ARGS_UNKNOWN`.',
         '',

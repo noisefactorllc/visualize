@@ -414,7 +414,7 @@ any user effect exists. Diagnostics with severity
 
 ## Command reference
 
-Visualize has 31 commands. Call a command as `await window.VisualizeAgent.<name>(args)`,
+Call a command as `await window.VisualizeAgent.<name>(args)`,
 as the WebMCP tool `visualize_<name>`, or through a Seance session with `seance-agent.mjs call <name>`.
 Every command rejects an argument that it does not declare, with `INVALID_ARGS_UNKNOWN`.
 
@@ -641,7 +641,7 @@ Returns: `{ enabled, bars }`.
 Arguments:
 
 - `enabled`: boolean
-- `bars`: integer, from 1 to 32
+- `bars`: integer, one of `1`, `2`, `4`, `8`, `16`, `32`, from 1 to 32
 
 #### `setAutoMix`
 
@@ -665,7 +665,7 @@ Returns: `{ bpm, divider, followMidiClock }`.
 Arguments:
 
 - `bpm`: number, from 40 to 300
-- `divider`: integer, from 1 to 32
+- `divider`: integer, one of `1`, `2`, `4`, `8`, `16`, `32`, from 1 to 32
 - `tap`: boolean
 - `resetPhase`: boolean
 - `followMidiClock`: boolean
