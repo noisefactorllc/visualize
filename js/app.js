@@ -1709,6 +1709,7 @@ async function boot() {
     // Fullscreen
     $('fullscreen-toggle').addEventListener('click', () => toggleFullscreen())
     $('about-btn').addEventListener('click', () => aboutDialog.show())
+    $('seance-dialog')?.querySelector('.hf-seance-join-input')?.setAttribute('aria-label', 'Session ID')
     $('go-online-btn').addEventListener('click', () => $('seance-dialog')?.show())
     // "connect agent..." shows where an agent can be answered: offline, or
     // online in a session this tab took online.
@@ -1965,6 +1966,7 @@ async function boot() {
     // <label>-for-input association doesn't work with custom elements,
     // so forward clicks on the row's text span to the inner toggle.
     for (const row of document.querySelectorAll('.checkbox-row')) {
+        row.querySelector('[role="switch"]')?.setAttribute('aria-labelledby', row.querySelector('span').id)
         row.addEventListener('click', (e) => {
             const toggle = row.querySelector('toggle-switch')
             if (!toggle || toggle.disabled) return

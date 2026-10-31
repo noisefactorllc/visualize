@@ -106,6 +106,33 @@ test('icon actions and custom app controls expose readable accessible names', as
             await expect(toggle).toHaveAccessibleName('Include in Auto-VJ pool')
         }
         await expect(page.locator('#fade-duration .slider')).toHaveAccessibleName('Fade time in seconds')
+        await page.click('#settings-toggle')
+        const drawer = page.locator('#settings-drawer')
+        await expect(drawer).toHaveAttribute('aria-hidden', 'false')
+        const switches = [
+            ['#midi-clock-enable', 'follow incoming MIDI clock for BPM'],
+            ['#prefer-webgpu', 'prefer WebGPU (if available)'],
+        ]
+        for (const [selector, name] of switches) {
+            const control = drawer.locator(selector).getByRole('switch')
+            await expect(control).toHaveAccessibleName(name)
+            const checked = await control.getAttribute('aria-checked')
+            await control.focus()
+            await page.keyboard.press('Space')
+            await expect(control).toHaveAttribute('aria-checked', checked === 'true' ? 'false' : 'true')
+            await drawer.locator(selector).locator('..').locator('span').click()
+            await expect(control).toHaveAttribute('aria-checked', checked)
+        }
+        expect(await page.evaluate(() => window.__visualize.midi.followClock)).toBe(false)
+        expect(await page.evaluate(() => window.__visualize.state.preferWebGPU)).toBe(false)
+        expect(await drawer.ariaSnapshot()).not.toMatch(/^\s*- (?:button|checkbox|combobox|link|radio|slider|spinbutton|switch|textbox)(?: \[[^\]]*\])*(?::.*)?$/m)
+        await page.keyboard.press('Escape')
+        await expect(drawer).toHaveAttribute('aria-hidden', 'true')
+        await page.click('#settings-toggle')
+        for (const [selector, name] of switches) {
+            await expect(drawer.locator(selector).getByRole('switch')).toHaveAccessibleName(name)
+        }
+
     } finally {
         await context.close()
     }

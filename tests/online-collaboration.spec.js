@@ -143,6 +143,43 @@ test('while the set is online, the session button offers going offline', async (
     }
 })
 
+test('Go Online textboxes keep accessible names across session changes and reopening', async ({ browser }) => {
+    const server = new FakeSeanceServer()
+    const context = await browser.newContext()
+    try {
+        const page = await newOnlinePage(context, server)
+        const dialog = page.locator('#seance-dialog dialog')
+        const expectNamedTextboxes = async (name) => {
+            await expect(dialog.getByRole('textbox')).toHaveCount(1)
+            await expect(dialog.getByRole('textbox')).toHaveAccessibleName(name)
+            expect(await dialog.ariaSnapshot()).not.toMatch(/^\s*- textbox(?: \[[^\]]*\])*(?::.*)?$/m)
+        }
+
+        await openDialog(page)
+        await expectNamedTextboxes('Session ID')
+        await expect(dialog.locator('.hf-seance-label').first()).toHaveText('')
+        await dialog.getByRole('textbox', { name: 'Session ID', exact: true }).fill('aB12cD')
+        await closeDialog(page)
+        await openDialog(page)
+        await expectNamedTextboxes('Session ID')
+        await expect(dialog.getByRole('textbox')).toHaveValue('aB12cD')
+
+        await dialog.getByRole('button', { name: 'Take Online', exact: true }).click()
+        await expect(dialog.locator('.hf-seance-status-text')).toHaveText('Online')
+        await expectNamedTextboxes('Session URL')
+        await expect(dialog.getByRole('textbox')).toHaveValue(/seance=/)
+        await closeDialog(page)
+        await openDialog(page)
+        await expectNamedTextboxes('Session URL')
+
+        await dialog.getByRole('button', { name: 'Go Offline', exact: true }).click()
+        await expect(dialog.locator('.hf-seance-status-text')).toHaveText('Offline')
+        await expectNamedTextboxes('Session ID')
+    } finally {
+        await context.close()
+    }
+})
+
 test('deck A and deck B sync independently in one Seance session', async ({ browser }) => {
     const server = new FakeSeanceServer()
     const context = await browser.newContext()
