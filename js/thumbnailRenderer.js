@@ -29,13 +29,13 @@ let _instance = null
 
 class ThumbnailRenderer {
     constructor() {
-        this.canvas = document.createElement('canvas')
-        this.canvas.width = THUMB_W
-        this.canvas.height = THUMB_H
-        this.canvas.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none;'
-        document.body.appendChild(this.canvas)
+        const canvas = document.createElement('canvas')
+        canvas.width = THUMB_W
+        canvas.height = THUMB_H
+        canvas.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none;'
+        document.body.appendChild(canvas)
 
-        this.deck = new Deck(this.canvas, {
+        this.deck = new Deck(canvas, {
             id: 'thumb',
             width: THUMB_W,
             height: THUMB_H,
@@ -83,7 +83,7 @@ class ThumbnailRenderer {
             // Let the renderer paint a few frames before capture.
             await new Promise(r => setTimeout(r, SETTLE_MS))
             const blob = await new Promise((r) => {
-                this.canvas.toBlob(b => r(b), 'image/webp', WEBP_QUALITY)
+                this.deck.canvas.toBlob(b => r(b), 'image/webp', WEBP_QUALITY)
             })
             job.resolve(blob)
         } catch (err) {

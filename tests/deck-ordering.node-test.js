@@ -26,7 +26,7 @@ function harness() {
             this.rendered = dsl
         }, start() { this.isRunning = true }, stop() {},
  dispose() { this.disposeCalls = (this.disposeCalls || 0) + 1 }, }
-    const context = vm.createContext({ console, Blob, CanvasRenderer: function () { return engine },
+    const context = vm.createContext({ console, Blob, CanvasRenderer: function ({ canvas }) { engine.canvas = canvas; return engine },
         CDN_BASE: '', curatedRuntimeDsl: dsl => dsl, extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })
     const Deck = vm.runInContext(source + '\nDeck', context)
     const deck = new Deck({})
@@ -435,7 +435,7 @@ test('cancelPending invalidates an in-flight load while loading effects before c
     }
     const context = vm.createContext({
         console,
-        CanvasRenderer: function () { return engine },
+        CanvasRenderer: function ({ canvas }) { engine.canvas = canvas; return engine },
         CDN_BASE: '',
         curatedRuntimeDsl: dsl => dsl,
         extractEffectNamesFromDsl: () => [{ effectId: 'fx1' }]
@@ -625,7 +625,7 @@ function stateHarness() {
     h.engine.resize = (w, bh) => resizes.push([w, bh])
     h.toFiniteNumber = (() => {
         let Deck
-        const context = vm.createContext({ console, CanvasRenderer: function () { return h.engine },
+        const context = vm.createContext({ console, CanvasRenderer: function ({ canvas }) { h.engine.canvas = canvas; return h.engine },
             CDN_BASE: '', curatedRuntimeDsl: dsl => dsl, extractEffectNamesFromDsl: () => [] })
         Deck = vm.runInContext(source + '\ntoFiniteNumber', context)
         return Deck
@@ -740,7 +740,7 @@ test('deck initialization makes bundled custom effects available before a progra
         },
     }
     const deckSource = source.replace(/import \{ registerCuratedEffects, curatedRuntimeDsl \} from '\.\/curatedEffects.js'\n/, '')
-    const context = vm.createContext({ console, Blob, CanvasRenderer: function () { return engine },
+    const context = vm.createContext({ console, Blob, CanvasRenderer: function ({ canvas }) { engine.canvas = canvas; return engine },
         CDN_BASE: '', getEffect: id => registry.get(id), registerCuratedEffects, curatedRuntimeDsl,
         registerNamespace: id => namespaces.add(id), Effect: function (payload) { Object.assign(this, payload) }, registerEffect: (id, effect) => registry.set(id, effect), unregisterEffect: id => registry.delete(id),
         extractEffectNamesFromDsl: () => [], extractEffectsFromDsl: () => [] })

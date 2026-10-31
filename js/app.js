@@ -378,7 +378,7 @@ async function boot() {
         height: state.mainRes.height,
         preferWebGPU: state.preferWebGPU,
     })
-    mixer.bindDecks(state.decks.A.canvas, state.decks.B.canvas)
+    mixer.bindDecks(state.decks.A, state.decks.B)
 
     // Compositor (main)
     const compositor = new MainCompositor(

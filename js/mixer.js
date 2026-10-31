@@ -36,28 +36,35 @@ export class MixerRenderer {
         this.height = height
 
         // Hidden canvas — the compositor reads from it via drawImage.
-        this.canvas = document.createElement('canvas')
-        this.canvas.width = width
-        this.canvas.height = height
-        this.canvas.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none;'
-        document.body.appendChild(this.canvas)
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        canvas.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;pointer-events:none;'
+        document.body.appendChild(canvas)
 
         this.renderer = new CanvasRenderer({
-            canvas: this.canvas,
+            canvas,
             width, height,
             basePath: CDN_BASE,
             preferWebGPU: preferWebGPU === true,
             useBundles: true,
             bundlePath: `${CDN_BASE}/effects`,
             onError: (err) => console.warn('[mixer]', err?.message || err),
+            // After a lost WebGL context the engine rebuilds the pipeline
+            // from the DSL, so the media steps' imageSize is the effect
+            // default again: forget the pushed sizes so the tick pushes them.
+            onContextRestored: () => {
+                this._refreshStepIndices()
+                this._lastImageSize = {}
+            },
         })
 
         this._initialized = false
         this._currentMixerId = DEFAULT_MIXER_ID
         this._currentXfade = 0
         this._currentOverrides = {}
-        this._deckACanvas = null
-        this._deckBCanvas = null
+        this._deckA = null
+        this._deckB = null
         this._rafId = null
         this._loadedMixerIds = new Set()
         // Gates the `ready` getter (with _initialized). Set here so a stray
@@ -73,6 +80,13 @@ export class MixerRenderer {
         this._mediaStepB = null
         this._mixerStep = null
     }
+
+    /**
+     * The canvas the mixer presents on. When the browser does not restore a
+     * lost WebGL context, the renderer moves to a fresh canvas in the old
+     * one's place, so read this each time rather than keeping the element.
+     */
+    get canvas() { return this.renderer.canvas }
 
     /** All available mixer descriptors — exposed for the UI picker. */
     get mixers() { return MIXERS }
@@ -127,9 +141,9 @@ export class MixerRenderer {
     }
 
     /** Hand off the two deck canvases that should feed the mixer. */
-    bindDecks(deckACanvas, deckBCanvas) {
-        this._deckACanvas = deckACanvas
-        this._deckBCanvas = deckBCanvas
+    bindDecks(deckA, deckB) {
+        this._deckA = deckA
+        this._deckB = deckB
     }
 
     /**
@@ -311,19 +325,21 @@ export class MixerRenderer {
             // [0,imageSize] and the right + bottom of the output stays
             // bgColor (black) — which is exactly the aspect-bug the
             // user was seeing after each mixer swap.
-            if (this._deckACanvas?.width > 0 && this._deckACanvas.height > 0) {
+            const deckACanvas = this._deckA?.canvas
+            const deckBCanvas = this._deckB?.canvas
+            if (deckACanvas?.width > 0 && deckACanvas.height > 0) {
                 this.renderer.updateTextureFromSource(
                     `imageTex_step_${this._mediaStepA}`,
-                    this._deckACanvas,
+                    deckACanvas,
                     { flipY: false }
                 )
                 this._setImageSize(this._mediaStepA, this.width, this.height)
                 uploadedA = true
             }
-            if (this._deckBCanvas?.width > 0 && this._deckBCanvas.height > 0) {
+            if (deckBCanvas?.width > 0 && deckBCanvas.height > 0) {
                 this.renderer.updateTextureFromSource(
                     `imageTex_step_${this._mediaStepB}`,
-                    this._deckBCanvas,
+                    deckBCanvas,
                     { flipY: false }
                 )
                 this._setImageSize(this._mediaStepB, this.width, this.height)

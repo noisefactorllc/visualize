@@ -80,7 +80,6 @@ export function toFiniteNumber(value) {
 
 export class Deck {
     constructor(canvas, options = {}) {
-        this.canvas = canvas
         this.id = options.id || 'deck'
         this.width = options.width || 1280
         this.height = options.height || 720
@@ -88,18 +87,24 @@ export class Deck {
         this.preferWebGPU = !!options.preferWebGPU
         this.onError = options.onError || ((err) => console.error(`[${this.id}]`, err))
 
-        this.canvas.width = this.width
-        this.canvas.height = this.height
+        canvas.width = this.width
+        canvas.height = this.height
 
         this._renderer = new CanvasRenderer({
-            canvas: this.canvas,
+            canvas,
             width: this.width,
             height: this.height,
             basePath: CDN_BASE,
             preferWebGPU: this.preferWebGPU,
             useBundles: true,
             bundlePath: `${CDN_BASE}/effects`,
-            onError: (err) => this.onError(err)
+            onError: (err) => this.onError(err),
+            // After a lost WebGL context the engine rebuilds the pipeline
+            // from the DSL: apply what load() applies after a compile again.
+            onContextRestored: () => {
+                this._normalizeColorUniforms()
+                this._rebindImages()
+            }
         })
 
         this._initialized = false
@@ -130,6 +135,13 @@ export class Deck {
             overrides: {}
         }
     }
+
+    /**
+     * The canvas the deck presents on. When the browser does not restore a
+     * lost WebGL context, the renderer moves to a fresh canvas in the old
+     * one's place, so read this each time rather than keeping the element.
+     */
+    get canvas() { return this._renderer.canvas }
 
     get pixelDensity() { return this._pixelDensity }
 
