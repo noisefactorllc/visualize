@@ -393,17 +393,7 @@ test('a restored WebGL context delivers real mixer pixels to the native receiver
         return app?.online && app.mixer?.ready && Object.values(app.decks).every(deck => deck.currentDsl === dsl)
     }, fixtureDsl)
     await startNativeReceiverOutput(page)
-    try {
-        // A slow renderer backs up the receiver's bounded queue and can push
-        // the first sender into recovery before two frames land; the poll
-        // rides out recovery loops instead of failing early.
-        await expect.poll(async () => (await nativeReceiverStatus(page)).accepted, {
-            timeout: 90_000 * SCALE,
-        }).toBe(true)
-    } catch (error) {
-        error.message += '\nReceiver diagnostics: ' + JSON.stringify(await nativeReceiverStatus(page))
-        throw error
-    }
+    await pollNativeReceiverAccepted(page)
 
     await page.evaluate(() => {
         const canvas = window.__visualize.mixer.canvas
@@ -441,11 +431,6 @@ test('a restored WebGL context delivers real mixer pixels to the native receiver
     })
     expect(pixels).toBeGreaterThan(8)
 
-    // Let the restored pipeline settle past its recompile stall, so the
-    // restarted sender does not fight the receiver's frame deadline during
-    // the first slow ticks after the restore.
-    await page.waitForTimeout(3_000 * SCALE)
-
     await page.evaluate(async () => {
         const { syncOutputController: output } = window.__visualize
         await output.connect()
@@ -454,12 +439,11 @@ test('a restored WebGL context delivers real mixer pixels to the native receiver
     const sendsBeforeRestart = await page.evaluate(() => window.nativeFrameChecksums.size)
     try {
         // A slow renderer backs up the receiver's bounded queue, so the
-        // restarted sender needs time to land two accepted frames again; the
-        // poll rides out recovery loops instead of failing early.
+        // restarted sender needs time to land two accepted frames again.
         await expect.poll(async () => {
             const status = await nativeReceiverStatus(page)
             return status.accepted && status.checksums.length > sendsBeforeRestart
-        }, { timeout: 90_000 * SCALE }).toBe(true)
+        }, { timeout: 30_000 * SCALE }).toBe(true)
     } catch (error) {
         error.message += '\nReceiver diagnostics: ' + JSON.stringify(await nativeReceiverStatus(page))
         throw error
