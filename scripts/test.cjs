@@ -237,6 +237,11 @@ async function main() {
   const nodeArgs = selection
     ? (selection.node.length ? ['--test', ...applyShard(selection.node)] : null)
     : (sharding ? ['--test', ...applyShard(allNodeTestFiles())] : null);
+  // A changed-path run that names only browser tests must not fall back to the
+  // full node suite: the operator's rule bounds such a run to the selected
+  // tests. Only an unset selection (and the shard partitioning of the full
+  // suite) runs the whole node phase.
+  const skipNodeSuite = Boolean(selection) && selection.node.length === 0;
   const pwArgs = selection
     ? ['playwright', 'test', ...applyShard(selection.spec)]
     : (sharding ? ['playwright', 'test', `--shard=${shardIndex + 1}/${shardCount}`] : ['playwright', 'test']);
@@ -267,9 +272,11 @@ async function main() {
     });
   }
 
-  const nodeRun = nodeArgs
-    ? run('node', nodeArgs)
-    : run('npm', ['run', 'test:node']);
+  const nodeRun = skipNodeSuite
+    ? { status: 0 }
+    : (nodeArgs
+        ? run('node', nodeArgs)
+        : run('npm', ['run', 'test:node']));
   if (nodeRun.status !== 0) {
     process.exit(nodeRun.status || 1);
   }

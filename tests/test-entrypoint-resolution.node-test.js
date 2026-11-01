@@ -182,7 +182,8 @@ test('gpuHeadedLaunch returns null on opt-out, missing tools, and a GPU-less pro
     try {
         process.env.PW_GPU_HEADED = '0'
         assert.equal(gpuHeadedLaunch(), null, 'PW_GPU_HEADED=0 must opt out')
-        process.env.PW_GPU_HEADED = undefined
+        delete process.env.PW_GPU_HEADED
+        assert.equal('PW_GPU_HEADED' in process.env, false, 'the unset case must be modeled')
         process.env.PATH = await fakeToolDir([])
         assert.equal(gpuHeadedLaunch(), null, 'no xvfb-run/nvidia-smi must stay inert')
         process.env.PATH = await fakeToolDir(['xvfb-run'])
