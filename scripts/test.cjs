@@ -373,8 +373,6 @@ function allNodeTestFiles() {
   }
 }
 
-// Returns { node: [relative paths], spec: [names] } or null when
-// NM_CHANGED_FILES is unset or empty (run the whole suite, as before).
 // A changed path inside the desktop product tree (never its node_modules).
 function normalizedDesktop(changedPath) {
   const normalized = changedPath.replace(/^\.\//, '');
