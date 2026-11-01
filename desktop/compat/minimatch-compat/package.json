@@ -1,0 +1,10 @@
+{
+  "name": "minimatch-compat",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.cjs",
+  "license": "MIT",
+  "dependencies": {
+    "minimatch-modern": "npm:minimatch@11.0.2"
+  }
+}

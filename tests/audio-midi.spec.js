@@ -23,6 +23,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { routeHandfishLocal } from './handfishLocal.js'
+import { audioReadinessSnapshot } from './audioReadiness.js'
 // Container-scale factor for timing-sensitive waits (SwiftShader/emulated CI
 // sets PW_TIMEOUT_SCALE); 1 on real machines so local timings are unchanged.
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
@@ -114,14 +115,11 @@ test('audio + MIDI: end-to-end verification', async ({ browser }) => {
     // but the fake source's startup time is jittery in headless mode —
     // give it 20s. The actual prod path completes in well under a
     // second on a real mic.
-    await page.waitForFunction(() => {
-        const a = window.__visualize?.audio
-        return a?.enabled
-            && a?._audioContext?.state === 'running'
-            && (a.meters.low > 0 || a.meters.mid > 0 || a.meters.high > 0)
-    }, null, { timeout: 20_000 * SCALE })
-
-    const meters = await page.evaluate(() => ({ ...window.__visualize.audio.meters }))
+    // Capture FFT, waveform and volume together instead of reading a later frame.
+    const ready = await page.waitForFunction(audioReadinessSnapshot, undefined,
+        { timeout: 20_000 * SCALE })
+    const { meters } = await ready.jsonValue()
+    await ready.dispose()
     expect(meters.vol).toBeGreaterThan(0.1)
 
     const pillText = await page.textContent('#audio-status .status-text')

@@ -7,15 +7,16 @@
   "scripts": {
     "predist": "node ../scripts/fetch-noisemaker.cjs",
     "predev": "npm install --no-save ../../scaffold/apps/desktop-shell",
-    "dev": "electron .",
-    "dist": "electron-builder",
-    "dist:mac": "electron-builder --mac",
-    "dist:win": "electron-builder --win",
-    "dist:linux": "electron-builder --linux"
+    "dev": "node node_modules/electron/cli.js .",
+    "dist": "node node_modules/electron-builder/cli.js",
+    "dist:mac": "node node_modules/electron-builder/cli.js --mac",
+    "dist:win": "node node_modules/electron-builder/cli.js --win",
+    "dist:linux": "node node_modules/electron-builder/cli.js --linux"
   },
   "devDependencies": {
     "electron": "^42.11.16",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "minimatch": "file:compat/minimatch-compat"
   },
   "build": {
     "publish": {
@@ -112,5 +113,8 @@
         }
       }
     }
+  },
+  "overrides": {
+    "minimatch": "$minimatch"
   }
 }
