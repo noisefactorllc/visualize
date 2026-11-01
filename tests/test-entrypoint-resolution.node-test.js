@@ -156,6 +156,49 @@ test('pickPwPort skips an occupied configured port and takes the permitted range
     }
 })
 
+// gpuHeadedLaunch: the GPU-backed browser phase must stay inert wherever the
+// capability is missing, and wrap with xvfb-run only when a display server and
+// a real GPU are both present. The controls put fake tools on a scratch PATH
+// so the probe never depends on the runner's real hardware.
+async function fakeToolDir(names, gpuListing) {
+    const { chmod, writeFile } = await import('node:fs/promises')
+    const dir = await mkdtemp(path.join(tmpdir(), 'fake-tools-'))
+    for (const name of names) {
+        const body = name === 'nvidia-smi' && gpuListing
+            ? `#!/bin/sh\necho "${gpuListing}"\n`
+            : '#!/bin/sh\nexit 0\n'
+        const file = path.join(dir, name)
+        await writeFile(file, body)
+        await chmod(file, 0o755)
+    }
+    return dir
+}
+
+test('gpuHeadedLaunch returns null on opt-out, missing tools, and a GPU-less probe', async () => {
+    const { gpuHeadedLaunch } = require('../scripts/test.cjs')
+    if (process.platform !== 'linux') return // the wrap exists for Linux only
+    const previousPath = process.env.PATH
+    const previousOpt = process.env.PW_GPU_HEADED
+    try {
+        process.env.PW_GPU_HEADED = '0'
+        assert.equal(gpuHeadedLaunch(), null, 'PW_GPU_HEADED=0 must opt out')
+        process.env.PW_GPU_HEADED = undefined
+        process.env.PATH = await fakeToolDir([])
+        assert.equal(gpuHeadedLaunch(), null, 'no xvfb-run/nvidia-smi must stay inert')
+        process.env.PATH = await fakeToolDir(['xvfb-run'])
+        assert.equal(gpuHeadedLaunch(), null, 'a display server without a GPU probe must stay inert')
+        process.env.PATH = await fakeToolDir(['xvfb-run', 'nvidia-smi'])
+        assert.equal(gpuHeadedLaunch(), null, 'a probe that lists no GPU must stay inert')
+        process.env.PATH = await fakeToolDir(['xvfb-run', 'nvidia-smi'], 'GPU 0: Fake')
+        assert.deepEqual(gpuHeadedLaunch(), { wrap: 'xvfb-run', wrapArgs: ['-a'] },
+            'a display server plus a GPU probe must enable the wrap')
+    } finally {
+        process.env.PATH = previousPath
+        if (previousOpt === undefined) delete process.env.PW_GPU_HEADED
+        else process.env.PW_GPU_HEADED = previousOpt
+    }
+})
+
 // Hold one loopback port for the negative controls. Sandboxed runners forbid
 // ephemeral listen(0) outright (EPERM); there the helper binds an explicit
 // permitted-range port instead (probed free first), and returns null when no

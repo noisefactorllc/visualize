@@ -299,8 +299,42 @@ async function main() {
     PW_TIMEOUT_SCALE: pwScale,
   };
 
-  const pwRun = run('npx', pwArgs, pwEnv);
+  // GPU-backed browser phase: see gpuHeadedLaunch(). It only changes how the
+  // browser renders, never which tests run and never an assertion.
+  const gpu = gpuHeadedLaunch();
+  const pwRunEnv = { ...pwEnv };
+  if (gpu && process.env.PW_GPU_ARGS === undefined) {
+    pwRunEnv.PW_GPU_ARGS = '--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan';
+  }
+  if (gpu) {
+    console.error('[scripts/test] GPU-backed headed browser phase: xvfb display, ANGLE Vulkan');
+  }
+  const pwArgv = gpu
+    ? [gpu.wrap, ...gpu.wrapArgs, 'npx', ...pwArgs, '--headed']
+    : ['npx', ...pwArgs];
+  const pwRun = run(pwArgv[0], pwArgv.slice(1), pwRunEnv);
   process.exit(pwRun.status || 0);
+}
+
+// A Linux runner that offers a real GPU can render WebGL on that GPU only
+// from a headed browser: headless Chromium cannot start the GPU's Vulkan
+// context and falls back to software rendering (SwiftShader). There every
+// frame export stalls the renderer and starves the sender's WebSocket
+// writes, and the native receiver's frame deadline closes senders mid-frame.
+// When the runner offers both a display server (xvfb) and a GPU, wrap the
+// browser suite headed under that display with ANGLE Vulkan so the suite
+// renders on the real GPU. Runners without the capability, and every macOS
+// run, keep the exact prior behavior. PW_GPU_HEADED=0 opts out, and an
+// explicit PW_GPU_ARGS always keeps the operator's flags untouched.
+function gpuHeadedLaunch() {
+  if (process.platform !== 'linux') return null;
+  if (process.env.PW_GPU_HEADED === '0') return null;
+  const tools = spawnSync('/bin/sh', ['-c', 'command -v xvfb-run >/dev/null && command -v nvidia-smi >/dev/null']);
+  if (tools.status !== 0) return null;
+  const probe = spawnSync('nvidia-smi', ['-L'], { timeout: 15000 });
+  const listing = probe.stdout ? probe.stdout.toString() : '';
+  if (probe.status !== 0 || !listing.includes('GPU')) return null;
+  return { wrap: 'xvfb-run', wrapArgs: ['-a'] };
 }
 
 // All node test files, sorted, for shard partitioning of the full suite.
@@ -473,6 +507,7 @@ module.exports = {
   findLaunchBinary,
   findShellForRevision,
   findWorkingLaunch,
+  gpuHeadedLaunch,
   parsePortRange,
   pickPwPort,
   probePort,
