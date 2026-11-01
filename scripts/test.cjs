@@ -373,7 +373,8 @@ function allNodeTestFiles() {
   }
 }
 
-// A changed path inside the desktop product tree (never its node_modules).
+// True when a changed path is inside the desktop product tree (never its
+// node_modules). The entrypoint routes such paths to the desktop node tests.
 function normalizedDesktop(changedPath) {
   const normalized = changedPath.replace(/^\.\//, '');
   return /^desktop\//.test(normalized) && !normalized.includes('node_modules');
