@@ -375,6 +375,14 @@ function allNodeTestFiles() {
 
 // Returns { node: [relative paths], spec: [names] } or null when
 // NM_CHANGED_FILES is unset or empty (run the whole suite, as before).
+// A changed path inside the desktop product tree (never its node_modules).
+function normalizedDesktop(changedPath) {
+  const normalized = changedPath.replace(/^\.\//, '');
+  return /^desktop\//.test(normalized) && !normalized.includes('node_modules');
+}
+
+// Returns { node: [relative paths], spec: [names] } or null when
+// NM_CHANGED_FILES is unset or empty (run the whole suite, as before).
 function selectChangedPathTests() {
   const raw = process.env.NM_CHANGED_FILES;
   if (!raw || !raw.trim()) return null;
@@ -391,6 +399,7 @@ function selectChangedPathTests() {
   for (const changedPath of changed) {
     const normalized = changedPath.replace(/^\.\//, '');
     if (normalized.startsWith('.') || /^scripts\/test\.cjs$/.test(normalized)) continue;
+    if (normalizedDesktop(changedPath)) continue;
     if (/^tests\//.test(normalized)) {
       changedTests.push(path.basename(normalized));
       continue;
@@ -410,6 +419,21 @@ function selectChangedPathTests() {
     files = fs.readdirSync(testsDir);
   } catch {
     return { node: [], spec: [] };
+  }
+  // Desktop changes select the desktop node tests: desktop code is not
+  // exercised by the root tests/ suite (no root test reads desktop/), and its
+  // tests live outside that directory, so the stem scan above cannot see
+  // them. Without this, a desktop candidate would report "no test exercises
+  // the changed paths" and run none of its tests. Desktop paths therefore
+  // select every desktop/test node test (they exercise the desktop
+  // packaging and its vendored dependencies collectively) and feed no stems
+  // into the root scan.
+  if (changed.some(changedPath => normalizedDesktop(changedPath))) {
+    try {
+      for (const file of fs.readdirSync(path.join(repoRoot, 'desktop', 'test'))) {
+        if (file.endsWith('.test.cjs')) selected.node.push(path.join('desktop', 'test', file));
+      }
+    } catch { /* no desktop test directory: nothing to select */ }
   }
   for (const file of files) {
     const isNode = file.endsWith('.node-test.js');
@@ -538,4 +562,5 @@ module.exports = {
   probePort,
   requiredRevision,
   requiredShellRevision,
+  selectChangedPathTests,
 };

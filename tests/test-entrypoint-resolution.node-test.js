@@ -243,6 +243,39 @@ test('gpuHeadedLaunch returns null on opt-out, missing tools, and a GPU-less pro
     }
 })
 
+// selectChangedPathTests: a desktop change must select the desktop node
+// tests even though they live outside tests/ (the stem scan above sees only
+// that directory), and a desktop path must feed no stems into the root
+// tests/ scan. A tests/ change keeps the exact prior selection.
+test('changed desktop paths select the desktop node tests and no root tests', () => {
+    const { selectChangedPathTests } = require('../scripts/test.cjs')
+    const previous = process.env.NM_CHANGED_FILES
+    try {
+        process.env.NM_CHANGED_FILES = [
+            'desktop/compat/minimatch-compat/index.cjs',
+            'desktop/compat/minimatch-compat/package.json',
+            'desktop/test/minimatch-compat.test.cjs',
+            'desktop/package.json',
+            'desktop/package-lock.json',
+            'desktop/.npmrc',
+        ].join('\n')
+        const selection = selectChangedPathTests()
+        assert.ok(selection.node.includes('desktop/test/minimatch-compat.test.cjs'),
+            `desktop test not selected: ${JSON.stringify(selection.node)}`)
+        assert.ok(selection.node.every(file => file.startsWith('desktop/')),
+            `a desktop change must not select root tests: ${JSON.stringify(selection.node)}`)
+        assert.deepEqual(selection.spec, [])
+        process.env.NM_CHANGED_FILES = 'tests/audio-readiness.node-test.js'
+        const rootSelection = selectChangedPathTests()
+        assert.deepEqual(rootSelection.node, ['tests/audio-readiness.node-test.js'])
+        assert.ok(rootSelection.node.every(file => file.startsWith('tests/')),
+            `a tests/ change must not select desktop tests: ${JSON.stringify(rootSelection.node)}`)
+    } finally {
+        if (previous === undefined) delete process.env.NM_CHANGED_FILES
+        else process.env.NM_CHANGED_FILES = previous
+    }
+})
+
 // Hold one loopback port for the negative controls. Sandboxed runners forbid
 // ephemeral listen(0) outright (EPERM); there the helper binds an explicit
 // permitted-range port instead (probed free first), and returns null when no
