@@ -258,19 +258,11 @@ test('an older cancelled audio selection cannot clear the newer selection', asyn
     expect(await page.locator('#audio-device').evaluate(element => element.value)).toBe('B')
 })
 
-// The native receiver fixture run for one render backend. preferWebGPU seeds
-// the persisted renderer preference before boot; the WebGPU leg additionally
-// requires the mixer's live pipeline to actually run on WebGPU, and skips
-// honestly when this runner's browser cannot provide it (the fallback must
-// never be reported as the WebGPU path).
-async function nativeReceiverAcceptance(page, preferWebGPU) {
-    test.slow()
-    if (preferWebGPU) {
-        await page.addInitScript(key => {
-            localStorage.setItem(key, JSON.stringify({ preferWebGPU: true }))
-        }, 'visualize.renderer.v1')
-    }
-    await page.route('**/js/sync/bundle.js', route => route.fulfill({
+// Route the app's Sync SDK through an observed client pointed at the fixture
+// daemon: every data-socket send records an FNV-1a hash of its payload bytes,
+// and pairing is refused because video reuses the audio grant.
+function routeObservedSyncClient(page) {
+    return page.route('**/js/sync/bundle.js', route => route.fulfill({
         contentType: 'text/javascript',
         body: `export * from '/js/sync/sdk/0.3.3/browser/index.js';
             import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.3/browser/index.js';
@@ -293,6 +285,65 @@ async function nativeReceiverAcceptance(page, preferWebGPU) {
                 async pair() { throw new Error('Video should reuse the audio grant'); }
             }`
     }))
+}
+
+async function startNativeReceiverOutput(page) {
+    await page.evaluate(async () => {
+        const sync = await import('/js/sync/audioInput.js')
+        await sync.connectSyncAudio()
+        const { audio, syncOutputController: output } = window.__visualize
+        await audio.enable('sync-audio:audio_2')
+        await output.connect()
+        await output.start('Visualize native receiver')
+    })
+}
+
+// The receiver's bounded queue may end the sender between polls; the closed
+// client's control exchange then throws a lifecycle error. That is the
+// not-yet-accepted state the poll already tolerates, not a failure of the
+// acceptance criterion.
+function nativeReceiverStatus(page) {
+    return page.evaluate(async () => {
+        const output = window.__visualize.syncOutputController
+        const client = output._client, sender = output._sender
+        if (!client || !sender) return { state: output.state, accepted: false }
+        try {
+            const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
+                { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
+            window.nativeReceiverStats = stats
+            return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
+                accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
+        } catch (error) {
+            if (error?.name === 'SyncLifecycleError' || error?.code === 'SYNC_LIFECYCLE') {
+                return { state: output.state, accepted: false }
+            }
+            throw error
+        }
+    })
+}
+
+async function pollNativeReceiverAccepted(page) {
+    try {
+        await expect.poll(async () => (await nativeReceiverStatus(page)).accepted, { timeout: 15_000 * SCALE }).toBe(true)
+    } catch (error) {
+        error.message += '\nReceiver diagnostics: ' + JSON.stringify(await nativeReceiverStatus(page))
+        throw error
+    }
+}
+
+// The native receiver fixture run for one render backend. preferWebGPU seeds
+// the persisted renderer preference before boot; the WebGPU leg additionally
+// requires the mixer's live pipeline to actually run on WebGPU, and skips
+// honestly when this runner's browser cannot provide it (the fallback must
+// never be reported as the WebGPU path).
+async function nativeReceiverAcceptance(page, preferWebGPU) {
+    test.slow()
+    if (preferWebGPU) {
+        await page.addInitScript(key => {
+            localStorage.setItem(key, JSON.stringify({ preferWebGPU: true }))
+        }, 'visualize.renderer.v1')
+    }
+    await routeObservedSyncClient(page)
     await setup(page, true)
     await page.waitForFunction(dsl => {
         const app = window.__visualize
@@ -310,41 +361,8 @@ async function nativeReceiverAcceptance(page, preferWebGPU) {
         test.skip(!backend.gpu || backend.active !== 'webgpu',
             `mixer backend is ${backend.active} (gpu: ${backend.gpu}); no WebGPU observation on this runner`)
     }
-    await page.evaluate(async () => {
-        const sync = await import('/js/sync/audioInput.js')
-        await sync.connectSyncAudio()
-        const { audio, syncOutputController: output } = window.__visualize
-        await audio.enable('sync-audio:audio_2')
-        await output.connect()
-        await output.start('Visualize native receiver')
-    })
-    const receiverStatus = () => page.evaluate(async () => {
-        const output = window.__visualize.syncOutputController
-        const client = output._client, sender = output._sender
-        // The receiver's bounded queue may end the sender between polls; the
-        // closed client's control exchange then throws a lifecycle error. That
-        // is the not-yet-accepted state the poll already tolerates, not a
-        // failure of the acceptance criterion.
-        if (!client || !sender) return { state: output.state, accepted: false }
-        try {
-            const stats = await client._scheduleControl(client._controlSession, () => client._exchange(
-                { type: 'getStats', senderId: sender.id }, message => message, client._controlSession))
-            window.nativeReceiverStats = stats
-            return { state: output.state, stats, checksums: [...window.nativeFrameChecksums],
-                accepted: Number(stats.accepted) >= 2 && window.nativeFrameChecksums.has(Number(stats.checksum)) }
-        } catch (error) {
-            if (error?.name === 'SyncLifecycleError' || error?.code === 'SYNC_LIFECYCLE') {
-                return { state: output.state, accepted: false }
-            }
-            throw error
-        }
-    })
-    try {
-        await expect.poll(async () => (await receiverStatus()).accepted, { timeout: 15_000 * SCALE }).toBe(true)
-    } catch (error) {
-        error.message += '\nReceiver diagnostics: ' + JSON.stringify(await receiverStatus())
-        throw error
-    }
+    await startNativeReceiverOutput(page)
+    await pollNativeReceiverAccepted(page)
     const stats = await page.evaluate(() => window.nativeReceiverStats)
     expect(Number(stats.rejected)).toBe(0)
     expect(Number(stats.failed)).toBe(0)
@@ -359,6 +377,82 @@ test('native receiver accepts mixer bytes while audio and video share the grant'
 
 test('native receiver accepts mixer bytes rendered on WebGPU', async ({ page }) => {
     await nativeReceiverAcceptance(page, true)
+})
+
+// A lost WebGL context makes the engine rebuild the mixer pipeline on a
+// fresh canvas, so the live Sync output stops with the renderer-replaced
+// error instead of sending stale canvas bytes. After the context restores,
+// a restarted output must deliver the mixer's real rendered pixels to the
+// receiver again.
+test('a restored WebGL context delivers real mixer pixels to the native receiver again', async ({ page }) => {
+    test.slow()
+    await routeObservedSyncClient(page)
+    await setup(page, true)
+    await page.waitForFunction(dsl => {
+        const app = window.__visualize
+        return app?.online && app.mixer?.ready && Object.values(app.decks).every(deck => deck.currentDsl === dsl)
+    }, fixtureDsl)
+    await startNativeReceiverOutput(page)
+    await pollNativeReceiverAccepted(page)
+
+    await page.evaluate(() => {
+        const canvas = window.__visualize.mixer.canvas
+        const gl = canvas.getContext('webgl2')
+        const ext = gl && gl.getExtension('WEBGL_lose_context')
+        if (!ext) throw new Error('WEBGL_lose_context is required for this test')
+        ext.loseContext()
+        setTimeout(() => ext.restoreContext(), 250)
+    })
+
+    // The stopped sender must not leak stale canvas bytes while the output
+    // waits for the restart.
+    await expect.poll(() => page.evaluate(() => window.__visualize.syncOutputController.state.status), {
+        timeout: 15_000 * SCALE,
+    }).toBe('error')
+    expect(await page.evaluate(() => window.__visualize.syncOutputController.state.error?.code))
+        .toBe('SYNC_RENDERER_REPLACED')
+    const sendsAtStop = await page.evaluate(() => window.nativeFrameChecksums.size)
+    await page.waitForTimeout(1_000 * SCALE)
+    expect(await page.evaluate(() => window.nativeFrameChecksums.size)).toBe(sendsAtStop)
+
+    // The restored mixer renders real pixels again.
+    const pixels = await page.evaluate(() => {
+        const probe = document.createElement('canvas')
+        probe.width = 32
+        probe.height = 32
+        const context = probe.getContext('2d')
+        context.drawImage(document.getElementById('main-canvas'), 0, 0, 32, 32)
+        const data = context.getImageData(0, 0, 32, 32).data
+        let total = 0
+        for (let index = 0; index < data.length; index += 4) {
+            total += (data[index] + data[index + 1] + data[index + 2]) / 3
+        }
+        return total / (data.length / 4)
+    })
+    expect(pixels).toBeGreaterThan(8)
+
+    await page.evaluate(async () => {
+        const { syncOutputController: output } = window.__visualize
+        await output.connect()
+        await output.start('Visualize native receiver')
+    })
+    const sendsBeforeRestart = await page.evaluate(() => window.nativeFrameChecksums.size)
+    try {
+        // A slow renderer backs up the receiver's bounded queue, so the
+        // restarted sender needs time to land two accepted frames again.
+        await expect.poll(async () => {
+            const status = await nativeReceiverStatus(page)
+            return status.accepted && status.checksums.length > sendsBeforeRestart
+        }, { timeout: 30_000 * SCALE }).toBe(true)
+    } catch (error) {
+        error.message += '\nReceiver diagnostics: ' + JSON.stringify(await nativeReceiverStatus(page))
+        throw error
+    }
+    const stats = await page.evaluate(() => window.nativeReceiverStats)
+    expect(Number(stats.rejected)).toBe(0)
+    expect(Number(stats.failed)).toBe(0)
+    await page.evaluate(() => window.__visualize.syncOutputController.stop())
+    await page.evaluate(() => window.__visualize.audio.disable())
 })
 
 for (const backend of ['webgl2', 'webgpu']) {
