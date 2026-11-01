@@ -222,6 +222,29 @@ async function pickPwPort() {
   return configured[0] || 3070;
 }
 
+// Decide the node phase for one invocation. A bounded run (a changed-path
+// selection, or the shard partitioning of the full suite) must never widen:
+// when its node file list is empty after sharding, the phase runs nothing
+// instead of falling back to `node --test` with no paths, which runs every
+// node test. With no selection and no sharding, the whole-suite path is
+// unchanged: nodeArgs is null and main() runs `npm run test:node`.
+function planNodePhase({ selection, sharding, shardCount, shardIndex, allFiles }) {
+  const applyShard = list => (sharding ? list.filter((_, index) => index % shardCount === shardIndex) : list);
+  if (selection) {
+    const sharded = applyShard(selection.node);
+    return sharded.length
+      ? { nodeArgs: ['--test', ...sharded], skip: false }
+      : { nodeArgs: null, skip: true };
+  }
+  if (sharding) {
+    const sharded = applyShard(allFiles);
+    return sharded.length
+      ? { nodeArgs: ['--test', ...sharded], skip: false }
+      : { nodeArgs: null, skip: true };
+  }
+  return { nodeArgs: null, skip: false };
+}
+
 async function main() {
   // Operator rule: when the supervisor names this candidate's changed paths in
   // NM_CHANGED_FILES, run only the tests that exercise those paths, and keep
@@ -234,14 +257,8 @@ async function main() {
   const sharding = Number.isInteger(shardCount) && shardCount >= 2 && shardCount <= 8 &&
       Number.isInteger(shardIndex) && shardIndex >= 0 && shardIndex < shardCount;
   const applyShard = list => (sharding ? list.filter((_, index) => index % shardCount === shardIndex) : list);
-  const nodeArgs = selection
-    ? (selection.node.length ? ['--test', ...applyShard(selection.node)] : null)
-    : (sharding ? ['--test', ...applyShard(allNodeTestFiles())] : null);
-  // A changed-path run that names only browser tests must not fall back to the
-  // full node suite: the operator's rule bounds such a run to the selected
-  // tests. Only an unset selection (and the shard partitioning of the full
-  // suite) runs the whole node phase.
-  const skipNodeSuite = Boolean(selection) && selection.node.length === 0;
+  const nodePlan = planNodePhase({ selection, sharding, shardCount, shardIndex, allFiles: allNodeTestFiles() });
+  const skipNodeSuite = nodePlan.skip;
   const pwArgs = selection
     ? ['playwright', 'test', ...applyShard(selection.spec)]
     : (sharding ? ['playwright', 'test', `--shard=${shardIndex + 1}/${shardCount}`] : ['playwright', 'test']);
@@ -274,8 +291,8 @@ async function main() {
 
   const nodeRun = skipNodeSuite
     ? { status: 0 }
-    : (nodeArgs
-        ? run('node', nodeArgs)
+    : (nodePlan.nodeArgs
+        ? run('node', nodePlan.nodeArgs)
         : run('npm', ['run', 'test:node']));
   if (nodeRun.status !== 0) {
     process.exit(nodeRun.status || 1);
@@ -517,6 +534,7 @@ module.exports = {
   gpuHeadedLaunch,
   parsePortRange,
   pickPwPort,
+  planNodePhase,
   probePort,
   requiredRevision,
   requiredShellRevision,

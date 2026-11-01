@@ -156,6 +156,49 @@ test('pickPwPort skips an occupied configured port and takes the permitted range
     }
 })
 
+// planNodePhase: a bounded run (a changed-path selection, or the shard
+// partitioning of the full suite) must never widen. A shard can empty a
+// nonempty selection; the run must then skip the node phase instead of
+// running `node --test` with no paths, which discovers and runs every
+// node test file.
+test('planNodePhase keeps every bounded run inside its selected node files', () => {
+    const { planNodePhase } = require('../scripts/test.cjs')
+    const allFiles = ['tests/a.node-test.js', 'tests/b.node-test.js', 'tests/c.node-test.js']
+    // Unset variables: the whole-suite path is unchanged (main runs npm run test:node).
+    assert.deepEqual(
+        planNodePhase({ selection: null, sharding: false, shardCount: 0, shardIndex: 0, allFiles }),
+        { nodeArgs: null, skip: false })
+    // A selection runs exactly its own node files under sharding.
+    assert.deepEqual(
+        planNodePhase({
+            selection: { node: ['tests/a.node-test.js', 'tests/b.node-test.js'], spec: ['x.spec.js'] },
+            sharding: true, shardCount: 2, shardIndex: 0, allFiles
+        }),
+        { nodeArgs: ['--test', 'tests/a.node-test.js'], skip: false })
+    // The regression case: shard 1 of 2 empties a one-file selection.
+    assert.deepEqual(
+        planNodePhase({
+            selection: { node: ['tests/a.node-test.js'], spec: ['x.spec.js'] },
+            sharding: true, shardCount: 2, shardIndex: 1, allFiles
+        }),
+        { nodeArgs: null, skip: true })
+    // A selection that names no node files at all also skips.
+    assert.deepEqual(
+        planNodePhase({
+            selection: { node: [], spec: ['x.spec.js'] },
+            sharding: false, shardCount: 0, shardIndex: 0, allFiles
+        }),
+        { nodeArgs: null, skip: true })
+    // A full-suite shard with no files skips instead of running everything.
+    assert.deepEqual(
+        planNodePhase({ selection: null, sharding: true, shardCount: 2, shardIndex: 1, allFiles: ['tests/a.node-test.js'] }),
+        { nodeArgs: null, skip: true })
+    // A full-suite shard with files runs exactly those files.
+    assert.deepEqual(
+        planNodePhase({ selection: null, sharding: true, shardCount: 3, shardIndex: 2, allFiles }),
+        { nodeArgs: ['--test', 'tests/c.node-test.js'], skip: false })
+})
+
 // gpuHeadedLaunch: the GPU-backed browser phase must stay inert wherever the
 // capability is missing, and wrap with xvfb-run only when a display server and
 // a real GPU are both present. The controls put fake tools on a scratch PATH
