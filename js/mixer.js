@@ -57,7 +57,12 @@ export class MixerRenderer {
                 this._refreshStepIndices()
                 this._lastImageSize = {}
             },
+            // A WebGPU canvas holds its frame only during the task that
+            // rendered it, so copy the frame for readers right away.
+            onFrame: () => this._copyWebGPUFrame(),
         })
+        this._frameCopy = null
+        this._frameCopyContext = null
 
         this._initialized = false
         this._currentMixerId = DEFAULT_MIXER_ID
@@ -87,6 +92,50 @@ export class MixerRenderer {
      * one's place, so read this each time rather than keeping the element.
      */
     get canvas() { return this.renderer.canvas }
+
+    /**
+     * The canvas that readers outside the mixer's render task read: the
+     * compositor. (Sync output's sink reads the live canvas inside the render
+     * task, so it keeps reading `canvas`.) A WebGPU canvas holds a frame only during
+     * the task that rendered it; read later it is blank or an invalid
+     * texture. Under WebGPU this is a 2D copy taken right after each frame.
+     * Under WebGL2 it is the mixer's canvas, which keeps its frame. Before the
+     * first compile it is the copy, which holds no frame yet: the WebGPU backend's texture
+     * upload calls getContext('2d') on a canvas source, which would claim a
+     * canvas that has no context yet and leave the renderer unable to
+     * present on it.
+     */
+    get frameCanvas() {
+        if (!this.renderer.pipeline || this._presentsWebGPU()) return this._frameCopyCanvas()
+        return this.canvas
+    }
+
+    _presentsWebGPU() {
+        return this.renderer.pipeline?.backend?.getName?.() === 'WebGPU'
+    }
+
+    _frameCopyCanvas() {
+        if (!this._frameCopy) {
+            this._frameCopy = document.createElement('canvas')
+            this._frameCopyContext = this._frameCopy.getContext('2d')
+        }
+        const source = this.canvas
+        if (source && (this._frameCopy.width !== source.width || this._frameCopy.height !== source.height)) {
+            this._frameCopy.width = source.width
+            this._frameCopy.height = source.height
+        }
+        return this._frameCopy
+    }
+
+    // Called from the renderer's onFrame, in the task that rendered the frame.
+    _copyWebGPUFrame() {
+        if (!this._presentsWebGPU()) return
+        const source = this.canvas
+        if (!source?.width || !source.height) return
+        const copy = this._frameCopyCanvas()
+        this._frameCopyContext.clearRect(0, 0, copy.width, copy.height)
+        this._frameCopyContext.drawImage(source, 0, 0)
+    }
 
     /** All available mixer descriptors — exposed for the UI picker. */
     get mixers() { return MIXERS }
@@ -325,8 +374,10 @@ export class MixerRenderer {
             // [0,imageSize] and the right + bottom of the output stays
             // bgColor (black) — which is exactly the aspect-bug the
             // user was seeing after each mixer swap.
-            const deckACanvas = this._deckA?.canvas
-            const deckBCanvas = this._deckB?.canvas
+            // frameCanvas: a WebGPU deck's frame copy, since the mixer's tick
+            // runs outside the task that rendered the deck's frame.
+            const deckACanvas = this._deckA?.frameCanvas ?? this._deckA?.canvas
+            const deckBCanvas = this._deckB?.frameCanvas ?? this._deckB?.canvas
             if (deckACanvas?.width > 0 && deckACanvas.height > 0) {
                 this.renderer.updateTextureFromSource(
                     `imageTex_step_${this._mediaStepA}`,

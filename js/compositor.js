@@ -160,7 +160,7 @@ export class MainCompositor {
         // then we keep the 2D equal-power crossfade alive so the main
         // canvas never goes black during the boot handoff.
         if (this.mixer?.ready) {
-            ctx.drawImage(this.mixer.canvas, 0, 0, w, h)
+            ctx.drawImage(this.mixer.frameCanvas ?? this.mixer.canvas, 0, 0, w, h)
         } else {
             const result = XFADE_CURVES[this._curve](this._xfade)
             let alphaA, alphaB
@@ -184,12 +184,12 @@ export class MainCompositor {
             // additive blend is deliberate, not a missing "true" alpha xfade.
             if (alphaA > 0.001 && this.deckA?.canvas?.width > 0 && this.deckA.canvas.height > 0) {
                 ctx.globalAlpha = alphaA
-                ctx.drawImage(this.deckA.canvas, 0, 0, w, h)
+                ctx.drawImage(this.deckA.frameCanvas ?? this.deckA.canvas, 0, 0, w, h)
             }
             if (alphaB > 0.001 && this.deckB?.canvas?.width > 0 && this.deckB.canvas.height > 0) {
                 ctx.globalAlpha = alphaB
                 ctx.globalCompositeOperation = 'lighter'
-                ctx.drawImage(this.deckB.canvas, 0, 0, w, h)
+                ctx.drawImage(this.deckB.frameCanvas ?? this.deckB.canvas, 0, 0, w, h)
                 ctx.globalCompositeOperation = 'source-over'
             }
             ctx.globalAlpha = 1

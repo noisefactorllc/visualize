@@ -104,8 +104,13 @@ export class Deck {
             onContextRestored: () => {
                 this._normalizeColorUniforms()
                 this._rebindImages()
-            }
+            },
+            // A WebGPU canvas holds its frame only during the task that
+            // rendered it, so copy the frame for readers right away.
+            onFrame: () => this._copyWebGPUFrame()
         })
+        this._frameCopy = null
+        this._frameCopyContext = null
 
         this._initialized = false
         this._disposed = false
@@ -142,6 +147,49 @@ export class Deck {
      * one's place, so read this each time rather than keeping the element.
      */
     get canvas() { return this._renderer.canvas }
+
+    /**
+     * The canvas that readers outside the deck's render task read: the
+     * mixer and the compositor. A WebGPU canvas holds a frame
+     * only during the task that rendered it; read later it is blank or an
+     * invalid texture. Under WebGPU this is a 2D copy taken right after each
+     * frame. Under WebGL2 it is the deck's canvas, which keeps its frame.
+     * Before the first compile it is the copy, which holds no frame yet: the WebGPU backend's
+     * texture upload calls getContext('2d') on a canvas source, which would
+     * claim a canvas that has no context yet and leave the deck unable to
+     * present on it.
+     */
+    get frameCanvas() {
+        if (!this._renderer.pipeline || this._presentsWebGPU()) return this._frameCopyCanvas()
+        return this.canvas
+    }
+
+    _presentsWebGPU() {
+        return this._renderer.pipeline?.backend?.getName?.() === 'WebGPU'
+    }
+
+    _frameCopyCanvas() {
+        if (!this._frameCopy) {
+            this._frameCopy = document.createElement('canvas')
+            this._frameCopyContext = this._frameCopy.getContext('2d')
+        }
+        const source = this.canvas
+        if (source && (this._frameCopy.width !== source.width || this._frameCopy.height !== source.height)) {
+            this._frameCopy.width = source.width
+            this._frameCopy.height = source.height
+        }
+        return this._frameCopy
+    }
+
+    // Called from the renderer's onFrame, in the task that rendered the frame.
+    _copyWebGPUFrame() {
+        if (!this._presentsWebGPU()) return
+        const source = this.canvas
+        if (!source?.width || !source.height) return
+        const copy = this._frameCopyCanvas()
+        this._frameCopyContext.clearRect(0, 0, copy.width, copy.height)
+        this._frameCopyContext.drawImage(source, 0, 0)
+    }
 
     get pixelDensity() { return this._pixelDensity }
 
