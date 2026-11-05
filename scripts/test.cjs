@@ -394,9 +394,13 @@ function selectChangedPathTests() {
   const moduleStems = [];
   const camelStems = [];
   const changedTests = [];
+  let entrypointChanged = false;
   for (const changedPath of changed) {
-    const normalized = changedPath.replace(/^\.\//, '');
-    if (normalized.startsWith('.') || /^scripts\/test\.cjs$/.test(normalized)) continue;
+    const normalized = changedPath.replace(/^\.\/+/, '');
+    if (normalized.startsWith('.') || /^scripts\/test\.cjs$/.test(normalized)) {
+      if (/^scripts\/test\.cjs$/.test(normalized)) entrypointChanged = true;
+      continue;
+    }
     if (normalizedDesktop(changedPath)) continue;
     if (/^tests\//.test(normalized)) {
       changedTests.push(path.basename(normalized));
@@ -418,18 +422,44 @@ function selectChangedPathTests() {
   } catch {
     return { node: [], spec: [] };
   }
-  // Desktop changes select the desktop node tests: desktop code is not
-  // exercised by the root tests/ suite (no root test reads desktop/), and its
-  // tests live outside that directory, so the stem scan above cannot see
-  // them. Without this, a desktop candidate would report "no test exercises
-  // the changed paths" and run none of its tests. Desktop paths therefore
-  // select every desktop/test node test (they exercise the desktop
-  // packaging and its vendored dependencies collectively) and feed no stems
-  // into the root scan.
+  // Desktop changes select only the desktop tests that exercise them:
+  // desktop code is not exercised by the root tests/ suite (no root test
+  // reads desktop/), and its tests live outside that directory, so the stem
+  // scan above skips desktop paths and cannot see their tests. Running every
+  // desktop test for any desktop path would execute tests unrelated to the
+  // change, so match desktop tests the way the root scan matches: by the
+  // test's own filename when it changed, and otherwise by the changed
+  // desktop modules' stems in the test source. A desktop path that no
+  // desktop test exercises selects nothing, and the run reports that.
   if (changed.some(changedPath => normalizedDesktop(changedPath))) {
+    const desktopStems = [];
+    const desktopTests = [];
+    for (const changedPath of changed) {
+      if (!normalizedDesktop(changedPath)) continue;
+      const base = path.basename(changedPath.replace(/^\.\/*/, ''));
+      if (/\.test\.cjs$/.test(base)) {
+        desktopTests.push(base);
+        continue;
+      }
+      const stem = base.replace(/\.(js|mjs|cjs|json)$/, '');
+      if (!stem || stem === 'test' || stem.length < 5) continue;
+      const kebab = stem.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+      for (const form of new Set([stem, kebab])) {
+        if (!desktopStems.includes(form)) desktopStems.push(form);
+      }
+    }
     try {
       for (const file of fs.readdirSync(path.join(repoRoot, 'desktop', 'test'))) {
-        if (file.endsWith('.test.cjs')) selected.node.push(path.join('desktop', 'test', file));
+        if (!file.endsWith('.test.cjs')) continue;
+        let matched = desktopTests.includes(file) ||
+          desktopStems.some(stem => file.includes(stem));
+        if (!matched && desktopStems.length) {
+          try {
+            const content = fs.readFileSync(path.join(repoRoot, 'desktop', 'test', file), 'utf8');
+            matched = desktopStems.some(stem => content.includes(stem));
+          } catch { /* unreadable test files stay unselected */ }
+        }
+        if (matched) selected.node.push(path.join('desktop', 'test', file));
       }
     } catch { /* no desktop test directory: nothing to select */ }
   }
@@ -452,6 +482,14 @@ function selectChangedPathTests() {
       if (isNode) selected.node.push(path.join('tests', file));
       else selected.spec.push(file);
     }
+  }
+  // The entrypoint itself has a dedicated regression test that requires this
+  // module (tests/test-entrypoint-resolution.node-test.js), so an entrypoint
+  // change selects that test instead of selecting nothing.
+  const resolutionTest = path.join('tests', 'test-entrypoint-resolution.node-test.js');
+  if (entrypointChanged && !selected.node.includes(resolutionTest) &&
+      fs.existsSync(path.join(testsDir, 'test-entrypoint-resolution.node-test.js'))) {
+    selected.node.push(resolutionTest);
   }
   return selected;
 }
