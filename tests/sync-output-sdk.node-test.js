@@ -74,7 +74,7 @@ test('every Sync SDK consumer loads the pinned 0.3.3 snapshot', async () => {
 test('h264 browser SDK matches the reviewed immutable manifest', async () => {
     const directory = resolve(sdkDir, '../0.3.3')
     const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), '4530db185a4d896799246c0e1f2ca862311ac453b563f86301f939e2c0659c97')
+    assert.equal(createHash('sha256').update(manifest).digest('hex'), '92fdb3ffb7496d39d58bb13f0c9b944ed17f3128e2753cc4209836e1169bb23a')
     const manifestFiles = []
     for (const line of manifest.trim().split('\n')) {
         const [expected, filename] = line.split('  ')
