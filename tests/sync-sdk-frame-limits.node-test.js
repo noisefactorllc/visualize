@@ -51,6 +51,59 @@ test('encodeFrameV1 accepts the largest v1 RGBA frame and refuses frames above i
     ), /protocol v1 limits/)
 })
 
+const H264 = Object.freeze({
+    width: 2, height: 2, rowStride: 0,
+    sequence: 1, presentationTimeUs: 0,
+    pixelFormat: PIXEL_FORMAT.H264_ANNEXB, colorSpace: COLOR_SPACE.SRGB,
+    alphaMode: ALPHA_MODE.OPAQUE,
+})
+
+test('encodeFrameV1 applies the v1 limits to every H.264 boundary', () => {
+    // An even 4096 by 4096 frame with an exactly 8 MiB Annex B payload is the
+    // largest H.264 frame the v1 limits accept.
+    const largestPayload = new Uint8Array(8 * 1024 * 1024)
+    largestPayload[8 * 1024 * 1024 - 1] = 1
+    const largest = encodeFrameV1({ ...H264, width: 4096, height: 4096 }, largestPayload)
+    assert.equal(largest.byteLength, 64 + 8 * 1024 * 1024)
+    assert.equal(decodeFrameHeaderV1(largest).payloadBytes, 8 * 1024 * 1024)
+
+    // The payload must hold 1 to 8388608 bytes.
+    assert.throws(() => encodeFrameV1({ ...H264 }, new Uint8Array(0)), /1 to 8388608/)
+    assert.throws(() => encodeFrameV1({ ...H264 }, new Uint8Array(8 * 1024 * 1024 + 1)), /1 to 8388608/)
+    // H.264 dimensions must be even, even inside the payload limits.
+    assert.throws(() => encodeFrameV1({ ...H264, width: 4095 }, new Uint8Array(8)), /even/)
+    assert.throws(() => encodeFrameV1({ ...H264, height: 3 }, new Uint8Array(8)), /even/)
+    // An H.264 frame carries its Annex B stream without a row stride.
+    assert.throws(() => encodeFrameV1({ ...H264, rowStride: 8 }, new Uint8Array(8)), /row stride must be zero/)
+    // H.264 requires sRGB color space and opaque alpha.
+    assert.throws(() => encodeFrameV1(
+        { ...H264, colorSpace: COLOR_SPACE.DISPLAY_P3 }, new Uint8Array(8)), /sRGB/)
+    assert.throws(() => encodeFrameV1(
+        { ...H264, alphaMode: ALPHA_MODE.PREMULTIPLIED }, new Uint8Array(8)), /opaque/)
+})
+
+test('decodeFrameHeaderV1 applies the v1 limits to every H.264 header boundary', () => {
+    const header = (mutate) => {
+        const bytes = new Uint8Array(
+            encodeFrameV1(H264, new Uint8Array(8)),
+        ).slice(0, 64)
+        const view = new DataView(bytes.buffer)
+        mutate(view)
+        return bytes
+    }
+    // A decode that mutates only the header must still refuse an odd
+    // dimension, a nonzero row stride, a wrong color space, a wrong alpha
+    // mode, and a payload outside 1 to 8388608 bytes.
+    assert.throws(() => decodeFrameHeaderV1(header(view => view.setUint32(20, 4097, true))), RangeError)
+    assert.throws(() => decodeFrameHeaderV1(header(view => view.setUint32(24, 3, true))), /even/)
+    assert.throws(() => decodeFrameHeaderV1(header(view => view.setUint32(28, 8, true))), /row stride must be zero/)
+    assert.throws(() => decodeFrameHeaderV1(header(view => view.setUint16(14, COLOR_SPACE.DISPLAY_P3, true))), /sRGB/)
+    assert.throws(() => decodeFrameHeaderV1(header(view => view.setUint16(16, ALPHA_MODE.PREMULTIPLIED, true))), /opaque/)
+    assert.throws(() => decodeFrameHeaderV1(header(view => view.setUint32(32, 0, true))), /1 to 8388608/)
+    assert.throws(() => decodeFrameHeaderV1(
+        header(view => view.setUint32(32, 8 * 1024 * 1024 + 1, true))), /1 to 8388608/)
+})
+
 test('decodeFrameHeaderV1 refuses headers above the v1 limits', () => {
     const header = (mutate) => {
         const bytes = new Uint8Array(
