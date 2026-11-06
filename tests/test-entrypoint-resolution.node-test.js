@@ -276,6 +276,37 @@ test('changed desktop paths select the desktop node tests and no root tests', ()
     }
 })
 
+// The entrypoint branch of the changed-path selection (scripts/test.cjs): a
+// change to the entrypoint itself must select the dedicated resolution
+// regression test instead of selecting nothing, alone or beside other paths,
+// and the selection must never list the test twice when it also changed.
+test('an entrypoint change selects the resolution regression test', () => {
+    const { selectChangedPathTests } = require('../scripts/test.cjs')
+    const previous = process.env.NM_CHANGED_FILES
+    try {
+        process.env.NM_CHANGED_FILES = 'scripts/test.cjs'
+        const selection = selectChangedPathTests()
+        assert.deepEqual(selection.node, ['tests/test-entrypoint-resolution.node-test.js'])
+        assert.deepEqual(selection.spec, [])
+        // Dotfile configuration names no module, so the entrypoint stays the
+        // only selected test beside it.
+        process.env.NM_CHANGED_FILES = '.npmrc\nscripts/test.cjs'
+        const mixed = selectChangedPathTests()
+        assert.deepEqual(mixed.node, ['tests/test-entrypoint-resolution.node-test.js'])
+        // When the resolution test itself changed, the direct selection wins
+        // and the entrypoint branch must not duplicate it.
+        process.env.NM_CHANGED_FILES = [
+            'tests/test-entrypoint-resolution.node-test.js', 'scripts/test.cjs',
+        ].join('\n')
+        const both = selectChangedPathTests()
+        assert.deepEqual(both.node, ['tests/test-entrypoint-resolution.node-test.js'])
+        assert.deepEqual(both.spec, [])
+    } finally {
+        if (previous === undefined) delete process.env.NM_CHANGED_FILES
+        else process.env.NM_CHANGED_FILES = previous
+    }
+})
+
 // Hold one loopback port for the negative controls. Sandboxed runners forbid
 // ephemeral listen(0) outright (EPERM); there the helper binds an explicit
 // permitted-range port instead (probed free first), and returns null when no
