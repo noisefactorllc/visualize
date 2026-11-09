@@ -3,16 +3,18 @@
  * Each stateful effect instance in a chain must own its state and its sizing.
  *
  * The engine's expander used to scope every global_ texture by chain position
- * only, so two instances of a stateful effect in one chain (an inline surface
+ * only, so a repeat of a stateful effect in a chain (an inline surface
  * argument like blendMode(tex: reactionDiffusion(...)), or a repeated filter
- * like watercolor().watercolor()) read and wrote one state texture, and two
- * zoom-sized simulations shared one zoom_chain_N size. Visualize renders any
- * program a user loads, including share links with such chains, so both shapes
- * drew one simulation driving two pictures.
+ * like watercolor().watercolor()) read and wrote the same state texture as
+ * its earlier instance, and zoom-sized simulations in a chain shared the same
+ * zoom_chain_N size. Visualize renders any program a user loads, including
+ * share links with such chains, so the rendered pictures carried state that
+ * an instance does not own.
  *
  * The engine fix scopes private state per instance (the first instance keeps
- * the chain-scoped ID; each further instance appends its node) and gives each
- * further node its own node-scoped sizing parameter, while textures that
+ * the chain-scoped ID; an instance after it appends its node) and gives any
+ * node after the sizing node its own node-scoped sizing parameter, while
+ * textures that
  * different effects deliberately share keep the chain scope. This pins that
  * contract at the product boundary, against the engine core this app actually
  * downloads from the CDN, with the same graph-level checks as the engine's
@@ -55,7 +57,7 @@ async function withRegisteredEffects(page) {
 }
 
 // The graph-level contract checks, run in the page against the loaded engine
-// core. Returns one { name, pass, message } record per check.
+// core. Returns a { name, pass, message } record per check.
 async function runChecks(page, checksName) {
     return page.evaluate(([registerDsl, name]) => {
         const checks = {
@@ -106,10 +108,11 @@ async function runChecks(page, checksName) {
 
                 const results = []
 
-                // An inline surface argument: two reactionDiffusion simulations
-                // in one chain, sized by zoom x4 and x16. Independent state
-                // textures with independent sizes, and each pass's zoom bound
-                // to its own instance's sizing parameter with its own value.
+                // An inline surface argument: a reactionDiffusion simulation
+                // blended over another, sized by zoom x4 and x16. Independent
+                // state textures with independent sizes, and each pass's zoom
+                // bound to its own instance's sizing parameter with its own
+                // value.
                 try {
                     const a = build('reactionDiffusion(zoom: x4).blendMode(tex: reactionDiffusion(zoom: x16)).write(o0)')
                     const aNodes = instances(a.graph, 'reactionDiffusion', 'global_rd_state')
@@ -133,9 +136,9 @@ async function runChecks(page, checksName) {
                     results.push({ name: 'inline surface argument: independent state, sizes and zoom uniforms', pass: false, message: String(err && err.message || err) })
                 }
 
-                // Changing one instance's zoom must leave the other's state
-                // size and uniform intact: the sizing parameter belongs to one
-                // node only.
+                // Changing an instance's zoom must leave the other instance's
+                // state size and uniform intact: a sizing parameter belongs to
+                // the node that claims it, not to the chain.
                 try {
                     const a = build('reactionDiffusion(zoom: x4).blendMode(tex: reactionDiffusion(zoom: x16)).write(o0)')
                     const aNodes = instances(a.graph, 'reactionDiffusion', 'global_rd_state')
@@ -157,7 +160,7 @@ async function runChecks(page, checksName) {
                     results.push({ name: 'runtime zoom update touches only its own instance', pass: false, message: String(err && err.message || err) })
                 }
 
-                // A repeated filter: two watercolor instances ping-pong their
+                // A repeated filter: every watercolor instance ping-pongs its
                 // own state.
                 try {
                     const c = build('perlin().watercolor().watercolor().write(o0)')
@@ -169,7 +172,7 @@ async function runChecks(page, checksName) {
                     results.push({ name: 'repeated filter: independent ping-pong state', pass: false, message: String(err && err.message || err) })
                 }
 
-                // Legacy compatibility: the first (or only) instance keeps the
+                // Legacy compatibility: an instance without a repeat keeps the
                 // chain-scoped ID.
                 try {
                     const single = build('perlin().watercolor().write(o0)')
@@ -191,7 +194,7 @@ async function runChecks(page, checksName) {
     }, [REGISTER_DSL, checksName])
 }
 
-test('two stateful instances in one chain keep independent state and sizing', async ({ page }) => {
+test('stateful instances in a chain keep independent state and sizing', async ({ page }) => {
     await withRegisteredEffects(page)
     const results = await runChecks(page, 'independentStateAndSizing')
     for (const result of results) {
