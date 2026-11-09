@@ -11,10 +11,10 @@
  * share links with such chains, so the rendered pictures carried state that
  * an instance does not own.
  *
- * The engine fix scopes private state per instance (the first instance keeps
- * the chain-scoped ID; an instance after it appends its node) and gives any
- * node after the sizing node its own node-scoped sizing parameter, while
- * textures that
+ * The engine fix scopes private state per instance (an instance keeps the
+ * chain-scoped ID until the same effect appears again in the chain; the
+ * repeat appends its node) and gives any node after the sizing node its own
+ * node-scoped sizing parameter, while textures that
  * different effects deliberately share keep the chain scope. This pins that
  * contract at the product boundary, against the engine core this app actually
  * downloads from the CDN, with the same graph-level checks as the engine's
@@ -33,9 +33,12 @@ installHandfishLocal(test)
 test.describe.configure({ timeout: 120_000 * SCALE, retries: 0 })
 
 // Names every effect the checks below expand, so the deck's bundle loader
-// registers their ops and enums in the page before compileGraph runs.
+// registers their ops and enums in the page before compileGraph runs. The
+// render program registers the loop effects the accumulator check names.
 const REGISTER_DSL = 'search synth, mixer, filter\n' +
     'perlin().blendMode(tex: reactionDiffusion(zoom: x4)).watercolor().write(o0)'
+const REGISTER_RENDER_DSL = 'search synth, render\n' +
+    'perlin().loopBegin().loopEnd().write(o0)'
 
 async function withRegisteredEffects(page) {
     await page.goto('/')
@@ -45,15 +48,17 @@ async function withRegisteredEffects(page) {
 
     // The probe deck's load runs the product's own bundle-loading path for
     // every effect the checks name; after it, compileGraph can expand them.
-    await page.evaluate(async (registerDsl) => {
+    await page.evaluate(async ([registerDsl, registerRenderDsl]) => {
         const { Deck } = await import('/js/noisemaker/deck.js')
-        const canvas = document.createElement('canvas')
-        const deck = new Deck(canvas, { id: 'probe', width: 128, height: 128 })
-        await deck.init()
-        const load = await deck.load(registerDsl, 'stateful-instance registration probe')
-        deck.dispose()
-        if (!load.success) throw new Error(`registration probe failed to compile: ${load?.error?.message || 'unknown error'}`)
-    }, REGISTER_DSL)
+        for (const [index, dsl] of [registerDsl, registerRenderDsl].entries()) {
+            const canvas = document.createElement('canvas')
+            const deck = new Deck(canvas, { id: `probe${index}`, width: 128, height: 128 })
+            await deck.init()
+            const load = await deck.load(dsl, 'stateful-instance registration probe')
+            deck.dispose()
+            if (!load.success) throw new Error(`registration probe failed to compile: ${load?.error?.message || 'unknown error'}`)
+        }
+    }, [REGISTER_DSL, REGISTER_RENDER_DSL])
 }
 
 // The graph-level contract checks, run in the page against the loaded engine
@@ -63,6 +68,12 @@ async function runChecks(page, checksName) {
         const checks = {
             async independentStateAndSizing() {
                 const { _bundle } = await import('/js/noisemaker/bundle.js')
+
+                const describeError = (err) => {
+                    if (!err) return 'unknown error'
+                    if (typeof err.message === 'string') return err.message
+                    try { return JSON.stringify(err.message ?? err) } catch { return String(err) }
+                }
 
                 class RecordingBackend {
                     textures = new Map()
@@ -133,7 +144,7 @@ async function runChecks(page, checksName) {
                     }
                     results.push({ name: 'inline surface argument: independent state, sizes and zoom uniforms', pass: true })
                 } catch (err) {
-                    results.push({ name: 'inline surface argument: independent state, sizes and zoom uniforms', pass: false, message: String(err && err.message || err) })
+                    results.push({ name: 'inline surface argument: independent state, sizes and zoom uniforms', pass: false, message: describeError(err) })
                 }
 
                 // Changing an instance's zoom must leave the other instance's
@@ -157,7 +168,7 @@ async function runChecks(page, checksName) {
                     }
                     results.push({ name: 'runtime zoom update touches only its own instance', pass: true })
                 } catch (err) {
-                    results.push({ name: 'runtime zoom update touches only its own instance', pass: false, message: String(err && err.message || err) })
+                    results.push({ name: 'runtime zoom update touches only its own instance', pass: false, message: describeError(err) })
                 }
 
                 // A repeated filter: every watercolor instance ping-pongs its
@@ -169,7 +180,7 @@ async function runChecks(page, checksName) {
                     if (cNodes[0].texture === cNodes[1].texture) throw new Error('ping-pong textures must be distinct')
                     results.push({ name: 'repeated filter: independent ping-pong state', pass: true })
                 } catch (err) {
-                    results.push({ name: 'repeated filter: independent ping-pong state', pass: false, message: String(err && err.message || err) })
+                    results.push({ name: 'repeated filter: independent ping-pong state', pass: false, message: describeError(err) })
                 }
 
                 // Legacy compatibility: an instance without a repeat keeps the
@@ -183,7 +194,48 @@ async function runChecks(page, checksName) {
                     }
                     results.push({ name: 'single instance keeps the legacy chain-scoped state ID', pass: true })
                 } catch (err) {
-                    results.push({ name: 'single instance keeps the legacy chain-scoped state ID', pass: false, message: String(err && err.message || err) })
+                    results.push({ name: 'single instance keeps the legacy chain-scoped state ID', pass: false, message: describeError(err) })
+                }
+
+                // A repeat with an explicit zoom beside a default zoom: every
+                // instance keeps its own zoom value, and the default sizing
+                // stays at the engine's default state size.
+                try {
+                    const d = build('reactionDiffusion(zoom: x4).blendMode(tex: reactionDiffusion()).blendMode(tex: reactionDiffusion(zoom: x16)).write(o0)')
+                    const dNodes = instances(d.graph, 'reactionDiffusion', 'global_rd_state')
+                    const textures = new Set(dNodes.map(node => node.texture))
+                    if (dNodes.length !== 3 || textures.size !== 3) {
+                        throw new Error(`expected 3 distinct state textures, got ${textures.size} for ${dNodes.length} instances`)
+                    }
+                    assertSize(d.pipeline, dNodes[0].texture, 256)
+                    assertSize(d.pipeline, dNodes[1].texture, 128)
+                    assertSize(d.pipeline, dNodes[2].texture, 64)
+                    results.push({ name: 'explicit and default zooms size their own state', pass: true })
+                } catch (err) {
+                    results.push({ name: 'explicit and default zooms size their own state', pass: false, message: describeError(err) })
+                }
+
+                // Loop accumulators are deliberately shared: loopBegin and
+                // loopEnd in a chain keep the chain-scoped accumulator ID.
+                try {
+                    for (const chain of [
+                        'perlin().loopBegin().loopEnd().write(o0)',
+                        'perlin().loopBegin().loopEnd().loopBegin().loopEnd().write(o0)',
+                    ]) {
+                        const l = build(chain)
+                        for (const pass of l.graph.passes) {
+                            if (pass.effectFunc === 'loopBegin' && pass.inputs.accumTex !== 'global_accum_chain_0') {
+                                throw new Error(`loopBegin reads ${pass.inputs.accumTex}, expected the shared chain accumulator`)
+                            }
+                            if (pass.effectFunc === 'loopEnd' && pass.outputs.fragColor.startsWith('global_') &&
+                                pass.outputs.fragColor !== 'global_accum_chain_0') {
+                                throw new Error(`loopEnd writes ${pass.outputs.fragColor}, expected the shared chain accumulator`)
+                            }
+                        }
+                    }
+                    results.push({ name: 'loop accumulators keep the shared chain scope', pass: true })
+                } catch (err) {
+                    results.push({ name: 'loop accumulators keep the shared chain scope', pass: false, message: describeError(err) })
                 }
 
                 return results
