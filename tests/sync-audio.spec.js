@@ -70,7 +70,7 @@ test.afterAll(async () => {
     await exited
 })
 
-async function setup(page, fullApp = false) {
+async function setup(page, fullApp = false, dsl = fixtureDsl) {
     // Serve the Handfish UI assets from a local mirror when the runner's
     // network cannot reach the CDN (HANDFISH_LOCAL); a no-op otherwise.
     await routeHandfishLocal(page)
@@ -80,7 +80,7 @@ async function setup(page, fullApp = false) {
         // Exercise real rendering with a bounded input, without randomly
         // compiling a heavy simulation during native protocol assertions.
         await page.route('**/data/programs.json', route => route.fulfill({
-            json: [{ title: 'Sync fixture', tagline: '', tags: ['abstract'], category: 'abstract', dsl: fixtureDsl }]
+            json: [{ title: 'Sync fixture', tagline: '', tags: ['abstract'], category: 'abstract', dsl }]
         }))
     }
     await page.route('**/js/sync/audio.js', route => route.fulfill({
@@ -557,3 +557,111 @@ for (const backend of ['webgl2', 'webgpu']) {
         }
     })
 }
+
+// A macOS daemon routes canvas output to H.264 when its welcome reports a
+// selected Syphon send provider and a release that decodes H.264 (0.2.84 or
+// later). The fixture daemon publishes to its test provider only, and a
+// development build reports the protocol library's fallback version, so this
+// client reports both in the welcome it returns: the app's own output
+// controller then starts its H.264 canvas sender against the fixture, which
+// decodes every frame with VideoToolbox.
+function routeH264SyncClient(page) {
+    return page.route('**/js/sync/bundle.js', route => route.fulfill({
+        contentType: 'text/javascript',
+        body: `export * from '/js/sync/sdk/0.3.3/browser/index.js';
+            import { SyncBridgeClient as Base } from '/js/sync/sdk/0.3.3/browser/index.js';
+            export class SyncBridgeClient extends Base {
+                constructor(options) { super({ ...options, endpoint: ${JSON.stringify(endpoint)}, permissions: { query: async () => ({ state: 'granted' }) } }); }
+                async pair() { throw new Error('Video should reuse the audio grant'); }
+                async connect() {
+                    const welcome = await super.connect();
+                    const providers = [...(welcome.capabilities?.providers ?? []),
+                        { id: 'syphon', direction: 'send', available: true, selected: true }];
+                    return { ...welcome, version: '0.2.84', capabilities: { ...welcome.capabilities, providers } };
+                }
+            }`
+    }))
+}
+
+// FNV-1a over the bytes the fixture hashes from a decoded RGBA frame: every
+// byte of a frame up to 1 MiB, otherwise the first 64 KiB. AVC can quantize
+// the first white macroblock to 254, as in the synthetic case above.
+function uniformWhiteChecksums(width, height) {
+    const bytes = width * height * 4
+    const end = bytes > 1048576 ? 65536 : bytes
+    return [false, true].map(nearBlock => {
+        let checksum = 0x811c9dc5
+        for (let i = 0; i < end; i++) {
+            const pixel = Math.floor(i / 4)
+            const rgb = nearBlock && pixel % width < 16 && Math.floor(pixel / width) < 16 ? 254 : 255
+            checksum = Math.imul(checksum ^ (i % 4 === 3 ? 255 : rgb), 0x01000193) >>> 0
+        }
+        return checksum
+    })
+}
+
+// The production WebGPU path: both decks and the mixer render on WebGPU, and
+// the output controller encodes the live mixer canvas from inside the render
+// task. A mixer that reads its deck canvases outside the task that rendered
+// them produces black, which the decoded checksum rejects.
+test('native H.264 receiver decodes the production WebGPU mixer output', async ({ page }) => {
+    test.skip(process.platform !== 'darwin', 'Native H.264 decoding requires VideoToolbox')
+    test.slow()
+    const solidDsl = color => `search synth, render\nsolid(color: ${color}).write(o0)\nrender(o0)`
+    const decksShow = dsl => page.waitForFunction(dsl => {
+        const app = window.__visualize
+        return app?.online && app.mixer?.ready && Object.values(app.decks).every(deck => deck.currentDsl === dsl)
+    }, dsl)
+    await page.addInitScript(key => {
+        localStorage.setItem(key, JSON.stringify({ preferWebGPU: true }))
+    }, 'visualize.renderer.v1')
+    await routeH264SyncClient(page)
+    await setup(page, true, solidDsl('#000000'))
+    await decksShow(solidDsl('#000000'))
+    expect(await page.evaluate(() => {
+        const app = window.__visualize
+        return [app.decks.A.activeBackend, app.decks.B.activeBackend, app.mixer.activeBackend]
+    })).toEqual(['webgpu', 'webgpu', 'webgpu'])
+    // Deck render loops that start after the mixer's draw after the mixer's
+    // tick in every frame, so the mixer reads each deck frame in a later task
+    // than the one that rendered it. Put the decks in that order, then change
+    // both decks from black to white: the output turns white only if the mixer
+    // receives the frames the decks render from then on.
+    await page.evaluate(async dsl => {
+        const decks = [window.__visualize.decks.A, window.__visualize.decks.B]
+        for (const deck of decks) {
+            deck._renderer.stop()
+            deck._renderer.start()
+        }
+        await Promise.all(decks.map(deck => deck.load(dsl, 'white')))
+    }, solidDsl('#ffffff'))
+    await decksShow(solidDsl('#ffffff'))
+    await startNativeReceiverOutput(page)
+    const output = await page.evaluate(() => {
+        const controller = window.__visualize.syncOutputController
+        return { compressed: controller._compressedSender, width: controller.state.width, height: controller.state.height }
+    })
+    expect(output.compressed).toBe(true)
+    const expectedChecksums = uniformWhiteChecksums(output.width, output.height)
+    const decodedStats = () => page.evaluate(async () => {
+        const controller = window.__visualize.syncOutputController
+        const client = controller._client, sender = controller._sender
+        if (!client || !sender) return { state: controller.state }
+        return client._scheduleControl(client._controlSession, () => client._exchange(
+            { type: 'getStats', senderId: sender._transport.id }, message => message, client._controlSession))
+    })
+    let stats
+    try {
+        await expect.poll(async () => {
+            stats = await decodedStats()
+            return Number(stats.accepted) >= 2 && expectedChecksums.includes(Number(stats.checksum))
+        }, { timeout: 30_000 * SCALE }).toBe(true)
+    } catch (error) {
+        error.message += '\nDecoded stats: ' + JSON.stringify({ stats, expectedChecksums, output })
+        throw error
+    }
+    expect(Number(stats.rejected)).toBe(0)
+    expect(Number(stats.failed)).toBe(0)
+    await page.evaluate(() => window.__visualize.syncOutputController.stop())
+    await page.evaluate(() => window.__visualize.audio.disable())
+})
