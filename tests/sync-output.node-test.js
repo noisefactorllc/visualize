@@ -980,6 +980,73 @@ test('passes the sender backlog signal through the renderer sink', async () => {
     await controller.stop()
 })
 
+test('a sink configure failure above the v1 limits ends the output with the surfaced error', async () => {
+    const fixture = createFixture()
+    const canvas = { width: 1280, height: 720 }
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
+        renderer: fixture.renderer,
+        getCanvas: () => canvas,
+        connectionProvider: fixture.connectionProvider
+    })
+
+    await controller.connect()
+    await controller.start('Visualize Sink Error')
+
+    // The wrapper must expose onError so the engine can report each sink's
+    // isolated configure/deferRender/submit failure to its owner.
+    assert.equal(typeof fixture.attachedSink.onError, 'function')
+
+    // A canvas that grows past the Sync v1 limits rejects the new descriptor
+    // the way the SDK's SyncFrameSink.configure rejects a descriptor above
+    // the 4096 pixel limit.
+    const sdkConfigure = fixture.sender.configure
+    fixture.sender.configure = (descriptor) => {
+        if (descriptor.width > 4096 || descriptor.height > 4096) {
+            throw new RangeError('descriptor width and height must be at most 4096')
+        }
+        return sdkConfigure(descriptor)
+    }
+    let thrown
+    try {
+        fixture.attachedSink.configure({ width: 4097, height: 4097, fps: 60 })
+    } catch (error) {
+        thrown = error
+    }
+    assert.ok(thrown instanceof RangeError)
+    assert.equal(controller.state.status, 'sending',
+        'the wrapper must not report the failure before the engine passes it to onError')
+
+    // The engine reports each sink's isolated error to that sink's onError.
+    fixture.attachedSink.onError(thrown)
+    assert.equal(controller.state.status, 'error')
+    assert.equal(controller.state.error?.code, 'SYNC_OUTPUT_FAILED')
+    assert.ok(fixture.events.filter((event) => event === 'sender close').length >= 1)
+    assert.ok(fixture.events.filter((event) => event === 'client close').length >= 1)
+    assert.equal(fixture.events.filter((event) => event === 'sink removed').length, 1)
+})
+
+test('a healthy sink that never throws keeps the wrapper onError unused and the same calls as before', async () => {
+    const fixture = createFixture()
+    const canvas = { width: 1280, height: 720 }
+    const controller = new syncOutput.SyncOutputController({ random: () => 0,
+        renderer: fixture.renderer,
+        getCanvas: () => canvas,
+        connectionProvider: fixture.connectionProvider
+    })
+
+    await controller.connect()
+    await controller.start('Visualize Healthy Sink')
+
+    assert.equal(typeof fixture.attachedSink.onError, 'function')
+    assert.equal(fixture.attachedSink.submit('mixer-texture', 4), true)
+    assert.equal(fixture.attachedSink.deferRender(), false)
+    assert.equal(controller.state.status, 'sending')
+    assert.deepEqual(fixture.events.find((event) => Array.isArray(event) && event[0] === 'submit'),
+        ['submit', 'mixer-texture', 4])
+    await controller.stop()
+    assert.equal(controller.state.status, 'ready')
+})
+
 test('SyncOutputController forwards injected logger to SyncH264CanvasSender.create', async () => {
     const original = {
         encoder: globalThis.VideoEncoder,

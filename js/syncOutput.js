@@ -170,7 +170,10 @@ function validateSender(sender) {
     }
 }
 
-function createConfiguredSink(sender, onConfigured) {
+function createConfiguredSink(sender, onConfigured, onError) {
+    // The engine reports each sink's isolated configure/deferRender/submit
+    // error to that sink's optional onError(error) method, so the wrapper
+    // forwards it to the controller's live-session teardown.
     return Object.freeze({
         configure(descriptor) {
             const configuredDescriptor = validateDescriptor(descriptor)
@@ -186,6 +189,9 @@ function createConfiguredSink(sender, onConfigured) {
         },
         close(options) {
             return sender.close(options)
+        },
+        onError(error) {
+            if (typeof onError === 'function') onError(error)
         }
     })
 }
@@ -823,7 +829,7 @@ export class SyncOutputController {
                 if (sinkGeneration !== null) {
                     this._sinkConfigured(sender, sinkGeneration, nextDescriptor)
                 }
-            })
+            }, (error) => this._handleSinkError(error))
             resources.removeSink = this._renderer.addSink(sink)
             if (typeof resources.removeSink !== 'function') {
                 throw outputError('SYNC_RENDERER_UNAVAILABLE', 'Renderer did not return a sink removal handle')
@@ -1033,6 +1039,39 @@ export class SyncOutputController {
         if (cause) this._logger?.warn?.('Sync frame export failed repeatedly:', cause)
     }
 
+    _handleSinkError(error) {
+        if (this._disposed || this._state.status !== 'sending' || !this._sender) return
+        const cause = error instanceof Error ? error.message : (error ? String(error) : '')
+        const generation = this._liveGeneration
+        const sender = this._sender
+        const exportQueue = this._exportQueue
+        const removeSink = this._removeSink
+        this._clearStatsTimer()
+        this._clearRecoveryProbationTimer()
+        this._invalidateLiveSession(generation)
+        try { removeSink?.() } catch {
+            // The sink failure is already terminal for this live session.
+        }
+        try { sender?.close() } catch {
+            // The sink failure is already terminal for this live session.
+        }
+        try { exportQueue?.close() } catch {
+            // The sink failure is already terminal for this live session.
+        }
+        this._releaseClient()
+        const code = typeof error?.code === 'string' && error.code ? error.code : 'SYNC_OUTPUT_FAILED'
+        this._setState({
+            status: 'error',
+            connected: false,
+            senderName: null,
+            error: publicError(code,
+                cause
+                    ? `The Sync output failed: ${cause}`
+                    : 'The Sync output failed')
+        })
+        if (cause) this._logger?.warn?.('Sync output sink failed:', cause)
+    }
+
     _sinkConfigured(sender, generation, descriptor) {
         if (generation !== this._liveGeneration || sender !== this._sender ||
             this._state.status !== 'sending') {
@@ -1238,7 +1277,7 @@ export class SyncOutputController {
                 if (sinkGeneration !== null) {
                     this._sinkConfigured(sender, sinkGeneration, descriptor)
                 }
-            })
+            }, (error) => this._handleSinkError(error))
             resources.removeSink = this._renderer.addSink(sink)
             if (typeof resources.removeSink !== 'function') {
                 throw outputError(
