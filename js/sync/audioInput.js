@@ -1,6 +1,6 @@
 import { SyncBridgeClient } from './audio.js'
 import { syncCredentialStore } from './credentials.js'
-import { SyncLifecycleError, SyncUnavailableError } from './sdk/0.3.3/browser/index.js'
+import { SyncLifecycleError, SyncUnavailableError } from './sdk/0.3.4/browser/index.js'
 
 export const SYNC_AUDIO_PREFIX = 'sync-audio:'
 export function isSyncAudioSource(id) {
