@@ -15,7 +15,7 @@
 //   drops under renderer load cannot starve playback and meters.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SyncLifecycleError, SyncUnavailableError } from '../js/sync/sdk/0.3.4/browser/index.js'
+import { SyncLifecycleError, SyncUnavailableError } from '../js/sync/sdk/0.3.3/browser/index.js'
 import {
     isTransientConnectLoss,
     retryUnavailable,

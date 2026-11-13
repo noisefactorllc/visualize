@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { SyncBridgeClient } from '../js/sync/audio.js'
-import { SyncUnavailableError } from '../js/sync/sdk/0.3.4/browser/index.js'
+import { SyncUnavailableError } from '../js/sync/sdk/0.3.3/browser/index.js'
 import { retryUnavailable } from '../js/sync/audioInput.js'
 
 const WELCOME = {
