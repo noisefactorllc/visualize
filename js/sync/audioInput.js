@@ -14,6 +14,14 @@ export function syncAudioBufferFrames(sampleRate) {
     return { capacity, prefill, maxQueuedFrames }
 }
 
+// Web Audio bounds the worklet graph: AudioWorkletNode options and
+// createChannelSplitter accept 1 to 32 channels. A daemon source declaring
+// more channels would crash enable() inside the node constructor, after the
+// native capture is already open, with a cryptic constructor error. Reject
+// the format before any AudioContext is created so the failure is a clear
+// device error and the capture is released.
+export const MAX_SYNC_AUDIO_CHANNELS = 32
+
 // The native daemon closes a control connection whose hello is delayed past
 // its 1s hello deadline (server.cpp kControlHelloDeadlineMs) or whose exchange
 // misses its 2s data-message deadline (kDataMessageDeadlineMs). A busy main
@@ -237,6 +245,10 @@ export function createSyncAudioInput({
                 }
             }, { signal })
             signal?.throwIfAborted()
+            if (!Number.isInteger(format.channelCount) ||
+                format.channelCount < 1 || format.channelCount > MAX_SYNC_AUDIO_CHANNELS)
+                throw new Error(
+                    `Sync audio channel count ${format.channelCount} is unsupported (1 to ${MAX_SYNC_AUDIO_CHANNELS} channels)`)
             context = new AudioContext({ sampleRate: format.sampleRate })
             if (context.sampleRate !== format.sampleRate) throw new Error('Sync audio sample rate is unsupported')
             await context.audioWorklet.addModule(workletUrl)

@@ -276,3 +276,116 @@ test('a send-direction audio provider is not offered as an input device', async 
     await assert.rejects(syncAudio.connectSyncAudio(), /supports audio input/)
     assert.equal(listed, 0, 'a send-direction audio provider must not be enumerated as input')
 })
+
+// Fake Web Audio surface for openSyncAudioSource. The real sync-audio-bridge
+// processor runs inside the fake node, so each open drives the genuine
+// worklet construction path that js/audio.js and SyncAudioChannels rely on.
+function fakeAudioEnvironment() {
+    const created = []
+    class FakeAudioContext {
+        constructor(options) {
+            this.sampleRate = options?.sampleRate ?? 48000
+            this.state = 'running'
+            this.destination = {}
+            created.push(this)
+            this.closeCount = 0
+        }
+        get audioWorklet() {
+            return { addModule: async () => {} }
+        }
+        async resume() {}
+        async close() { this.closeCount++ }
+        createGain() {
+            return { gain: { value: 1 }, connect() { return this.destination } }
+        }
+    }
+    class FakeAudioWorkletNode {
+        constructor(context, name, options) {
+            // Model the browser's real bound: AudioWorkletNode rejects
+            // outputChannelCount values outside 1 to 32 with a constructor
+            // error, which is exactly the failure a 33+ channel daemon
+            // source caused before the open-path guard existed.
+            const counts = options?.outputChannelCount
+            if (counts?.some(count => count < 1 || count > 32))
+                throw new Error(`Failed to construct 'AudioWorkletNode': outputChannelCount ${counts[0]} is outside the range 1 to 32`)
+            this.context = context
+            this.name = name
+            this.options = options
+            const Processor = processors.get(name)
+            if (!Processor) throw new Error(`Unknown processor ${name}`)
+            this.processor = new Processor({ processorOptions: options?.processorOptions })
+            this.port = { postMessage: () => {} }
+            created.push(this)
+        }
+        connect(target) { return target }
+        disconnect() {}
+    }
+    return { created, FakeAudioContext, FakeAudioWorkletNode }
+}
+
+function fakeOpenClient(format, handlers = {}) {
+    let closed = 0
+    return {
+        closedCount: () => closed,
+        close() { closed++ },
+        async openAudioSource() {
+            if (handlers.openAudioSource) return handlers.openAudioSource()
+            return format
+        },
+        // The read loop parks here without a timer, so the test event loop
+        // still drains after the capture is stopped.
+        readAudioSource() { return new Promise(() => {}) }
+    }
+}
+
+function withFakeAudioGlobals(environment, run) {
+    const previousContext = globalThis.AudioContext
+    const previousNode = globalThis.AudioWorkletNode
+    globalThis.AudioContext = environment.FakeAudioContext
+    globalThis.AudioWorkletNode = environment.FakeAudioWorkletNode
+    return Promise.resolve().then(run).finally(() => {
+        globalThis.AudioContext = previousContext
+        globalThis.AudioWorkletNode = previousNode
+    })
+}
+
+test('a Sync source within the worklet channel bounds opens with its declared channel count', async () => {
+    for (const channelCount of [1, 2, 8, 32]) {
+        const environment = fakeAudioEnvironment()
+        const client = fakeOpenClient({ sampleRate: 48000, channelCount })
+        const syncAudio = createSyncAudioInput({
+            Client: class { constructor() { return client } },
+            credentialStore: fakeCredentialStore(),
+            appName: 'Test'
+        })
+        await withFakeAudioGlobals(environment, async () => {
+            const capture = await syncAudio.openSyncAudioSource('sync-audio:audio_1')
+            assert.equal(capture.channelCount, channelCount)
+            const node = environment.created.find(item => item instanceof environment.FakeAudioWorkletNode)
+            assert.ok(node, 'the bridge worklet node must be created')
+            assert.equal(node.name, 'sync-audio-bridge')
+            assert.deepEqual(node.options.outputChannelCount, [channelCount])
+            assert.equal(node.processor.channelCount, channelCount)
+            capture.bridge.stop()
+        })
+    }
+})
+
+test('a Sync source beyond the worklet channel bounds is rejected before any audio graph is built', async () => {
+    for (const channelCount of [33, 64]) {
+        const environment = fakeAudioEnvironment()
+        const client = fakeOpenClient({ sampleRate: 48000, channelCount })
+        const syncAudio = createSyncAudioInput({
+            Client: class { constructor() { return client } },
+            credentialStore: fakeCredentialStore(),
+            appName: 'Test'
+        })
+        await withFakeAudioGlobals(environment, async () => {
+            await assert.rejects(
+                syncAudio.openSyncAudioSource('sync-audio:audio_1'),
+                new RegExp(`channel count ${channelCount} is unsupported`))
+            assert.equal(environment.created.length, 0, 'no AudioContext or worklet node is created')
+            assert.ok(client.closedCount() >= 1, 'the opened control connection is released')
+        })
+    }
+})
