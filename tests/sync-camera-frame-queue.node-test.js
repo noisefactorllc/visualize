@@ -89,6 +89,21 @@ test('fourth pending bitmap closes oldest and retains fixed FIFO depth three', b
     await owner.stop(); assert.ok(h.bitmaps.every(bitmap => bitmap.closes === 1))
 })
 
+test('a second consumer on the same track is rejected until the current owner stops', bounded, async t => {
+    const h = setup(t), first = h.start()
+    await h.deliver(100)
+    assert.throws(() => h.start(), /Camera frames still have an owner/,
+        'a concurrent consumer must not attach while the first still owns the track')
+    assert.equal(h.errors.length, 0, 'the rejected consumer must not fail the current owner')
+    await first.stop()
+    const second = h.start()
+    assert.equal(second.active, true, 'ownership releases after the first consumer stops')
+    await h.deliver(200); await h.deliver(300); second.consume()
+    assert.equal(h.uploads.length, 1, 'the new owner serves frames on the same track')
+    await second.stop()
+    assert.ok(h.bitmaps.every(bitmap => bitmap.closes === 1))
+})
+
 test('same-track restart retains timestamp watermark; decreasing timestamps fail instead of resetting', bounded, async t => {
     const h = setup(t), first = h.start()
     await h.deliver(100); await first.stop()
