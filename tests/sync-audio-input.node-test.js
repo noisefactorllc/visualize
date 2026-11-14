@@ -15,7 +15,7 @@
 //   drops under renderer load cannot starve playback and meters.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { SyncLifecycleError, SyncUnavailableError } from '../js/sync/sdk/0.3.3/browser/index.js'
+import { SyncLifecycleError, SyncUnavailableError, SyncAuthenticationError, SyncBridgeError } from '../js/sync/sdk/0.3.3/browser/index.js'
 import {
     isTransientConnectLoss,
     retryUnavailable,
@@ -369,6 +369,92 @@ test('a Sync source within the worklet channel bounds opens with its declared ch
             capture.bridge.stop()
         })
     }
+})
+
+test('an authentication failure clears the stale credential; other failures leave it in place', async () => {
+    const cleared = []
+    const credential = { token: 'stale' }
+    const store = {
+        credential,
+        current: () => credential,
+        publish: value => value,
+        clear: item => cleared.push(item)
+    }
+    const syncAudio = createSyncAudioInput({
+        Client: class {
+            constructor() { return {
+                close() {},
+                async connect() { throw new SyncAuthenticationError('token rejected') },
+                async listAudioSources() { return [] }
+            } }
+        },
+        credentialStore: store,
+        appName: 'Test'
+    })
+    await assert.rejects(syncAudio.connectSyncAudio(), /token rejected/)
+    assert.ok(cleared.length >= 1 && cleared.every(item => item === credential),
+        'an authentication failure must clear the stale credential')
+    assert.deepEqual(syncAudio.getSyncAudioDevices(), [])
+
+    const untouched = []
+    const keptCredential = { token: 'kept' }
+    const keptStore = {
+        credential: keptCredential,
+        current: () => keptCredential,
+        publish: value => value,
+        clear: item => untouched.push(item)
+    }
+    const otherSyncAudio = createSyncAudioInput({
+        Client: class {
+            constructor() { return {
+                close() {},
+                async connect() { throw new Error('daemon down') },
+                async listAudioSources() { return [] }
+            } }
+        },
+        credentialStore: keptStore,
+        appName: 'Test'
+    })
+    await assert.rejects(otherSyncAudio.connectSyncAudio(), /daemon down/)
+    assert.deepEqual(untouched, [], 'a non-credential failure must keep the stored credential')
+})
+
+test('a pairing-required discovery failure re-pairs and reconnects with the fresh grant', async () => {
+    const published = []
+    const credential = { token: 'stale' }
+    const store = {
+        credential,
+        current: () => published.at(-1) ?? credential,
+        publish: value => { published.push(value); return value },
+        clear() {}
+    }
+    let connects = 0
+    let pairs = 0
+    let sources = 0
+    const syncAudio = createSyncAudioInput({
+        Client: class {
+            constructor() { return {
+                close() {},
+                async pair() { pairs++; return { token: 'fresh' } },
+                async connect() {
+                    connects++
+                    if (connects === 1) {
+                        throw new SyncBridgeError('pairing required', { daemonCode: 'audio_pairing_required' })
+                    }
+                    return { capabilities: { providers: RECEIVE_AUDIO_PROVIDERS } }
+                },
+                async listAudioSources() { sources++; return [{ id: 'audio_1', name: 'Device 1', channelCount: 2, sampleRate: 48000 }] }
+            } }
+        },
+        credentialStore: store,
+        appName: 'Test'
+    })
+    const devices = await syncAudio.connectSyncAudio()
+    assert.equal(pairs, 1, 'the pairing-required rejection must drive one fresh pairing')
+    assert.deepEqual(published, ['fresh'])
+    assert.equal(sources, 1)
+    assert.equal(devices[0].id, 'sync-audio:audio_1')
+    assert.equal(devices[0].connected, true)
 })
 
 test('a mid-stream read failure marks the device lost, releases the capture, and reconnects', async () => {
