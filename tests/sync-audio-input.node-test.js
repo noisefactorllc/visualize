@@ -371,6 +371,49 @@ test('a Sync source within the worklet channel bounds opens with its declared ch
     }
 })
 
+test('a mid-stream read failure marks the device lost, releases the capture, and reconnects', async () => {
+    const errors = []
+    const clients = []
+    class Client {
+        constructor() {
+            const index = clients.length
+            clients.push(this)
+            let closed = 0
+            this.closedCount = () => closed
+            this.close = () => { closed++ }
+            this.connect = async () => ({ capabilities: { providers: RECEIVE_AUDIO_PROVIDERS } })
+            this.listAudioSources = async () => [{ id: 'audio_1', name: 'Device 1', channelCount: 2, sampleRate: 48000 }]
+            this.openAudioSource = async () => ({ sampleRate: 48000, channelCount: 2 })
+            // The discovery client never reads; the first capture's read loop
+            // dies mid-stream; every later capture's reader parks, so the
+            // reconnect proof is deterministic.
+            this.readAudioSource = index === 1
+                ? async () => { throw new SyncLifecycleError('stream ended') }
+                : () => new Promise(() => {})
+        }
+    }
+    const syncAudio = createSyncAudioInput({
+        Client,
+        credentialStore: fakeCredentialStore(),
+        appName: 'Test'
+    })
+    await withFakeAudioGlobals(fakeAudioEnvironment(), async () => {
+        await syncAudio.connectSyncAudio()
+        assert.equal(syncAudio.getSyncAudioDevices()[0]?.connected, true)
+        const capture = await syncAudio.openSyncAudioSource('sync-audio:audio_1', error => errors.push(error))
+        for (let tick = 0; tick < 100 && syncAudio.getSyncAudioDevices()[0]?.connected !== false; tick++)
+            await new Promise(resolve => setTimeout(resolve, 2))
+        assert.equal(syncAudio.getSyncAudioDevices()[0]?.connected, false,
+            'a mid-stream read failure must mark the device lost')
+        assert.equal(errors.length, 1)
+        assert.match(errors[0].message, /stream ended/)
+        assert.ok(clients[0].closedCount() >= 1, 'the failed capture releases its control connection')
+        const again = await syncAudio.openSyncAudioSource('sync-audio:audio_1')
+        assert.equal(again.channelCount, 2, 'the device can reconnect after the loss')
+        again.bridge.stop()
+    })
+})
+
 test('a Sync source beyond the worklet channel bounds is rejected before any audio graph is built', async () => {
     for (const channelCount of [33, 64]) {
         const environment = fakeAudioEnvironment()
