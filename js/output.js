@@ -3,7 +3,7 @@
  * canvas, ideal for dragging onto a projector / second display.
  *
  * Strategy: the popup builds its own canvas and we copy the main canvas
- * into it via drawImage() in a rAF loop run from the main window. This
+ * into it via drawImage() on the popup's own animation frames. This
  * works across HTMLCanvasElements from different documents because
  * drawImage accepts any CanvasImageSource.
  *
@@ -82,6 +82,109 @@ const POPUP_HTML = `<!DOCTYPE html>
 </body>
 </html>`
 
+/**
+ * While the output window is on screen and the main window is hidden
+ * (minimized, or on another Space behind a fullscreen output window), the
+ * browser runs none of the main window's animation frames. The decks, the
+ * mixer and the main compositor all draw on those frames, so the output
+ * window would keep copying one unchanging main canvas. The router takes
+ * over the main window's requestAnimationFrame: while the main window is
+ * visible, its own frames run every callback as before; while it is hidden
+ * and the output window is visible, the output window's frames run them.
+ */
+const frameRouters = new WeakMap()
+
+export function frameRouter(main) {
+    const existing = frameRouters.get(main)
+    if (existing) return existing
+    const request = main.requestAnimationFrame.bind(main)
+    const cancel = main.cancelAnimationFrame.bind(main)
+    const callbacks = new Map()
+    // Ids above any the browser hands out for this document, so a frame
+    // requested before the router existed is still cancelled natively.
+    let nextId = 0x40000000
+    let output = null
+    let mainFrame = 0
+    let outputFrame = null
+
+    const outputVisible = () => {
+        try {
+            return !!output && !output.closed && output.document.visibilityState === 'visible'
+        } catch {
+            return false
+        }
+    }
+    const run = (time) => {
+        if (mainFrame) {
+            cancel(mainFrame)
+            mainFrame = 0
+        }
+        if (outputFrame) {
+            try { outputFrame.win.cancelAnimationFrame(outputFrame.id) } catch {}
+            outputFrame = null
+        }
+        const due = [...callbacks.values()]
+        callbacks.clear()
+        for (const callback of due) {
+            try {
+                callback(time)
+            } catch (error) {
+                if (main.reportError) main.reportError(error)
+                else main.setTimeout(() => { throw error })
+            }
+        }
+    }
+    const schedule = () => {
+        if (!callbacks.size) return
+        if (!mainFrame) {
+            mainFrame = request((time) => {
+                mainFrame = 0
+                run(time)
+            })
+        }
+        if (!outputFrame && main.document.visibilityState === 'hidden' && outputVisible()) {
+            const win = output
+            // The output window's frame times count from its own time origin.
+            const offset = win.performance.timeOrigin - main.performance.timeOrigin
+            const id = win.requestAnimationFrame((time) => {
+                outputFrame = null
+                run(time + offset)
+            })
+            outputFrame = { win, id }
+        }
+    }
+
+    main.requestAnimationFrame = function requestAnimationFrame(callback) {
+        if (typeof callback !== 'function') return request(callback)
+        const id = nextId++
+        callbacks.set(id, callback)
+        schedule()
+        return id
+    }
+    main.cancelAnimationFrame = function cancelAnimationFrame(id) {
+        if (!callbacks.delete(id)) cancel(id)
+    }
+    main.document.addEventListener('visibilitychange', schedule)
+
+    const router = {
+        attach(win) {
+            output = win
+            win.document.addEventListener('visibilitychange', schedule)
+            schedule()
+        },
+        detach(win) {
+            if (output !== win) return
+            output = null
+            if (outputFrame?.win === win) {
+                try { win.cancelAnimationFrame(outputFrame.id) } catch {}
+                outputFrame = null
+            }
+        },
+    }
+    frameRouters.set(main, router)
+    return router
+}
+
 export class OutputWindow {
     constructor(sourceCanvas, { onWarning } = {}) {
         this.sourceCanvas = sourceCanvas
@@ -108,6 +211,9 @@ export class OutputWindow {
         w.document.write(POPUP_HTML)
         w.document.close()
         this._win = w
+        // Keep the main window's frames running while only this window is on screen.
+        this._frames = frameRouter(window)
+        this._frames.attach(w)
 
         // Capture the popup's rAF/cancelAnimationFrame bound to the popup
         // window — calling them unbound (e.g. `this._win.requestAnimationFrame(tick)`)
@@ -140,6 +246,7 @@ export class OutputWindow {
         }
         this._rafId = null
         this._cancel = null
+        if (this._win) this._frames?.detach(this._win)
         if (this._win && !this._win.closed) {
             try { this._win._visualizeOutput?.stop() } catch {}
             this._win.close()
