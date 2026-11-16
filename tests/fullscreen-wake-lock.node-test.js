@@ -109,3 +109,37 @@ test('without the wake lock API fullscreen changes do nothing', async () => {
     doc.setFullscreen(false)
     assert.equal(wake.held, false)
 })
+
+test('dispose releases the held lock and stops following the document', async () => {
+    const doc = createDoc()
+    const { nav, pending } = createDeferredNav()
+    const wake = keepScreenAwakeInFullscreen({ doc, nav })
+
+    doc.setFullscreen(true)
+    const sentinel = createSentinel()
+    pending[0].resolve(sentinel)
+    await settle()
+    assert.equal(wake.held, true)
+
+    wake.dispose()
+    assert.equal(sentinel.released, true)
+    assert.equal(wake.held, false)
+    doc.setFullscreen(false)
+    doc.setFullscreen(true)
+    assert.equal(pending.length, 1)
+})
+
+test('a lock that arrives after dispose is released at once', async () => {
+    const doc = createDoc()
+    const { nav, pending } = createDeferredNav()
+    const wake = keepScreenAwakeInFullscreen({ doc, nav })
+
+    doc.setFullscreen(true)
+    wake.dispose()
+    const sentinel = createSentinel()
+    pending[0].resolve(sentinel)
+    await settle()
+
+    assert.equal(sentinel.released, true)
+    assert.equal(wake.held, false)
+})

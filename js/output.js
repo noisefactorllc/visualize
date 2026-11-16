@@ -12,6 +12,8 @@
  * across browsers.
  */
 
+import { keepScreenAwakeInFullscreen } from './fullscreenWakeLock.js'
+
 // XSS gate: POPUP_HTML is written via document.write into a freshly-opened
 // window and contains an inline <script>. It MUST remain a static string
 // — never interpolate user input, deck DSL, program titles, or anything
@@ -214,6 +216,10 @@ export class OutputWindow {
         // Keep the main window's frames running while only this window is on screen.
         this._frames = frameRouter(window)
         this._frames.attach(w)
+        // Keep the display awake while this window is fullscreen. The lock is
+        // this window's own, so it holds while the main window is hidden.
+        this._wake?.dispose()
+        this._wake = keepScreenAwakeInFullscreen({ doc: w.document, nav: w.navigator })
 
         // Capture the popup's rAF/cancelAnimationFrame bound to the popup
         // window — calling them unbound (e.g. `this._win.requestAnimationFrame(tick)`)
@@ -247,6 +253,8 @@ export class OutputWindow {
         this._rafId = null
         this._cancel = null
         if (this._win) this._frames?.detach(this._win)
+        this._wake?.dispose()
+        this._wake = null
         if (this._win && !this._win.closed) {
             try { this._win._visualizeOutput?.stop() } catch {}
             this._win.close()
