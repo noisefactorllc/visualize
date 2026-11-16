@@ -2606,6 +2606,8 @@ kbd {
 }
 
 #app.fullscreen-main .main-head,
+#app.fullscreen-main .main-toolbar,
+#app.fullscreen-main .mixer-controls,
 #app.fullscreen-main .main-fx { display: none; }
 
 #app.fullscreen-main .main-canvas-wrap {
