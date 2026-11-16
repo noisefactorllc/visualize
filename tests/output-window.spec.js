@@ -5,6 +5,7 @@
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal } from './handfishLocal.js'
+import { cursorsShown } from './cursorsShown.js'
 const SCALE = Number(process.env.PW_TIMEOUT_SCALE || '1')
 
 installHandfishLocal(test)
@@ -55,6 +56,30 @@ test('the output window shows the fullscreen hint on open', async ({ page }) => 
     })
     expect(fade).toEqual({ delay: 3000, duration: 1000, atOpen: '1', atEnd: '0' })
     await expect(hint).toHaveCSS('opacity', '0', { timeout: 10_000 * SCALE })
+})
+
+test('the fullscreen output window hides the cursor over the whole screen', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('#toast')).toContainText('ready', { timeout: 30_000 * SCALE })
+
+    const popupOpened = page.waitForEvent('popup')
+    await page.click('#output-window')
+    const popup = await popupOpened
+    await popup.waitForFunction(() => !!window._visualizeOutput)
+
+    await popup.locator('body').press('f')
+    await popup.waitForFunction(() => document.fullscreenElement === document.documentElement)
+    expect(await cursorsShown(popup)).toEqual([])
+    // Moving and clicking keep it hidden.
+    const { width, height } = popup.viewportSize()
+    await popup.mouse.move(width / 2, height / 2)
+    await popup.mouse.down()
+    await popup.mouse.up()
+    expect(await cursorsShown(popup)).toEqual([])
+
+    await popup.locator('body').press('f')
+    await popup.waitForFunction(() => !document.fullscreenElement)
+    await popup.close()
 })
 
 test('the output window keeps getting new frames while the main window is hidden', async ({ page }) => {

@@ -2644,6 +2644,10 @@ kbd {
     width: 100vw;
 }
 
+/* Fullscreen shows only the canvas, so the pointer stays hidden over it. */
+#app.fullscreen-main,
+#app.fullscreen-main * { cursor: none; }
+
 /* ─────────────── theme picker ─────────────── */
 .hf-theme-select {
     flex: 1 1 auto;
