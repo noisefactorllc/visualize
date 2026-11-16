@@ -53,6 +53,7 @@ import {
     lockFullscreenEscape,
     unlockFullscreenEscape
 } from './drawerEscape.js'
+import { keepScreenAwakeInFullscreen } from './fullscreenWakeLock.js'
 import { DECK_DOC_IDS, createVisualizeOnlineCollaboration } from './onlineCollaboration.js'
 import { bootstrapAgent, createSeanceAgentRelay, markAgentReady } from './agent/index.js'
 import { RESOLUTIONS } from './agent/schemas.js'
@@ -1741,6 +1742,7 @@ async function boot() {
             unlockFullscreenEscape()
         }
     })
+    keepScreenAwakeInFullscreen()
 
     function toggleFullscreen() {
         const app = document.getElementById('app')
