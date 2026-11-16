@@ -50,6 +50,8 @@ export function createSyncOutputDialog({
     const statusText = requireElement(documentObject, 'sync-output-status')
     const connectNotice = requireElement(documentObject, 'sync-output-connect-notice')
     const actionButton = requireElement(documentObject, 'sync-output-action')
+    // The label sits beside the button's Sync mark, so only the label changes.
+    const actionLabel = requireElement(documentObject, 'sync-output-action-label')
 
     let state = controller.state || {}
     let pendingConnect = false
@@ -77,7 +79,7 @@ export function createSyncOutputDialog({
             state.error?.code === 'SYNC_INVALID_SENDER_NAME' ? 'true' : 'false'
         )
         connectNotice.hidden = !pendingConnect
-        actionButton.textContent = pendingConnect ? 'Connecting…' : view.action.label
+        actionLabel.textContent = pendingConnect ? 'Connecting…' : view.action.label
         actionButton.disabled = pendingConnect || view.action.disabled
         actionButton.dataset.action = pendingConnect ? 'connecting' : view.action.kind
     }

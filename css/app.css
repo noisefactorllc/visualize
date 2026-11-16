@@ -1059,6 +1059,35 @@ button.status-pill[data-state="on"]:hover { border-color: var(--hf-green); color
     text-transform: uppercase;
 }
 
+/* The official Sync mark on every button that connects to Sync. The glyph is
+   a mask, so it takes the button's own text colour in every theme and state.
+   It has the size and gap of the toolbar's icon glyphs. */
+.sync-mark {
+    display: inline-block;
+    flex: none;
+    width: var(--hf-size-lg);
+    height: var(--hf-size-lg);
+    vertical-align: middle;
+    background-color: currentColor;
+    -webkit-mask: url(sync-mark.svg) center / contain no-repeat;
+    mask: url(sync-mark.svg) center / contain no-repeat;
+}
+/* Forced colours repaint backgrounds as the page colour, which would hide the
+   mark: draw it in the system button text colour instead. */
+@media (forced-colors: active) {
+    .sync-mark {
+        forced-color-adjust: none;
+        background-color: ButtonText;
+    }
+}
+#sync-audio-connect,
+.sync-output-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--hf-space-1);
+}
+
 /* ─────────────── Confirm dialog (handfish .hf-dialog) ─────────────── */
 .confirm-dialog {
     width: min(420px, calc(100vw - 32px));

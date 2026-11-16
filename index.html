@@ -306,7 +306,7 @@
                     <div class="main-output-targets" aria-label="Output targets">
                         <button id="output-window" class="main-output-btn icon-button tooltip" data-title="Open mirrored output window" title="Open mirrored output window" aria-label="Open mirrored output window"><span class="icon">display_external_input</span></button>
                         <button id="sync-output-open" class="main-output-btn sync-output-open tooltip" data-title="Send to Noisedeck Sync" title="Send to Noisedeck Sync" aria-label="Send to Noisedeck Sync">
-                            <span class="icon">cast_connected</span>
+                            <span class="sync-mark" aria-hidden="true"></span>
                             <span>sync</span>
                         </button>
                     </div>
@@ -531,7 +531,7 @@
                     </select-dropdown>
                 </div>
                 <div class="settings-row">
-                    <button id="sync-audio-connect" class="ghost-button tooltip" data-title="Connect Sync audio input">connect Sync audio</button>
+                    <button id="sync-audio-connect" class="ghost-button tooltip" data-title="Connect Sync audio input"><span class="sync-mark" aria-hidden="true"></span>connect Sync audio</button>
                 </div>
                 <p id="sync-audio-status" class="settings-hint" role="status" aria-live="polite">Use native audio inputs through the Sync companion.</p>
                 <div class="settings-row">
@@ -725,7 +725,7 @@
                 <p id="sync-output-connect-notice" hidden>Your browser may request loopback access. Sync will separately ask whether this exact origin may pair.</p>
                 <p id="sync-output-status">Sync is not connected.</p>
             </div>
-            <button type="button" id="sync-output-action" class="sync-output-action">Check again</button>
+            <button type="button" id="sync-output-action" class="sync-output-action"><span class="sync-mark" aria-hidden="true"></span><span id="sync-output-action-label">Check again</span></button>
         </div>
     </dialog>
 

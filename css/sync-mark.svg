@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" data-sync-mark="overpass">
+  <defs>
+    <clipPath id="sync-overpass-window"><rect x="45" y="45" width="30" height="30"/></clipPath>
+    <mask id="sync-overpass-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
+      <rect width="120" height="120" fill="white"/>
+      <path d="M22 85h12c18 0 34-50 52-50h12" fill="none" stroke="black" stroke-width="20" stroke-linecap="square" stroke-linejoin="round" clip-path="url(#sync-overpass-window)"/>
+    </mask>
+  </defs>
+  <g fill="none" stroke="#000" stroke-width="10" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M22 35h12c18 0 34 50 52 50h12" mask="url(#sync-overpass-cut)"/>
+    <path d="M22 85h12c18 0 34-50 52-50h12"/>
+  </g>
+  <g fill="#000">
+    <rect x="15" y="28" width="14" height="14"/>
+    <rect x="15" y="78" width="14" height="14"/>
+    <rect x="91" y="28" width="14" height="14"/>
+    <rect x="91" y="78" width="14" height="14"/>
+  </g>
+</svg>

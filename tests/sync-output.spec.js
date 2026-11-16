@@ -185,15 +185,20 @@ test('Noisedeck Sync target sends real SDK-framed mixer pixels and disposes on p
     await expect(page.locator('#sync-output-name')).toHaveValue('Visualize')
     await expect(page.locator('#sync-output-state')).toHaveText('Ready')
     await expect(page.locator('#sync-output-action')).toHaveText('Connect Sync')
+    await expect(page.locator('#sync-output-action > .sync-mark')).toHaveCount(1)
 
     await page.click('#sync-output-action')
     await expect(page.locator('#sync-output-state')).toHaveText('Connected')
     await expect(page.locator('#sync-output-provider')).toHaveText('NDI, Spout')
+    await expect(page.locator('#sync-output-action')).toHaveText('Start sending')
+    await expect(page.locator('#sync-output-action > .sync-mark')).toHaveCount(1)
 
     await page.fill('#sync-output-name', 'Visualize Main')
     await page.click('#sync-output-action')
     await expect(page.locator('#sync-output-state')).toHaveText('Sending')
     await expect(page.locator('#sync-output-live')).toBeVisible()
+    await expect(page.locator('#sync-output-action')).toHaveText('Stop sending')
+    await expect(page.locator('#sync-output-action > .sync-mark')).toHaveCount(1)
     await expect(page.locator('#sync-output-format')).toHaveText('1280×720 · 60 fps')
     await page.waitForFunction(() => window.__visualizeSyncTest.frames.length >= 2)
 
