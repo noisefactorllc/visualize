@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { SyncBridgeClient } from '../js/sync/audio.js'
-import { SyncUnavailableError } from '../js/sync/sdk/0.3.3/browser/index.js'
+import { SyncUnavailableError } from '../js/sync/sdk/0.3.5/browser/index.js'
 import { retryUnavailable } from '../js/sync/audioInput.js'
 
 const WELCOME = {
@@ -115,4 +115,82 @@ test('contention on selection is retried as transient unavailability before fail
     }
     assert.equal(requests.filter(request => request.type === 'openAudioSource').length, 3,
         'a contended open must consume the full bounded retry budget')
+})
+
+// Sync af9d038: a full bounded credential worker answers the hello with
+// `authority_saturated` instead of checking the token. The token was never
+// checked, so this is transient unavailability (SyncUnavailableError, kept
+// token, retried by visualize's bounded connect retry), not an
+// authentication failure (which would clear the stored credential).
+test('a saturated credential hello decodes as SyncUnavailableError with the token kept', async () => {
+    const hellos = []
+    let saturated = true
+    const socketClass = class {
+        constructor() {
+            return new FakeControlSocket(request => {
+                if (request.type === 'hello') {
+                    hellos.push(request.token)
+                    if (saturated) {
+                        saturated = false
+                        return { type: 'error', code: 'authority_saturated', message: 'Credential worker is busy' }
+                    }
+                    return WELCOME
+                }
+                return undefined
+            })
+        }
+    }
+    const client = new SyncBridgeClient({
+        endpoint: 'http://127.0.0.1:53979',
+        token: 'saturated-hello-token',
+        WebSocket: socketClass,
+        permissions: { query: async () => ({ state: 'granted' }) },
+        timeoutMs: 2000
+    })
+    try {
+        await assert.rejects(client.connect(), error => {
+            assert.equal(error.name, 'SyncUnavailableError')
+            assert.equal(error.daemonCode, 'authority_saturated')
+            return true
+        })
+        assert.deepEqual(hellos, ['saturated-hello-token'])
+        // The token was never checked, so a retry reuses it and connects.
+        const welcome = await client.connect()
+        assert.equal(welcome.type, 'welcome')
+        assert.deepEqual(hellos, ['saturated-hello-token', 'saturated-hello-token'])
+    } finally {
+        client.close()
+    }
+})
+
+test('a saturated credential hello is retried as transient connect loss', async () => {
+    let attempts = 0
+    const socketClass = class {
+        constructor() {
+            return new FakeControlSocket(request => {
+                if (request.type === 'hello') {
+                    attempts++
+                    if (attempts < 3) {
+                        return { type: 'error', code: 'authority_saturated', message: 'Credential worker is busy' }
+                    }
+                    return WELCOME
+                }
+                return undefined
+            })
+        }
+    }
+    const client = new SyncBridgeClient({
+        endpoint: 'http://127.0.0.1:53979',
+        token: 'saturated-retry-token',
+        WebSocket: socketClass,
+        permissions: { query: async () => ({ state: 'granted' }) },
+        timeoutMs: 2000
+    })
+    try {
+        const welcome = await retryUnavailable(() => client.connect(), { attempts: 3, delay: 1 })
+        assert.equal(welcome.type, 'welcome')
+        assert.equal(attempts, 3, 'a saturated hello must consume the bounded retry budget, not fail at once')
+    } finally {
+        client.close()
+    }
 })

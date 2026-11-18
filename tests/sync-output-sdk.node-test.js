@@ -49,7 +49,7 @@ test('vendored Sync browser SDK matches its pinned checksums', async () => {
 })
 
 
-test('every Sync SDK consumer loads the pinned 0.3.3 snapshot', async () => {
+test('every Sync SDK consumer loads the pinned 0.3.5 snapshot', async () => {
     const jsRoot = resolve(sdkDir, '../../../..', 'js')
     const sources = []
     for (const entry of await readdir(jsRoot, { withFileTypes: true, recursive: true })) {
@@ -65,16 +65,18 @@ test('every Sync SDK consumer loads the pinned 0.3.3 snapshot', async () => {
     }
     assert.ok(consumers.size >= 3, 'bundle, audio and audioInput must reference a snapshot')
     for (const [location, version] of consumers) {
-        assert.equal(version, '0.3.3', `${location} must load the pinned 0.3.3 snapshot`)
+        assert.equal(version, '0.3.5', `${location} must load the pinned 0.3.5 snapshot`)
     }
     await assert.rejects(stat(resolve(sdkDir, '../0.3.0')), { code: 'ENOENT' },
         'the retired 0.3.0 audio snapshot must be gone')
+    await assert.rejects(stat(resolve(sdkDir, '../0.3.3')), { code: 'ENOENT' },
+        'the retired 0.3.3 snapshot must be gone')
 })
 
 test('h264 browser SDK matches the reviewed immutable manifest', async () => {
-    const directory = resolve(sdkDir, '../0.3.3')
+    const directory = resolve(sdkDir, '../0.3.5')
     const manifest = await readFile(resolve(directory, 'SHA256SUMS'), 'utf8')
-    assert.equal(createHash('sha256').update(manifest).digest('hex'), '92fdb3ffb7496d39d58bb13f0c9b944ed17f3128e2753cc4209836e1169bb23a')
+    assert.equal(createHash('sha256').update(manifest).digest('hex'), '35744d3af0126cd8d8658df0a7196881da6a37e7ef8571d9aedf46283fec6ae4')
     const manifestFiles = []
     for (const line of manifest.trim().split('\n')) {
         const [expected, filename] = line.split('  ')
