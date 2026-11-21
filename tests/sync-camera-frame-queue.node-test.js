@@ -254,7 +254,7 @@ test('useNativeShm streams frames via subscriber without MediaStreamTrackProcess
     assert.equal(uploads[1].closes, 1)
 })
 
-test('useNativeShm enforces timestamp watermark and reports error on regression', bounded, async () => {
+test('useNativeShm rebases the timestamp watermark when a new ring restarts its capture clock', bounded, async () => {
     class MockVideoFrame {
         constructor(buffer, options) {
             this.buffer = buffer
@@ -284,12 +284,18 @@ test('useNativeShm enforces timestamp watermark and reports error on regression'
         onError: (err) => errors.push(err)
     })
 
+    // Sync's camera restarts: the shared reader keeps the delivered sequence
+    // rising, and the new ring's capture session starts its clock again.
     subscriber({ sequence: 1, presentationTimeUs: 5000, width: 1920, height: 1080, buffer: new ArrayBuffer(10) })
     subscriber({ sequence: 2, presentationTimeUs: 4000, width: 1920, height: 1080, buffer: new ArrayBuffer(10) })
+    subscriber({ sequence: 3, presentationTimeUs: 4500, width: 1920, height: 1080, buffer: new ArrayBuffer(10) })
 
-    assert.equal(errors.length, 1)
-    assert.match(errors[0].message, /timestamp/)
-    assert.equal(owner.active, false)
+    owner.consume()
+    owner.consume()
+    owner.consume()
+    assert.equal(errors.length, 0, 'a restarted capture clock must not fail the session')
+    assert.equal(owner.active, true)
+    assert.deepEqual(uploads.map(frame => frame.timestamp), [5000, 4000, 4500])
     await owner.stop()
 })
 

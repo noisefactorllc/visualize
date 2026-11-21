@@ -78,9 +78,14 @@ export class SyncCameraFrameQueue {
                 throw new Error('Camera frame sequence is invalid or decreased')
             }
             if (sequence === this._watermark.sequence) return
-            if (!Number.isSafeInteger(timestamp) || timestamp < this._watermark.timestamp) {
-                throw new Error('Camera frame timestamp is invalid or decreased')
+            if (!Number.isSafeInteger(timestamp)) {
+                throw new Error('Camera frame timestamp is invalid')
             }
+            // The shared reader keeps the delivered sequence rising across a
+            // ring replacement, and a new ring's capture session may start its
+            // presentation clock again. A lower timestamp after the sequence
+            // rose is a new session: rebase the watermark and keep the queue
+            // alive instead of failing it.
             this._watermark.sequence = sequence
             this._watermark.timestamp = timestamp
 
