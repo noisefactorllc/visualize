@@ -491,6 +491,35 @@ test('uploadFromPayload keeps the handed-on texture fields in the stored definit
     assert.equal(registered[0], stored[0])
 })
 
+test('uploadFromPayload rejects a blank handed-on texture name instead of dropping it', async () => {
+    setBundleDependencies({
+        Effect: class {},
+        unregisterEffect: () => {},
+        getEffect: () => undefined,
+        registerEffect: () => {},
+    })
+    const mgr = new UserEffectsManager()
+    mgr._get = async () => null
+    const stored = []
+    mgr._put = async record => stored.push(record)
+    let removed = false
+    mgr._remove = async () => { removed = true }
+
+    await assert.rejects(
+        () => mgr.uploadFromPayload({
+            name: 'blankHandOnFx',
+            passes: [{ name: 'main', program: 'main', outputs: { color: 'stateTex' } }],
+            outputTex: '',
+            shaders: { main: { glsl: 'void main() {}' } },
+        }, {}),
+        /Portable effect: outputTex must be a nonempty texture name/,
+    )
+    // The blank reached the validator: the install persisted the record and
+    // the failed registration rolled it back.
+    assert.deepEqual(stored.map(record => record.name), ['blankHandOnFx'])
+    assert.equal(removed, true)
+})
+
 test('the fallback registration hands the output texture fields to the Effect instance', async () => {
     setBundleDependencies({
         Effect: class { constructor(init) { Object.assign(this, init) } },

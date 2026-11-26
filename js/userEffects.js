@@ -755,13 +755,14 @@ class UserEffectsManager {
             ...(payload.defaultProgram ? { defaultProgram: payload.defaultProgram } : {}),
             // Preserve the handed-on texture fields the same way: a chain
             // effect's payload carries them and _buildInstance forwards
-            // them to the runtime. Dropping them here installs an instance
-            // whose next chain effect never receives the handed-on
-            // textures, and persists that broken shape to IndexedDB.
-            ...(payload.outputTex ? { outputTex: payload.outputTex } : {}),
-            ...(payload.outputXyz ? { outputXyz: payload.outputXyz } : {}),
-            ...(payload.outputVel ? { outputVel: payload.outputVel } : {}),
-            ...(payload.outputRgba ? { outputRgba: payload.outputRgba } : {}),
+            // them to the runtime. Keep a present-but-malformed value so
+            // the Portable contract validator rejects it instead of the
+            // install silently repairing it (upstream registration refuses
+            // a blank handed-on texture name).
+            ...(payload.outputTex !== undefined ? { outputTex: payload.outputTex } : {}),
+            ...(payload.outputXyz !== undefined ? { outputXyz: payload.outputXyz } : {}),
+            ...(payload.outputVel !== undefined ? { outputVel: payload.outputVel } : {}),
+            ...(payload.outputRgba !== undefined ? { outputRgba: payload.outputRgba } : {}),
         }
 
         const defJson = JSON.stringify(definition, null, 2)
