@@ -440,6 +440,11 @@ test('validatePortableDefinition enforces the upstream Portable contract', () =>
         { ...raw(), paramAliases: 'bad' },
         { ...raw(), paramAliases: { old: 42 } },
         { ...raw(), paramAliases: { old: 'absent' } },
+        { ...raw(), outputTex: '' },
+        { ...raw(), outputTex: '   ' },
+        { ...raw(), outputXyz: 7 },
+        { ...raw(), outputVel: null },
+        { ...raw(), outputRgba: { name: 'stateTex' } },
         { ...raw(), globals: { mode: { type: 'int', default: 0, choices: 'abc' } } },
         { ...raw(), globals: { mode: { type: 'int', default: 0, choices: { Broken: {} } } } },
     ]
@@ -448,6 +453,68 @@ test('validatePortableDefinition enforces the upstream Portable contract', () =>
     }
     // The valid definition passes and returns the func name.
     assert.equal(validatePortableDefinition(valid()), 'portableContract')
+
+    // A nonempty texture name is accepted for every handed-on field: the
+    // expander reads these as strings to bind the chain's next effect.
+    const handedOn = raw()
+    handedOn.outputTex = 'stateTex'
+    handedOn.outputXyz = 'xyzTex'
+    handedOn.outputVel = 'velTex'
+    handedOn.outputRgba = 'rgbaTex'
+    assert.equal(validatePortableDefinition(handedOn), 'portableContract')
+})
+
+test('uploadFromPayload keeps the handed-on texture fields in the stored definition', async () => {
+    const mgr = new UserEffectsManager()
+    mgr._get = async () => null
+    const stored = []
+    mgr._put = async record => stored.push(record)
+    const registered = []
+    mgr._registerWithRenderer = async (_renderer, record) => registered.push(record)
+
+    await mgr.uploadFromPayload({
+        name: 'handOnFx',
+        passes: [{ name: 'main', program: 'main', outputs: { color: 'stateTex' } }],
+        textures: { stateTex: { width: 8, height: 8, format: 'rgba16f' } },
+        outputTex: 'stateTex',
+        outputXyz: 'xyzTex',
+        outputVel: 'velTex',
+        outputRgba: 'rgbaTex',
+        shaders: { main: { glsl: 'void main() {}' } },
+    }, {})
+
+    const def = JSON.parse(stored[0].files['definition.json'])
+    assert.equal(def.outputTex, 'stateTex')
+    assert.equal(def.outputXyz, 'xyzTex')
+    assert.equal(def.outputVel, 'velTex')
+    assert.equal(def.outputRgba, 'rgbaTex')
+    assert.equal(registered[0], stored[0])
+})
+
+test('the fallback registration hands the output texture fields to the Effect instance', async () => {
+    setBundleDependencies({
+        Effect: class { constructor(init) { Object.assign(this, init) } },
+        unregisterEffect: () => {},
+        getEffect: () => undefined,
+        registerEffect: () => {},
+    })
+    const mgr = new UserEffectsManager()
+    const instances = []
+    const renderer = {
+        registerEffectsFromBundle: bundle => instances.push(Object.values(bundle.effects)[0]),
+    }
+    await mgr._registerWithRenderer(renderer, portableRecord('fxHandOn', {
+        outputTex: 'stateTex',
+        outputXyz: 'xyzTex',
+        outputVel: 'velTex',
+        outputRgba: 'rgbaTex',
+    }))
+
+    const instance = instances[0]
+    assert.equal(instance.outputTex, 'stateTex')
+    assert.equal(instance.outputXyz, 'xyzTex')
+    assert.equal(instance.outputVel, 'velTex')
+    assert.equal(instance.outputRgba, 'rgbaTex')
 })
 
 test('_registerWithRenderer prefers the renderer registerPortableEffect and copies defaultProgram', async () => {

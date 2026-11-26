@@ -167,6 +167,12 @@ export function validatePortableDefinition(definition) {
         Object.values(definition.paramAliases).some(target => typeof target !== 'string' || !Object.hasOwn(globals || {}, target)))) {
         fail('paramAliases must map names to declared globals')
     }
+    // The 2D and agent textures an effect hands on to the next effect in
+    // its chain are texture names: the expander reads them as strings
+    // (upstream registerPortableEffect).
+    for (const field of ['outputTex', 'outputXyz', 'outputVel', 'outputRgba']) {
+        if (definition[field] !== undefined && !hasSource(definition[field])) fail(`${field} must be a nonempty texture name`)
+    }
     return func
 }
 
@@ -508,6 +514,14 @@ class UserEffectsManager {
             uniformLayout: definition.uniformLayout,
             uniformLayouts: definition.uniformLayouts,
             defaultProgram: definition.defaultProgram,
+            // The textures this effect hands on to the next effect in its
+            // chain: the configuration form carries the same fields the
+            // class form does (the engine's Effect constructor reads them
+            // to bind the chain's consumer).
+            outputTex: definition.outputTex,
+            outputXyz: definition.outputXyz,
+            outputVel: definition.outputVel,
+            outputRgba: definition.outputRgba,
         })
         instance.shaders = shaders
         // The engine's Effect constructor doesn't copy defaultProgram onto the
@@ -739,6 +753,15 @@ class UserEffectsManager {
             ...(payload.uniformLayout ? { uniformLayout: payload.uniformLayout } : {}),
             ...(payload.uniformLayouts ? { uniformLayouts: payload.uniformLayouts } : {}),
             ...(payload.defaultProgram ? { defaultProgram: payload.defaultProgram } : {}),
+            // Preserve the handed-on texture fields the same way: a chain
+            // effect's payload carries them and _buildInstance forwards
+            // them to the runtime. Dropping them here installs an instance
+            // whose next chain effect never receives the handed-on
+            // textures, and persists that broken shape to IndexedDB.
+            ...(payload.outputTex ? { outputTex: payload.outputTex } : {}),
+            ...(payload.outputXyz ? { outputXyz: payload.outputXyz } : {}),
+            ...(payload.outputVel ? { outputVel: payload.outputVel } : {}),
+            ...(payload.outputRgba ? { outputRgba: payload.outputRgba } : {}),
         }
 
         const defJson = JSON.stringify(definition, null, 2)
