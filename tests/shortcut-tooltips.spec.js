@@ -73,7 +73,10 @@ test('browser: performance shortcuts appear in tooltips across all controls', as
     }
 })
 
-test('icon actions and custom app controls expose readable accessible names', async ({ browser }) => {
+// The named-controls sweep is long: a single invocation must stay inside the
+// automated runners' per-command limit, so it is split in two. Each test boots
+// fresh and runs its own half, with identical assertions.
+test('icon actions and custom app controls expose readable accessible names (controls)', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {
         for (const selector of ['.deck-rebind-eq', '.deck-rebind-midi', '.deck-bandpass', '.deck-edit-toggle', '.deck-load-random', '.quick-cut']) {
@@ -106,6 +109,14 @@ test('icon actions and custom app controls expose readable accessible names', as
             await expect(toggle).toHaveAccessibleName('Include in Auto-VJ pool')
         }
         await expect(page.locator('#fade-duration .slider')).toHaveAccessibleName('Fade time in seconds')
+    } finally {
+        await context.close()
+    }
+})
+
+test('icon actions and custom app controls expose readable accessible names (settings drawer)', async ({ browser }) => {
+    const { context, page } = await boot(browser)
+    try {
         await page.click('#settings-toggle')
         const drawer = page.locator('#settings-drawer')
         await expect(drawer).toHaveAttribute('aria-hidden', 'false')
