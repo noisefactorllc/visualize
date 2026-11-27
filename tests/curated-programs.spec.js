@@ -50,13 +50,13 @@ test('curated custom effects load on both decks and produce thumbnails', async (
     await testInfo.attach('curated-library.png', { body: await page.screenshot(), contentType: 'image/png' })
 })
 
-test('all curated programs compile and render through the real deck', async ({ page }, testInfo) => {
-    test.setTimeout(600_000 * SCALE)
-    await boot(page)
-    const results = await page.evaluate(async () => {
+// The full pass loads every curated program through the real deck. A single
+// invocation must stay inside the automated runners' per-command limit, so the
+// pass is split in half: each test runs one half of the same filtered list,
+// with identical assertions, and together they cover every program.
+async function curatedDeckLoads(page, programs) {
+    return page.evaluate(async programs => {
         const { decks } = window.__visualize
-        const programsData = await fetch('/data/programs.json').then(r => r.json())
-        const programs = programsData.filter(p => p.source?.collection === 'noisemaker-curated')
         const results = []
         const sample = document.createElement('canvas')
         sample.width = 32; sample.height = 18
@@ -74,15 +74,32 @@ test('all curated programs compile and render through the real deck', async ({ p
             results.push({ code: p.source.code, success: res.success, running: decks.A.isRunning, pixelEnergy: energy, error: res.error })
         }
         return results
+    }, programs)
+}
+
+const curatedPrograms = async page => {
+    const programsData = await page.evaluate(() => fetch('/data/programs.json').then(r => r.json()))
+    return programsData.filter(p => p.source?.collection === 'noisemaker-curated')
+}
+
+for (const [title, half] of [
+    ['all curated programs compile and render through the real deck (first half)', 0],
+    ['all curated programs compile and render through the real deck (second half)', 1],
+]) {
+    test(title, async ({ page }, testInfo) => {
+        test.setTimeout(600_000 * SCALE)
+        await boot(page)
+        const programs = (await curatedPrograms(page)).filter((_, index) => index % 2 === half)
+        const results = await curatedDeckLoads(page, programs)
+        await testInfo.attach(`curated-frame-measurements-${half}.json`, { body: JSON.stringify(results, null, 2), contentType: 'application/json' })
+        expect(results).toHaveLength(half === 0 ? Math.ceil(157 / 2) : Math.floor(157 / 2))
+        expect(results.filter(result => result.pixelEnergy > 0).length).toBeGreaterThan(0)
+        for (const result of results) {
+            expect(result.success, JSON.stringify(result)).toBe(true)
+            expect(result.running, JSON.stringify(result)).toBe(true)
+        }
     })
-    await testInfo.attach('curated-frame-measurements.json', { body: JSON.stringify(results, null, 2), contentType: 'application/json' })
-    expect(results).toHaveLength(157)
-    expect(results.filter(result => result.pixelEnergy > 0).length).toBeGreaterThan(0)
-    for (const result of results) {
-        expect(result.success, JSON.stringify(result)).toBe(true)
-        expect(result.running, JSON.stringify(result)).toBe(true)
-    }
-})
+}
 
 test('the four Untitled programs select independently and remain distinct in the random pool', async ({ page }) => {
     await boot(page)
