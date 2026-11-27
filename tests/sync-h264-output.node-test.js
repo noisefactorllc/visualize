@@ -494,3 +494,174 @@ test('a stuck encoder drain aborts teardown and rejects closed', {
     assert.equal(terminates, 1)
     assert.equal(transportCloses, 1)
 })
+
+test('create rejects an SDK without H.264 output support', { timeout: 5000 }, async () => {
+    installEncoder()
+    await assert.rejects(SyncH264CanvasSender.create({
+        client: {}, name: 'No SDK', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    }), error => {
+        assert.equal(error.code, 'SYNC_CAPABILITY')
+        assert.equal(error.message, 'Sync SDK does not support H.264 output')
+        return true
+    })
+})
+
+test('create rejects a resolution no AVC level permits at the fixed bitrate', { timeout: 5000 }, async () => {
+    installEncoder()
+    const transport = transportFixture()
+    let transportCloses = 0
+    const guarded = { ...transport, close() { transportCloses++; transport.close() } }
+    await assert.rejects(SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => guarded },
+        name: 'Too large', canvas: { width: 4096, height: 4096 },
+        descriptor: { width: 4096, height: 4096, fps: 60 }, clock: performance
+    }), error => {
+        assert.equal(error.code, 'SYNC_CAPABILITY')
+        assert.equal(error.message, 'Hardware H.264 output is unavailable at this resolution')
+        return true
+    })
+    assert.equal(transportCloses, 0, 'no transport may be created for an unsupported resolution')
+})
+
+test('create rejects a configuration the hardware encoder does not support', { timeout: 5000 }, async () => {
+    installEncoder()
+    const transport = transportFixture()
+    let transportCloses = 0
+    const guarded = { ...transport, close() { transportCloses++; transport.close() } }
+    globalThis.VideoEncoder.isConfigSupported = async () => ({ supported: false })
+    await assert.rejects(SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => guarded },
+        name: 'Unsupported', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    }), error => {
+        assert.equal(error.code, 'SYNC_CAPABILITY')
+        assert.equal(error.message, 'Hardware H.264 output is unavailable at this resolution')
+        return true
+    })
+    assert.equal(transportCloses, 0, 'no transport may be created for an unsupported config')
+})
+
+test('a warmup failure releases the half-built sender and closes the transport once', {
+    timeout: 10000
+}, async () => {
+    installEncoder()
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        postMessage(message) {
+            if (message.type === 'finishWarmup') {
+                queueMicrotask(() => this.onmessage({ data: { type: 'warmReady', frames: 3 } }))
+            } else super.postMessage(message)
+        }
+    }
+    const base = transportFixture()
+    let transportCloses = 0
+    const transport = { ...base, close() { transportCloses++; base.close() } }
+    await assert.rejects(SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Cold start', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    }), error => {
+        assert.equal(error.code, 'SYNC_ENCODING_FAILED')
+        assert.equal(error.message, 'H.264 hardware encoder did not warm up')
+        return true
+    })
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(transportCloses, 1, 'the failed create must close its transport exactly once')
+})
+
+test('an encoder error message fails the sender and releases the transport', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        postMessage(message) {
+            if (message.type === 'frame') {
+                queueMicrotask(() => this.onmessage({
+                    data: { type: 'error', message: 'hardware encoder unavailable' }
+                }))
+            } else super.postMessage(message)
+        }
+    }
+    const base = transportFixture()
+    let transportCloses = 0
+    const transport = { ...base, close() { transportCloses++; base.close() } }
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Encoder error', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    sender.submit(1, performance.now())
+    await assert.rejects(sender.closed, error => {
+        assert.equal(error.code, 'SYNC_ENCODING_FAILED')
+        assert.equal(error.message, 'hardware encoder unavailable')
+        return true
+    })
+    assert.equal(transportCloses, 1, 'the failed sender must close its transport exactly once')
+    assert.equal(sender.submit(2, performance.now()), false, 'a failed sender accepts no further frames')
+})
+
+test('a crashed encoder worker fails the sender and releases the transport', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const workers = []
+    const BaseWorker = globalThis.Worker
+    globalThis.Worker = class extends BaseWorker {
+        constructor(...args) { super(...args); workers.push(this) }
+    }
+    const base = transportFixture()
+    let transportCloses = 0
+    const transport = { ...base, close() { transportCloses++; base.close() } }
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Worker crash', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    workers[0].onerror(new Error('worker crashed'))
+    await assert.rejects(sender.closed, error => {
+        assert.equal(error.code, 'SYNC_ENCODING_FAILED')
+        assert.equal(error.message, 'H.264 worker failed')
+        assert.equal(error.cause.message, 'worker crashed')
+        return true
+    })
+    assert.equal(transportCloses, 1, 'the failed sender must close its transport exactly once')
+})
+
+test('an identical configure call keeps the sender alive', { timeout: 5000 }, async () => {
+    installEncoder()
+    const transport = transportFixture()
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Same descriptor', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    sender.configure({ width: 1920, height: 1080, fps: 60 })
+    assert.equal(sender.submit(1, performance.now()), true)
+    sender.close()
+    await sender.closed
+    assert.equal(transport.writes.length, 1)
+})
+
+test('a changed output resolution stops the sender with SYNC_RENDERER_REPLACED', {
+    timeout: 5000
+}, async () => {
+    installEncoder()
+    const base = transportFixture()
+    let transportCloses = 0
+    const transport = { ...base, close() { transportCloses++; base.close() } }
+    const sender = await SyncH264CanvasSender.create({
+        client: { createH264StreamSender: async () => transport },
+        name: 'Resized', canvas: { width: 1920, height: 1080 },
+        descriptor: { width: 1920, height: 1080, fps: 60 }, clock: performance
+    })
+    sender.configure({ width: 1280, height: 720, fps: 60 })
+    await assert.rejects(sender.closed, error => {
+        assert.equal(error.code, 'SYNC_RENDERER_REPLACED')
+        assert.match(error.message, /resolution changed/i)
+        return true
+    })
+    assert.equal(transportCloses, 1, 'the replaced sender must close its transport exactly once')
+    assert.equal(sender.submit(1, performance.now()), false, 'a replaced sender accepts no further frames')
+})

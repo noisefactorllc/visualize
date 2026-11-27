@@ -91,10 +91,6 @@ export function createSyncAudioInput({
         return devices.map(device => ({ ...device }))
     }
 
-    function pause(milliseconds) {
-        return new Promise(resolve => setTimeout(resolve, milliseconds))
-    }
-
     function connectSyncAudio() {
         if (connecting) return connecting
         connecting = Promise.resolve().then(async () => {

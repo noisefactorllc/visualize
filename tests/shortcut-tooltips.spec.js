@@ -73,9 +73,6 @@ test('browser: performance shortcuts appear in tooltips across all controls', as
     }
 })
 
-// The named-controls sweep is long: a single invocation must stay inside the
-// automated runners' per-command limit, so it is split in two. Each test boots
-// fresh and runs its own half, with identical assertions.
 test('icon actions and custom app controls expose readable accessible names (controls)', async ({ browser }) => {
     const { context, page } = await boot(browser)
     try {

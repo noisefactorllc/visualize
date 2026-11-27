@@ -20,6 +20,28 @@ test('two decks share a native subscription and stopping one preserves the other
     assert.equal(stops, 1)
 })
 
+test('a failing native camera subscribe removes the listener and starts no dead entry', () => {
+    let attempts = 0
+    let receiver
+    const api = {
+        subscribe(callback) {
+            attempts++
+            if (attempts === 1) throw new Error('daemon gone')
+            receiver = callback
+            return () => {}
+        }
+    }
+    assert.throws(() => subscribeSyncCamera(() => {}, api), /daemon gone/)
+    assert.equal(attempts, 1)
+    const frames = []
+    const stop = subscribeSyncCamera(frame => frames.push(frame), api)
+    assert.equal(attempts, 2, 'a later subscriber must start a fresh subscription, not reuse the failed one')
+    receiver(7)
+    assert.deepEqual(frames, [7])
+    stop()
+    stop()
+})
+
 test('a changed camera stream stops its native subscription and reports failure once', async t => {
     const originals = Object.fromEntries(['MediaStreamTrackProcessor', 'VideoFrame', 'electronAPI'].map(key => [key, globalThis[key]]))
     t.after(() => { for (const [key, value] of Object.entries(originals)) {
