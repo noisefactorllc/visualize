@@ -12,10 +12,10 @@
  * (let constructor = vec3(0, 0, 0)) failed with a confusing diagnostic
  * instead of compiling. The engine now reads the table with
  * Object.hasOwn. This pins that contract at the product boundary, against
- * the engine core this app actually downloads from the CDN: the names lex
- * as identifiers, a bound name lexes as IDENT at both of its uses, a
- * prototype-property name still lexes as a member segment, and the
- * reserved words still lex as keywords.
+ * the engine core this app actually downloads from the CDN: an inherited
+ * name lexes as an identifier, a bound name lexes as IDENT at its binding
+ * and at its use, a prototype-property name after a dot still lexes as a
+ * member segment, and the reserved words still lex as keywords.
  */
 import { test, expect } from '@playwright/test'
 import { installHandfishLocal, routeEngineLocal } from './handfishLocal.js'
@@ -33,7 +33,7 @@ test('inherited-property names lex as identifiers', async ({ page }) => {
             }
         }
 
-        // Each inherited name lexes to a single identifier token.
+        // An inherited name lexes as an identifier token.
         for (const name of ['toString', 'valueOf', 'constructor', 'hasOwnProperty', '__proto__']) {
             check(`bare ${name}`, lex(name).map(token => token.type), ['IDENT', 'EOF'])
         }
